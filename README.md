@@ -63,6 +63,58 @@ bash scripts/check-tools.sh
 
 You should see green checkmarks for every required tool and informational notes for any optional ones missing.
 
+## Local cluster (kind)
+
+```bash
+# Start kind + a local Docker registry on localhost:5001
+bash scripts/kind-up.sh
+
+# Tear down both
+bash scripts/kind-down.sh
+```
+
+The cluster context is `kind-openvoid-local`. Re-running `kind-up.sh` is a no-op if both pieces already exist. The registry is wired into the kind network so any image pushed to `localhost:5001/...` is pullable from inside the cluster.
+
+## Remote cluster (DigitalOcean)
+
+```bash
+# One-time per machine: authenticate doctl
+doctl auth init
+
+# Bring up (~5 min, ~$24/mo while running)
+bash infra/remote/doks-create.sh
+
+# Tear down (stops billing immediately)
+bash infra/remote/doks-destroy.sh
+```
+
+Sizing, region, cost discipline, and orphaned-resource cleanup are all in [`infra/remote/README.md`](infra/remote/README.md). **Always run `doks-destroy.sh` between work sessions.**
+
+## Context safety
+
+openvoid uses two clusters: a local kind cluster (free, disposable) and a remote DOKS cluster (real money, demoable). It's easy to run a destructive command in the wrong place. Three rules:
+
+1. **Check before destructive commands.**
+   ```bash
+   bash scripts/kctx-check.sh && kubectl delete codingsession my-session
+   ```
+   The check prints the current context with color coding — green for local kind, yellow for remote DOKS, red for unknown. If it's not what you expect, stop and switch.
+
+2. **Use [`kubectx`](https://github.com/ahmetb/kubectx) for one-keystroke switching.** Install via `brew install kubectx`. Then:
+   ```bash
+   kubectx kind-openvoid-local       # back to local
+   kubectx do-nyc1-openvoid-dev      # switch to DOKS
+   kubectx -                         # toggle back
+   ```
+
+3. **Show the context in your shell prompt.** Either [`kube-ps1`](https://github.com/jonmosco/kube-ps1) (bash/zsh) or [Starship](https://starship.rs/) with the `kubernetes` module enabled. The cost of seeing the context permanently is one line of shell-rc config; the cost of *not* seeing it is a `kubectl delete -A` against production.
+
+Pin a default namespace per context to avoid `-n` typos:
+
+```bash
+kubectl config set-context --current --namespace=openvoid-system
+```
+
 ## Repo layout
 
 ```

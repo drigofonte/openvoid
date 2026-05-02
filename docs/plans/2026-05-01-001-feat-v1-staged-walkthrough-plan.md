@@ -389,7 +389,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Demo checkpoint at end of phase:** `kubectl get nodes` returns a Ready node on both kind and DOKS. The implementer can switch contexts cleanly.
 
-- [ ] **Unit 1.1: Create local kind cluster + local registry**
+- [x] **Unit 1.1: Create local kind cluster + local registry**
 
 **Goal:** A working local Kubernetes cluster with a local image registry the implementer can push to.
 
@@ -421,7 +421,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 1.2: Create remote DOKS cluster (one-time per demo)**
+- [x] **Unit 1.2: Create remote DOKS cluster (one-time per demo)**
 
 **Goal:** A working remote Kubernetes cluster on DigitalOcean.
 
@@ -453,7 +453,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 1.3: Context-switching discipline**
+- [x] **Unit 1.3: Context-switching discipline**
 
 **Goal:** Implementer never accidentally applies a kind manifest to DOKS or vice versa.
 
