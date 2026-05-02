@@ -1,0 +1,105 @@
+# Local-only Kubernetes manifest for the Session API.
+# Phase 5+ supersedes this with a Helm chart. For Phase 3 it ships as plain
+# YAML applied by Tilt.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openvoid-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openvoid-sessions
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: session-api
+  namespace: openvoid-system
+---
+# Session API needs to manage Pods in the openvoid-sessions namespace only.
+# Phase 4 replaces these pod permissions with permissions on the
+# CodingSession custom resource.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: session-api-pods
+  namespace: openvoid-sessions
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: session-api-pods
+  namespace: openvoid-sessions
+subjects:
+  - kind: ServiceAccount
+    name: session-api
+    namespace: openvoid-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: session-api-pods
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: session-api
+  namespace: openvoid-system
+  labels:
+    app.kubernetes.io/name: session-api
+    app.kubernetes.io/part-of: openvoid
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: session-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: session-api
+    spec:
+      serviceAccountName: session-api
+      containers:
+        - name: session-api
+          image: localhost:5001/openvoid/session-api:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4000
+          env:
+            - name: PORT
+              value: "4000"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: session-api
+  namespace: openvoid-system
+  labels:
+    app.kubernetes.io/name: session-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: session-api
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
