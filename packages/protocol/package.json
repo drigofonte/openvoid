@@ -1,0 +1,31 @@
+{
+  "name": "@openvoid/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Source-of-truth HTTP API contract for openvoid (TypeSpec → OpenAPI 3.1 → TS types).",
+  "license": "MIT",
+  "type": "module",
+  "main": "generated/types.ts",
+  "exports": {
+    ".": "./generated/types.ts",
+    "./openapi.yaml": "./generated/openapi.yaml"
+  },
+  "files": [
+    "main.tsp",
+    "tspconfig.yaml",
+    "generated"
+  ],
+  "scripts": {
+    "generate": "bash scripts/generate.sh",
+    "typecheck": "tsc --noEmit generated/types.ts"
+  },
+  "devDependencies": {
+    "@typespec/compiler": "1.11.0",
+    "@typespec/http": "1.11.0",
+    "@typespec/openapi": "1.11.0",
+    "@typespec/openapi3": "1.11.0",
+    "@typespec/rest": "0.81.0",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.7.2"
+  }
+}

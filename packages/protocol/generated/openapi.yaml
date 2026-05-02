@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: openvoid Session API
+  version: 0.1.0
+tags: []
+paths:
+  /sessions:
+    post:
+      operationId: Sessions_create
+      description: Create a new coding session. Returns 201 with the new session.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+  /sessions/{id}:
+    get:
+      operationId: Sessions_read
+      description: Fetch a session by id.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: Sessions_remove
+      description: Delete a session. Operator finalizer handles graceful shutdown.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Short machine-readable error code.
+        message:
+          type: string
+          description: Human-readable message.
+      description: Standard error response.
+    CreateSessionRequest:
+      type: object
+      required:
+        - repo
+      properties:
+        repo:
+          type: string
+          description: Git URL of the workspace to clone.
+        idleTimeoutSeconds:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Operator stops the session after this much inactivity. Defaults to 1800 (30 min).
+      description: Request body for creating a new coding session.
+    Session:
+      type: object
+      required:
+        - sessionId
+        - status
+      properties:
+        sessionId:
+          type: string
+          description: ULID identifying the session. Stable for the session's lifetime.
+        status:
+          allOf:
+            - $ref: '#/components/schemas/SessionPhase'
+          description: Current lifecycle phase.
+        endpointUrl:
+          type: string
+          description: Reachable URL of the agent (when status is Running). Empty until Phase 5/6.
+      description: A coding session resource as exposed by the API.
+    SessionPhase:
+      type: string
+      enum:
+        - Pending
+        - Running
+        - Stopping
+        - Stopped
+        - Failed
+      description: Lifecycle phase of a coding session.
