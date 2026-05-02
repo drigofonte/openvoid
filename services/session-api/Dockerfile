@@ -31,6 +31,16 @@ RUN pnpm --filter @openvoid/session-api deploy --prod /opt/session-api \
        /opt/session-api/node_modules/@openvoid/protocol/generated/openapi.yaml
 
 
+# Dev stage: keeps full workspace + dev deps so `tsx watch` can reload on
+# src/ file syncs from Tilt. Used by the root Tiltfile via target=dev.
+FROM builder AS dev
+WORKDIR /workspace/services/session-api
+ENV NODE_ENV=development
+ENV PORT=4000
+EXPOSE 4000
+CMD ["pnpm", "exec", "tsx", "watch", "src/server.ts"]
+
+
 FROM node:${NODE_VERSION} AS runtime
 WORKDIR /app
 
