@@ -1,0 +1,26 @@
+# kind cluster configuration for openvoid local development.
+#
+# Single control-plane node is enough for v1 — saves CPU/RAM on the
+# implementer's laptop, and the operator's reconcile loop doesn't care
+# about a multi-node setup.
+#
+# The containerdConfigPatches block tells containerd to treat
+# `localhost:5001` as an HTTP (not HTTPS) registry without TLS, so the
+# in-cluster nodes can pull images we push from the host. This is the
+# canonical pattern from kind.sigs.k8s.io/docs/user/local-registry/.
+#
+# Cluster name is `openvoid-local`, which produces context name
+# `kind-openvoid-local` — predictable, so other scripts can reference
+# it without dynamic discovery.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: openvoid-local
+
+nodes:
+  - role: control-plane
+
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
