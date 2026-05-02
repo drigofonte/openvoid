@@ -284,7 +284,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ### Phase 0: Toolchain & Repo Bootstrap
 
-- [ ] **Unit 0.1: Install local toolchain**
+- [x] **Unit 0.1: Install local toolchain**
 
 **Goal:** Implementer's machine has every CLI needed for Phases 1–9.
 
@@ -322,7 +322,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 0.2: Repo skeleton + `.gitignore` + base `package.json`**
+- [x] **Unit 0.2: Repo skeleton + `.gitignore` + base `package.json`**
 
 **Goal:** Repo has a workable structure for the next 9 phases without committing to every category yet.
 
@@ -354,7 +354,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 0.3: OpenCode endpoint surface spike (30 minutes)**
+- [x] **Unit 0.3: OpenCode endpoint surface spike (30 minutes)**
 
 **Goal:** Verify what `opencode serve` actually exposes before Phase 5 commits to a polling-based idle-stop mechanism that may rely on a non-existent endpoint.
 
