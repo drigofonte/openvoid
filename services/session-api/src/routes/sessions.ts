@@ -28,17 +28,21 @@ function isCreateRequest(body: unknown): body is CreateSessionRequest {
   if (!body || typeof body !== "object") return false;
   const r = body as Record<string, unknown>;
   if (typeof r.repo !== "string" || r.repo.length === 0) return false;
-  if (
-    r.idleTimeoutSeconds !== undefined &&
-    (typeof r.idleTimeoutSeconds !== "number" || r.idleTimeoutSeconds < 0)
-  ) {
-    return false;
+  if (r.idleTimeoutSeconds !== undefined) {
+    if (typeof r.idleTimeoutSeconds !== "number") return false;
+    if (!Number.isFinite(r.idleTimeoutSeconds) || r.idleTimeoutSeconds < 0) return false;
   }
   return true;
 }
 
 function jsonError(code: string, message: string): ApiError {
   return { code, message };
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  return "unknown error";
 }
 
 export function sessionsRouter(podOps: PodOps): Hono {
@@ -56,7 +60,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
       return c.json(
         jsonError(
           "invalid_request",
-          "Body must include `repo` (non-empty string) and optional non-negative `idleTimeoutSeconds`",
+          "Body must include `repo` (non-empty string) and optional non-negative finite `idleTimeoutSeconds`",
         ),
         400,
       );
@@ -67,7 +71,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
       await podOps.createSessionPod({ sessionId, image: STUB_IMAGE });
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to create pod: ${(err as Error).message}`),
+        jsonError("k8s_unavailable", `Failed to create pod: ${errorMessage(err)}`),
         503,
       );
     }
@@ -77,22 +81,22 @@ export function sessionsRouter(podOps: PodOps): Hono {
   });
 
   app.get("/sessions/:id", async (c) => {
-    const id = c.req.param("id");
+    const sessionId = c.req.param("id");
     let pod;
     try {
-      pod = await podOps.getSessionPod(id);
+      pod = await podOps.getSessionPod(sessionId);
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to get pod: ${(err as Error).message}`),
+        jsonError("k8s_unavailable", `Failed to get pod: ${errorMessage(err)}`),
         503,
       );
     }
     if (!pod) {
-      return c.json(jsonError("not_found", `Session ${id} not found`), 404);
+      return c.json(jsonError("not_found", `Session ${sessionId} not found`), 404);
     }
 
     const session: Session = {
-      sessionId: id,
+      sessionId,
       status: podPhaseToSessionStatus(pod.status?.phase),
     };
     const ip = pod.status?.podIP;
@@ -101,18 +105,18 @@ export function sessionsRouter(podOps: PodOps): Hono {
   });
 
   app.delete("/sessions/:id", async (c) => {
-    const id = c.req.param("id");
+    const sessionId = c.req.param("id");
     let deleted: boolean;
     try {
-      deleted = await podOps.deleteSessionPod(id);
+      deleted = await podOps.deleteSessionPod(sessionId);
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to delete pod: ${(err as Error).message}`),
+        jsonError("k8s_unavailable", `Failed to delete pod: ${errorMessage(err)}`),
         503,
       );
     }
     if (!deleted) {
-      return c.json(jsonError("not_found", `Session ${id} not found`), 404);
+      return c.json(jsonError("not_found", `Session ${sessionId} not found`), 404);
     }
     return c.body(null, 204);
   });

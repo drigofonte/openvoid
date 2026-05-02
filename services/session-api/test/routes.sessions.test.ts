@@ -7,6 +7,7 @@ import {
   buildSessionPodManifest,
   SESSION_LABEL,
   MANAGED_BY_LABEL,
+  MANAGED_BY_VALUE,
 } from "../src/k8s/client.js";
 
 function makeMockOps(): PodOps & {
@@ -59,7 +60,7 @@ describe("sessionsRouter", () => {
       const manifest = buildSessionPodManifest(arg);
       expect(manifest.metadata?.labels).toEqual({
         [SESSION_LABEL]: arg.sessionId,
-        [MANAGED_BY_LABEL]: "session-api",
+        [MANAGED_BY_LABEL]: MANAGED_BY_VALUE,
       });
       expect(manifest.spec?.containers?.[0]?.image).toBe("nginx:alpine");
     });
@@ -86,6 +87,17 @@ describe("sessionsRouter", () => {
       expect(body.code).toBe("invalid_request");
     });
 
+    it("rejects empty `repo` string with 400", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: "" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+    });
+
     it("rejects negative idleTimeoutSeconds with 400", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
@@ -93,6 +105,27 @@ describe("sessionsRouter", () => {
         body: JSON.stringify({ repo: "x", idleTimeoutSeconds: -1 }),
       });
       expect(res.status).toBe(400);
+    });
+
+    it("rejects non-finite idleTimeoutSeconds (NaN, Infinity) with 400", async () => {
+      for (const v of ["NaN", "Infinity"]) {
+        const res = await app.request("/sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          // JSON cannot encode NaN/Infinity; serialize the literal text instead.
+          body: `{"repo":"x","idleTimeoutSeconds":${v}}`,
+        });
+        expect(res.status, `value=${v}`).toBe(400);
+      }
+    });
+
+    it("accepts valid positive idleTimeoutSeconds", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: "x", idleTimeoutSeconds: 600 }),
+      });
+      expect(res.status).toBe(201);
     });
 
     it("returns 503 when the K8s client throws", async () => {
@@ -106,6 +139,19 @@ describe("sessionsRouter", () => {
       const body = await res.json();
       expect(body.code).toBe("k8s_unavailable");
       expect(body.message).toContain("apiserver unreachable");
+    });
+
+    it("returns 503 with a safe message when a non-Error value is thrown", async () => {
+      ops.createSessionPod.mockRejectedValueOnce("just a string");
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: "x" }),
+      });
+      expect(res.status).toBe(503);
+      const body = await res.json();
+      expect(body.code).toBe("k8s_unavailable");
+      expect(body.message).not.toContain("undefined");
     });
   });
 
@@ -130,12 +176,37 @@ describe("sessionsRouter", () => {
       expect((await res.json()).status).toBe("Failed");
     });
 
+    it("maps unknown phases (e.g. `Unknown`, `Pending`) to Pending", async () => {
+      for (const phase of ["Pending", "Unknown", "CrashLoopBackOff"]) {
+        ops.getSessionPod.mockResolvedValueOnce(podWith(phase));
+        const res = await app.request("/sessions/x");
+        expect((await res.json()).status, `phase=${phase}`).toBe("Pending");
+      }
+    });
+
+    it("omits endpointUrl from the response when the pod has no IP", async () => {
+      ops.getSessionPod.mockResolvedValueOnce(podWith("Running"));
+      const res = await app.request("/sessions/x");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({ sessionId: "x", status: "Running" });
+      expect(body).not.toHaveProperty("endpointUrl");
+    });
+
     it("returns 404 when the pod does not exist", async () => {
       ops.getSessionPod.mockResolvedValueOnce(null);
       const res = await app.request("/sessions/missing");
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.code).toBe("not_found");
+    });
+
+    it("returns 503 when the K8s client throws", async () => {
+      ops.getSessionPod.mockRejectedValueOnce(new Error("apiserver unreachable"));
+      const res = await app.request("/sessions/x");
+      expect(res.status).toBe(503);
+      const body = await res.json();
+      expect(body.code).toBe("k8s_unavailable");
     });
   });
 

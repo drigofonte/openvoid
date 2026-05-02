@@ -57,8 +57,9 @@ export interface components {
             /**
              * Format: int32
              * @description Operator stops the session after this much inactivity. Defaults to 1800 (30 min).
+             * @default 1800
              */
-            idleTimeoutSeconds?: number;
+            idleTimeoutSeconds: number;
         };
         /** @description A coding session resource as exposed by the API. */
         Session: {

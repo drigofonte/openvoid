@@ -101,7 +101,27 @@ What's wired up so far:
 |---|---|---|
 | 3 | `session-api` | Hono-based Session API on `localhost:4000`. Scalar UI at `http://localhost:4000/`. Editing `services/session-api/src/**` triggers a `tsx watch` restart inside the pod. |
 
-`tilt up` refuses to run against any context other than `kind-openvoid-local` — switch contexts with `kubectx` first if you need to deploy elsewhere.
+`tilt up` is gated to the `kind-openvoid-local` context via `allow_k8s_contexts`, so it won't touch DOKS in normal use. Don't override the gate with Tilt's `--allow` flag — it exists to stop accidents, not to be argued with.
+
+## API for agents
+
+The Session API is fully agent-callable over HTTP. The OpenAPI 3.1 spec lives at `/openapi.yaml`; the [Scalar](https://scalar.com/) UI at `/` is for humans:
+
+```bash
+# Inspect the contract
+curl http://localhost:4000/openapi.yaml
+
+# Create a session (returns 201 + { sessionId, status: "Pending" })
+curl -X POST http://localhost:4000/sessions \
+  -H 'content-type: application/json' \
+  -d '{"repo":"https://github.com/example/repo"}'
+
+# Read / delete a session
+curl http://localhost:4000/sessions/<sessionId>
+curl -X DELETE http://localhost:4000/sessions/<sessionId>
+```
+
+Errors return `{ code, message }` with stable codes (`invalid_body`, `invalid_request`, `not_found`, `k8s_unavailable`) so an agent can branch on `code` without parsing prose. Phase 3 is unauthenticated; Phase 9 will add a signed JWT requirement.
 
 ## Remote cluster (DigitalOcean)
 

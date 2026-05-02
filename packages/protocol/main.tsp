@@ -26,7 +26,7 @@ model CreateSessionRequest {
 
   @doc("Operator stops the session after this much inactivity. Defaults to 1800 (30 min).")
   @minValue(0)
-  idleTimeoutSeconds?: int32;
+  idleTimeoutSeconds?: int32 = 1800;
 }
 
 @doc("A coding session resource as exposed by the API.")
