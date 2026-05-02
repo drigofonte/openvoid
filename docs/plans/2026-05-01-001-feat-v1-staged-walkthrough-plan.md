@@ -184,7 +184,7 @@ Greenfield. Only `LICENSE`. Existing planning artifacts at `docs/ideation/`, `do
 
 - **v1 audience for the Web UI:** authenticated GitHub OAuth users (NextAuth) gated by `OPENVOID_ALLOWED_USERS`. No public unauthenticated access.
 - **Helm + ArgoCD timing:** chart authored in Phase 5 (operator first consumer); ArgoCD wired in Unit 5.9. Avoids the Phase 9 cliff.
-- **Idle-detection mechanism:** path determined by Phase 0.3 spike. Default plan: HTTP `/last-activity` polling if upstream supports it, otherwise wrapper-sidecar fallback.
+- **Idle-detection mechanism:** Phase 0.3 spike resolved (see [`docs/spikes/2026-05-02-opencode-endpoints.md`](../spikes/2026-05-02-opencode-endpoints.md)). OpenCode does **not** expose `/last-activity`. Path chosen: operator polls `GET /session/:id` every 30s and reads `time.updated` (Unix ms) as `lastActivityTime`. Phases 5.3, 6.3 reference the spike rather than the originally-planned `/last-activity` endpoint. Also resolved in the spike: the agent's output stream is **Server-Sent Events** (`/global/event` and `POST /session/:id/message` SSE response), **not WebSocket** — Phase 9.2's chat-box client wires up to SSE.
 - **DOKS node sizing:** 1× `s-2vcpu-4gb` for solo v1 demos; document scale-up to `s-2vcpu-8gb` for multi-user demos. Capacity table in `infra/remote/README.md`.
 - **PAT hardening:** fine-grained GitHub PAT scoped to one repo + tightened `opencode.json` (deny `/etc/git*` reads, deny webfetch to GitHub, restricted bash).
 - **Defense-in-depth on operator failure:** `activeDeadlineSeconds = idleTimeoutSeconds * 4` on session pods.
@@ -284,7 +284,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ### Phase 0: Toolchain & Repo Bootstrap
 
-- [ ] **Unit 0.1: Install local toolchain**
+- [x] **Unit 0.1: Install local toolchain**
 
 **Goal:** Implementer's machine has every CLI needed for Phases 1–9.
 
@@ -322,7 +322,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 0.2: Repo skeleton + `.gitignore` + base `package.json`**
+- [x] **Unit 0.2: Repo skeleton + `.gitignore` + base `package.json`**
 
 **Goal:** Repo has a workable structure for the next 9 phases without committing to every category yet.
 
@@ -354,7 +354,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 0.3: OpenCode endpoint surface spike (30 minutes)**
+- [x] **Unit 0.3: OpenCode endpoint surface spike (30 minutes)**
 
 **Goal:** Verify what `opencode serve` actually exposes before Phase 5 commits to a polling-based idle-stop mechanism that may rely on a non-existent endpoint.
 

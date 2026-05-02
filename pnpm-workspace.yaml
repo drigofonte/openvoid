@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "services/*"
+  - "packages/*"
+# Note: services/session-operator is Go (no package.json). pnpm ignores it
+# because its glob entry has no manifest — that's intentional. The Go module
+# is self-contained under services/session-operator/.
