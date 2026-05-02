@@ -63,6 +63,10 @@ bash scripts/check-tools.sh
 
 You should see green checkmarks for every required tool and informational notes for any optional ones missing.
 
+## New here? Read this first
+
+If you're new to Kubernetes (or the openvoid setup specifically), the tutorial at [`docs/tutorials/working-with-clusters.md`](docs/tutorials/working-with-clusters.md) walks through what each piece does, your daily flow, and how to move between local and remote.
+
 ## Local cluster (kind)
 
 ```bash
