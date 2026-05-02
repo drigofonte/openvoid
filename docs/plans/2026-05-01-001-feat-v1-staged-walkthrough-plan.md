@@ -481,7 +481,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Demo checkpoint at end of phase:** A trivial `nginx` pod is deployed to both clusters, port-forwarded, and reachable via `curl localhost:8080`. The implementer has internalized `apply`, `get`, `describe`, `logs`, `exec`, `port-forward`, `delete`.
 
-- [ ] **Unit 2.1: Hello-world Deployment + Service**
+- [x] **Unit 2.1: Hello-world Deployment + Service**
 
 **Goal:** Runnable proof of cluster + image-pull + Service + port-forward, with no openvoid code yet.
 
