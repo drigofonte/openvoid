@@ -30,7 +30,7 @@ The plan satisfies the brainstorm's milestone success criterion and the supporti
 
 - **R1 (milestone).** Local + DOKS end-to-end: Web UI → Session API → per-session Pod (init-clone + main agent + finalizer sidecar) → live preview → user-driven session-stop (Save button or Web-UI disconnect) → `feat/<session-id>` push. *Rev 4: replaces the original "...CodingSession CR → Operator → OpenCode Pod → ... idle-stop ..." chain with a leaner one. Activity-aware idle is deferred to v1.5; v1's stop signal is user-initiated, not LLM-activity-driven.*
 - **R2 (one-source-file API contract).** Phase 3 introduces TypeSpec; Phase 4+ keep it as the only edit point for the HTTP/WS contract.
-- **R3 (per-service CI scoping).** Phase 2 establishes the monorepo layout; CI is layered in incrementally — minimum viable CI in Phase 6 (Session API + chart linting), end-to-end CI gate added in Phase 9.
+- **R3 (per-service CI scoping).** Phase 2 establishes the monorepo layout; CI is layered in incrementally — minimum viable CI in Phase 7 (Session API + chart linting), end-to-end CI gate added in Phase 9.
 - **R4** *(retired in rev 4).* The brainstorm's "Go developer reasoning in isolation" requirement assumed a `services/session-operator/` Go module. The sidecar pivot removes the operator entirely — there is no Go module in v1. R4 graduates to v1.5 if the activity-aware idle reconciler ever needs to be built as a controller. No v1 unit advances R4.
 - **R5 (drift bounded by integration tests).** Phase 5+ exercise API → Pod (with init + sidecar) end-to-end via integration tests. *Rev 4: same intent, smaller surface — no CR layer to drift between.* *(Rev 5: still Phase 5+ — the sidecar moved to Phase 5, so the integration test lives there from the start.)*
 
@@ -97,8 +97,8 @@ The plan's R1 success criterion requires the milestone to work on both kind and 
 | Cluster context | `kind-openvoid-local` | `do-nyc1-openvoid-dev` | Phase 1 |
 | K8s minor version | 1.32+ (1.35.0 confirmed in use) | 1.32 (DOKS) | Both ≥1.29; native sidecars are GA in 1.33+ — both are well past the gate (rev 4) |
 | Workspace volume | `emptyDir` per Pod | `emptyDir` per Pod (DOKS Block Storage RWO is overkill for ephemeral v1 sessions) | Phase 4 — Helm value `session.workspace.type` (PVC reserved for v1.5) |
-| Container registry | `localhost:5001/openvoid/...` | `ghcr.io/openvoid/...` | Phase 6+ — Helm value `images.<svc>.repository` |
-| Image build flow | Tilt + buildx → local registry | CI builds + pushes to GHCR; Helm values updated | Phase 6, 9 |
+| Container registry | `localhost:5001/openvoid/...` | `ghcr.io/openvoid/...` | Phase 7+ — Helm value `images.<svc>.repository` |
+| Image build flow | Tilt + buildx → local registry | CI builds + pushes to GHCR; Helm values updated | Phase 7, 9 |
 | Live preview routing | `kubectl port-forward` (Tilt-managed; per-session port allocated by Web UI) | cloudflared tunnel + wildcard CNAMEs (`<sid>.preview.<domain>`) | Phase 9 |
 | Web UI public URL | `localhost:3000` | `https://app.<domain>` | Phase 9 |
 | Session pod public URL | `localhost:<port>` (port-forwarded) | `<sessionId>.{agent,preview}.<domain>` | Phase 9 |
@@ -123,8 +123,8 @@ Recorded so v1 design choices don't paint v1.5 into a corner. v1 keeps the seams
 | Cloudflared Deployment | Present on DOKS | Removed; not authored | Conditional `if .Values.routing.mode == "cloudflared"` in Helm |
 | GitOps | ArgoCD installed manually | OpenShift GitOps (Red-Hat-shipped ArgoCD) | Same `Application` CRDs; `infra/argocd/` works as-is |
 | Container registry | GHCR | OpenShift internal registry (`image-registry.openshift-image-registry.svc:5000`) or GHCR | Helm value `images.<svc>.repository` |
-| Pod identity | runs as `node`/UID 1000 | SCC `restricted-v2` overrides UID with a per-namespace random one; image must be writable by **any** UID | Phase 7.1 image hardening (`chgrp 0 + chmod g=u`) is SCC-friendly by construction |
-| `automountServiceAccountToken: false` | applied | applied (no change) | Phase 7.2 |
+| Pod identity | runs as `node`/UID 1000 | SCC `restricted-v2` overrides UID with a per-namespace random one; image must be writable by **any** UID | Phase 6.1 image hardening (`chgrp 0 + chmod g=u`) is SCC-friendly by construction |
+| `automountServiceAccountToken: false` | applied | applied (no change) | Phase 6.2 |
 | NetworkPolicy | enforced on DOKS, optional on kind | **mandatory** — OpenShift CNI (OVN-Kubernetes) enforces by default | Unit 5.7 default-deny works as-is |
 | Local dev cluster | kind | CRC (CodeReady Containers) — heavier; recommend keeping kind as the daily loop and only sanity-checking SCCs against a real OpenShift cluster pre-merge | Phase 0 tooling stays kind-only in v1 |
 | `ingress-nginx` / `cert-manager` | absent | absent (Routes replace both) | n/a |
@@ -164,7 +164,7 @@ No `services/session-operator/` (and per rev 4, never will be in v1). No `go.mod
 | TS container builds | `docker buildx` | latest | Tilt: `docker_build()` with `live_update` |
 | Sidecar git image | `alpine/git` | 2.45+ | Used by both the `git-clone` init container (Phase 4) and the `git-finalizer` native sidecar (Phase 5). ~25 MB |
 | Container registry | GHCR | n/a | `ghcr.io/openvoid/...`; v1 is repo-public so anonymous pulls work |
-| Helm | 3.x latest | n/a | Introduced in Phase 6 (rev 5 — later than rev 4's Phase 5 because the finalizer sidecar moved earlier; still earlier than the rev 1–3 Phase 9, since the chart is the only deploy artifact) |
+| Helm | 3.x latest | n/a | Introduced in Phase 7 (rev 5 — later than rev 4's Phase 5 because the finalizer sidecar and OpenCode moved earlier; Helm is now the consolidation phase that absorbs all hard-coded constants and out-of-band Secrets in one go) |
 | ArgoCD | latest stable | n/a | Introduced in Phase 9 (unchanged) |
 | OpenCode | `opencode-ai` | 1.14+ | `opencode serve` mode; tested in Phase 0.3 spike at v1.14.31 |
 | Live preview (kind) | `kubectl port-forward` | n/a | Tilt-managed; per-session ports allocated by the Web UI |
@@ -191,7 +191,7 @@ No `services/session-operator/` (and per rev 4, never will be in v1). No `go.mod
 
 - **DOKS Block Storage is RWO only.** Don't attempt RWX. *(Rev 4: v1 uses `emptyDir` for the workspace, so this is now defensive — applies if v1.5 introduces a session-PVC.)*
 - **Provisioning latency on DOKS PVCs is 15–45 s.** *(Rev 4: not on the v1 critical path with `emptyDir`. Re-relevant if v1.5 adds PVCs.)*
-- **OpenCode has no official container image.** We build a thin Dockerfile in Phase 7.
+- **OpenCode has no official container image.** We build a thin Dockerfile in Phase 6.
 - **`preStop` does not run on `--grace-period=0 --force`.** Document as "do not force-delete sessions." *(Rev 4: same applies to the SIGTERM trap inside the finalizer sidecar — force-delete bypasses graceful shutdown entirely and the push will not happen.)*
 - **Don't use livenessProbe on the agent pod.** A thinking LLM looks dead but isn't.
 - **OpenShift SCC `restricted-v2` assigns a random per-namespace UID** that overrides the image's `USER` directive. Images that work on stock K8s (`USER 1000`) fail on OpenShift unless `/app` (or wherever the process writes) is owned by GID 0 and group-writable. Canonical Dockerfile pattern: `RUN chgrp -R 0 /app && chmod -R g=u /app`. Cheap to apply, and aligns with K8s security best-practice anyway.
@@ -259,7 +259,7 @@ No `services/session-operator/` (and per rev 4, never will be in v1). No `go.mod
 Triggered by a real-world question during the Phase 3 demo: "we'd like to replicate this inside our company on OpenShift; what changes?" The answer should not be "rearchitect Phase 5–9," so v1 absorbs a small structural commitment now.
 
 - **Routing layer is a Helm-level abstraction** (see Key Technical Decisions). v1 ships only the `cloudflared` mode; the seam is `routing.mode` plus a `templates/routing/` directory in the chart. *(Rev 4 update: now framed as "Helm-level, not application-level" since there's no operator.)*
-- **OpenCode image is SCC-friendly by construction** (Phase 7 — `chgrp 0 + chmod g=u`). *(Rev 3 originally placed this in Phase 6; rev 5 reorder moved OpenCode to Phase 7.)* Cheap; the same pattern is best-practice on stock K8s. v1 still runs as UID 1000 on kind/DOKS; the file ownership change just means OpenShift won't reject the image at admission.
+- **OpenCode image is SCC-friendly by construction** (Phase 6 — `chgrp 0 + chmod g=u`). *(Rev 3 originally placed this in Phase 6; rev 5 kept OpenCode in Phase 6 — same number, different surrounding context.)* Cheap; the same pattern is best-practice on stock K8s. v1 still runs as UID 1000 on kind/DOKS; the file ownership change just means OpenShift won't reject the image at admission.
 - **Per-session port-forward orchestration on kind** is the Web UI's responsibility (Phase 9), not the operator's. `kubectl port-forward` against the per-session `Service` produces `localhost:<port>`; the iframe embeds that.
 - **OpenShift implementation itself stays out of v1 scope.** No `oc` in Phase 0; no CRC; no second remote cluster. v1's two-target story (kind + DOKS) is unchanged.
 
@@ -285,20 +285,21 @@ Triggered by hands-on debugging during the Phase 4 manual demo. Three failure mo
 
 That sequence prompted a re-read of Phases 5–7. The original ordering — Phase 5 Helm chart → Phase 6 OpenCode → Phase 7 `git-finalizer` sidecar — bundles the single biggest architectural risk in v1 (does the native sidecar SIGTERM trap actually push reliably?) into the same phase that introduces OpenCode's image, server password, port wiring, and PID 1 / signal-handling quirks. Two unknowns colliding.
 
-- **Phase reorder: finalizer before OpenCode.** The new sequence is: **Phase 5 = `git-finalizer` sidecar against the placeholder nginx main** (lifecycle proven against a known-simple PID 1, demo workload via `kubectl exec` editing `/workspace/repo`); **Phase 6 = Helm chart** (unchanged content, just renumbered; chart now also parameterizes the finalizer image and `terminationGracePeriodSeconds`); **Phase 7 = OpenCode image as main container** (slots into a proven lifecycle — failure modes here are agent-specific, not sidecar-pattern-specific). Phase 8 (safety rails) and Phase 9 (Web UI) are unchanged.
+- **Phase reorder: finalizer first, OpenCode second, Helm consolidates last.** The new sequence is: **Phase 5 = `git-finalizer` sidecar against the placeholder nginx main** (lifecycle proven against a known-simple PID 1, demo workload via `kubectl exec` editing `/workspace/repo`); **Phase 6 = OpenCode image as main container** (real agent slots into a proven lifecycle, with `OPENCODE_SERVER_PASSWORD` applied out-of-band the same way `git-creds` already is); **Phase 7 = Helm chart consolidating everything** (every hard-coded constant and out-of-band Secret graduates to chart values or templates in one place). Phase 8 (safety rails) and Phase 9 (Web UI) are unchanged.
+- **Why Helm last, not in the middle.** Helm-before-OpenCode (the original rev-5-draft ordering) is convenience, not necessity. The `OPENCODE_SERVER_PASSWORD` Secret pattern is identical to the `git-creds` pattern Phase 4 already established — reusing it costs zero new K8s knowledge. Putting OpenCode in Phase 6 lets the OpenCode-specific gotchas (PID 1 forwarding, `opencode.json` loading, server-password wiring, agent's read of `/workspace/repo`, model/provider config) cluster naturally with Phase 5's lifecycle-validation work — both are "make a real session pod work end-to-end." Phase 7 then becomes a clean conceptual chunk on its own ("packaging"). The "second magic moment" (real agent edits real code) arrives one phase sooner.
 - **Empty-repo precondition is explicit.** v1 assumes the target repo already has at least one commit on the requested branch. `git clone --branch main <empty-repo>` fails with `Remote branch main not found in upstream origin`, by design. The v1.5 "Repo provisioning on first Start Session" deferred item now also covers seeding an initial commit so brand-new platform-owned repos work without manual setup.
-- **What's gained.** If the SIGTERM cascade misbehaves, the user finds out against nginx (trivial PID 1) before introducing OpenCode. If OpenCode misbehaves, the lifecycle is already proven and the suspect is narrowed to the agent. End of Phase 5 also becomes the **first** "magic moment" — a complete clone+modify+push lifecycle, no agent required — and end of Phase 7 becomes the second (real agent edits).
-- **What's lost.** One phase's worth of delay before "real agent edits real code." Negligible.
-- **What does *not* change.** Brainstorm requirements (R1 etc.) are unchanged. The threat model is unchanged (credential mounted on init + sidecar only, never on main). The pod-lifecycle state diagram is unchanged in shape — only the *order in which Phases introduce each role* shifts.
+- **What's gained.** If the SIGTERM cascade misbehaves, the user finds out against nginx (trivial PID 1) before introducing OpenCode. If OpenCode misbehaves, the lifecycle is already proven and the suspect is narrowed to the agent. End of Phase 5 becomes the **first** "magic moment" — a complete clone+modify+push lifecycle, no agent required — and end of Phase 6 becomes the second (real agent edits). Phase 7 absorbs all packaging concerns in one coherent unit.
+- **What's lost.** Phase 6 runs against `infra/local/session-api.yaml` (Phase 3's raw manifest) one phase longer before the chart retires it. Negligible. The `infra/local/opencode-password-secret.yaml` example file is created in Phase 6 then deleted in Phase 7 — it serves as a temporary scaffold, exactly as `git-creds-secret.yaml.example` does on a longer timeline.
+- **What does *not* change.** Brainstorm requirements (R1 etc.) are unchanged. The threat model is unchanged (credential mounted on init + sidecar only, never on main). The pod-lifecycle state diagram is unchanged in shape — only the *order in which Phases introduce each role* shifts. `git-creds` stays out-of-band even after Phase 7 — it's a real third-party PAT that openvoid can't auto-generate, unlike `OPENCODE_SERVER_PASSWORD`.
 
 ### Deferred to implementation
 
-- **Exact OpenCode CLI flags for `opencode serve`** (`--port`, `--host`, model selection): resolve in Phase 7 once running the image locally.
+- **Exact OpenCode CLI flags for `opencode serve`** (`--port`, `--host`, model selection): resolve in Phase 6 once running the image locally.
 - ~~**Whether to route the agent WS through Session API or directly via cloudflared subdomain**~~: **resolved in rev 4** as "Session API proxies the chat SSE." The original framing ("WS") was also superseded by the spike's SSE finding. The user's web preview port still uses a `<sessionId>.preview.<domain>` cloudflared subdomain.
-- **Tiltfile final shape** (resource ordering, port-forward strategy): resolve incrementally — Phase 3 baseline + Phase 6 Helm-aware refresh.
+- **Tiltfile final shape** (resource ordering, port-forward strategy): resolve incrementally — Phase 3 baseline + Phase 7 Helm-aware refresh.
 - **GitHub App vs PAT credentials**: PAT in v1 (decided); App migration deferred to v1.5. Both are credentials of the **platform's** source-control account, not per-user — see the "Tenancy & repo-ownership model" key decision.
 - **Repo provisioning on first Start Session**: deferred. v1 hard-codes the implementer's single test repo as the workspace target, **and that target must already have at least one commit on the requested branch** — empty repos fail Phase 4's `git clone --branch main` step with `Remote branch main not found in upstream origin`. The v1.5 unit covers two responsibilities behind the existing `repo` request field: (a) "ensure repo exists" — create `<platform-org>/<userId>-<appId>` if it doesn't exist, using the same platform credential; (b) "ensure default branch has at least one commit" — push an initial empty `README.md` (or similar) so subsequent clones succeed. Both run in the Session API before pod creation.
-- **Helm chart structure** (one chart per service vs umbrella): defer to Phase 6's Unit 6.1 detail.
+- **Helm chart structure** (one chart per service vs umbrella): defer to Phase 7's Unit 7.1 detail.
 - **Wildcard DNS + cert-manager for ingress**: deferred to v1.5+ self-host concession.
 - **PVC for workspace** (vs `emptyDir`): rev 4 makes `emptyDir` the v1 default — sessions are ephemeral and the SIGTERM-cascade push is the persistence mechanism. PVC reserved for v1.5 if "resume my session tomorrow" becomes a real requirement.
 - **Activity-aware idle reconciler shape** (if v1.5 reintroduces it): Session API runs a `setInterval` polling each pod's `/session/:id` and deleting on stale `time.updated`. The seam is small; the v1.5 work is one `services/session-api/src/reconciler/idle.ts` module.
@@ -316,15 +317,15 @@ graph TB
     P2 --> P3[Phase 3: Session API + TypeSpec]
     P3 --> P4[Phase 4: Workspace volume + git-clone init]
     P4 --> P5[Phase 5: git-finalizer native sidecar against placeholder]
-    P5 --> P6[Phase 6: Helm chart + Session API in chart]
-    P6 --> P7[Phase 7: OpenCode image as main container]
+    P5 --> P6[Phase 6: OpenCode image as main container]
+    P6 --> P7[Phase 7: Helm chart consolidates everything]
     P7 --> P8[Phase 8: Safety rails — NetworkPolicy + activeDeadlineSeconds + opencode.json]
-    P6 --> P9a[Phase 9a: Web UI scaffold + Save & Stop UX]
+    P7 --> P9a[Phase 9a: Web UI scaffold + Save & Stop UX]
     P9a --> P9b[Phase 9b: SSE chat path + presence + cloudflared + ArgoCD]
     P8 --> P9b
 ```
 
-*(Rev 5: phases 5/6/7 reordered. The sidecar finalizer (formerly Phase 7) moves to Phase 5 to validate the SIGTERM cascade against the placeholder nginx main before OpenCode is introduced. Helm chart (formerly Phase 5) moves to Phase 6, picking up parameterization for the finalizer values. OpenCode image (formerly Phase 6) moves to Phase 7 and slots into a proven lifecycle. Rationale recorded under "Resolved during Phase 4 verification (rev 5)" above.)*
+*(Rev 5: phases 5/6/7 reordered. The sidecar finalizer (formerly Phase 7) moves to Phase 5 to validate the SIGTERM cascade against the placeholder nginx main before OpenCode is introduced. OpenCode (formerly Phase 6) becomes Phase 6 still, but now lands **before** Helm — using the same out-of-band Secret pattern Phase 4 established for `git-creds`, so the OpenCode-specific gotchas cluster with Phase 5's lifecycle work. Helm chart (formerly Phase 5) moves to Phase 7 and becomes the consolidation phase: every constant in `client.ts` and every out-of-band Secret graduates to chart values or templates here. Rationale recorded under "Resolved during Phase 4 verification (rev 5)" above.)*
 
 *(Rev 4: dropped Phases "CodingSession CRD" and "Session Operator." Replaced with workspace+init in Phase 4 and Helm-chart-first in (then-)Phase 5. The sidecar finalizer was (then-)Phase 7. Phase 8 is reframed as safety rails — its old "belt-and-braces commit" content collapses into the finalizer's idempotent push.)*
 
@@ -643,13 +644,13 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Create: `packages/protocol/package.json`.
 - Create: `packages/protocol/tspconfig.yaml` — `emit: ["@typespec/openapi3"]`, `openapi-versions: ["3.1.0"]`, `output-file: openapi.yaml`.
 - Create: `packages/protocol/main.tsp` — initial spec: `POST /sessions` (request: `{ repo: string, idleTimeoutSeconds?: int }`; response: `{ sessionId: string, status: "Pending"|"Running"|"Stopping"|"Stopped"|"Failed", endpointUrl?: string }`); `GET /sessions/{id}`; `DELETE /sessions/{id}`.
-- Create: `packages/protocol/generated/openapi.yaml` (committed; CI verifies freshness — wired up in Phase 6).
+- Create: `packages/protocol/generated/openapi.yaml` (committed; CI verifies freshness — wired up in Phase 7).
 - Create: `packages/protocol/generated/types.ts` (committed; produced by `openapi-typescript`).
 - Create: `packages/protocol/scripts/generate.sh` — runs `tsp compile .` then `openapi-typescript packages/protocol/generated/openapi.yaml -o packages/protocol/generated/types.ts`.
 
 **Approach:**
 - Minimum viable contract: just the 3 endpoints above. Phase 4 adds session listing, status streaming. Phase 8 adds explicit `branchName` to response.
-- Don't try to model the WS streaming endpoint in TypeSpec yet — Phase 7 surfaces those needs.
+- Don't try to model the WS streaming endpoint in TypeSpec yet — Phase 6 surfaces those needs.
 
 **Patterns to follow:**
 - TypeSpec official "Getting started with HTTP" tutorial. Keep operations small.
@@ -657,7 +658,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 **Test scenarios:**
 - Happy path: `bash packages/protocol/scripts/generate.sh` produces non-empty `openapi.yaml` and `types.ts`.
 - Idempotent: re-running with no source change produces no diff.
-- Edge case: edit `main.tsp` to add a field; regenerate; both artifacts update. (CI freshness check enforces this in Phase 6.)
+- Edge case: edit `main.tsp` to add a field; regenerate; both artifacts update. (CI freshness check enforces this in Phase 7.)
 
 **Verification:**
 - `cat packages/protocol/generated/openapi.yaml` is valid OpenAPI 3.1 (`openapi: 3.1.0`).
@@ -686,7 +687,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Approach:**
 - Hono is the recommended TS API framework for this kind of small service in 2026 — minimal, fast, ESM-native.
-- The `POST /sessions` handler in this slice creates a **plain Pod** directly (not yet a CR). The Pod is `nginx:alpine` for now — Phase 7 swaps in OpenCode. This keeps Phase 3 honestly simple.
+- The `POST /sessions` handler in this slice creates a **plain Pod** directly (not yet a CR). The Pod is `nginx:alpine` for now — Phase 6 swaps in OpenCode. This keeps Phase 3 honestly simple.
 - Pod spec includes labels: `openvoid.io/session-id=<sessionId>`, `openvoid.io/managed-by=session-api`. `sessionId` is a fresh ULID from `id128` or similar.
 - `GET /sessions/{id}` reads the Pod via labels. `DELETE` removes the Pod.
 
@@ -725,7 +726,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 **Approach:**
 - Image name `localhost:5001/openvoid/session-api:dev` so kind's local registry serves it.
 - Live update: sync `src/` and restart Node when `package.json` changes.
-- This Tiltfile grows in Phases 5 (`git-finalizer` sidecar), 6 (Helm chart), 7 (OpenCode image), 9 (Web UI). *(Rev 4: original Phase 5 was "operator" — superseded by sidecar pivot. Rev 5: phases 5/6/7 reordered to put the sidecar before the chart and OpenCode.)*
+- This Tiltfile grows in Phases 5 (`git-finalizer` sidecar), 6 (OpenCode image), 7 (Helm chart), 9 (Web UI). *(Rev 4: original Phase 5 was "operator" — superseded by sidecar pivot. Rev 5: phases 5/6/7 reordered — sidecar first, OpenCode second using out-of-band Secret pattern, Helm last as the consolidation phase.)*
 
 **Patterns to follow:**
 - Tilt's "Live Update with Node" recipe.
@@ -804,7 +805,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
   - `git clone --branch "$BRANCH" "$AUTH_URL" /workspace/repo`
   - `git -C /workspace/repo remote set-url origin "$REPO_URL"` — strip the token from the persisted remote so the working tree on disk has no credential.
   - Configure `user.email`/`user.name` for downstream commits.
-- The `git-creds` Secret lives in `openvoid-sessions` (created out-of-band by the implementer using the example manifest). Phase 6 will graduate to chart-templated.
+- The `git-creds` Secret lives in `openvoid-sessions` (created out-of-band by the implementer using the example manifest). It stays out-of-band even after Phase 7 (the chart references it but doesn't auto-generate it — `git-creds` holds a real third-party PAT, unlike `OPENCODE_SERVER_PASSWORD` which Phase 7 graduates to a chart-templated auto-generated Secret).
 
 **Patterns to follow:**
 - The compass research's `Sidecar approach` YAML, §10 — clone-init shape mirrors that example exactly.
@@ -832,13 +833,13 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 **Dependencies:** Unit 4.2.
 
 **Files:**
-- Modify: `services/session-api/src/k8s/client.ts` — annotations + `activeDeadlineSeconds`. Default value sourced from a constant (chart will override in Phase 6).
+- Modify: `services/session-api/src/k8s/client.ts` — annotations + `activeDeadlineSeconds`. Default value sourced from a constant (chart will override in Phase 7).
 - Modify: `services/session-api/src/routes/sessions.ts` — `GET /sessions/:id` reads annotations to populate the response's `repo`, `branch`, and `createdAt` fields (extending the Phase 3 response shape — TypeSpec contract update if needed in Phase 3's `packages/protocol/main.tsp`).
 - Modify: `packages/protocol/main.tsp` — add `repo`, `branch`, `createdAt` (RFC 3339) to the `Session` model. Regenerate `openapi.yaml` + `types.ts` via `pnpm --filter @openvoid/protocol generate`.
 
 **Approach:**
 - Annotations are written-only by the Session API at creation time; no in-pod process modifies them in v1. (A v1.5 activity-aware idle reconciler might add `openvoid.io/last-seen-at`.)
-- `activeDeadlineSeconds = 14400` is hard-coded in v1; Phase 6's chart parameterizes it as `session.activeDeadlineSeconds`.
+- `activeDeadlineSeconds = 14400` is hard-coded in v1; Phase 7's chart parameterizes it as `session.activeDeadlineSeconds`.
 
 **Patterns to follow:**
 - Phase 3's existing label conventions — annotations follow the same `openvoid.io/*` namespace.
@@ -859,7 +860,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ### Phase 5: `git-finalizer` native sidecar against placeholder main (Slice 5 — rev 5)
 
-**Demo checkpoint at end of phase:** A session created via `POST /sessions` runs with the placeholder `nginx:alpine` main container plus a `git-finalizer` native sidecar. The implementer `kubectl exec`s into the pod, creates or modifies a file in `/workspace/repo`, then issues `DELETE /sessions/<sid>`. The SIGTERM cascade fires: kubelet signals main → main exits → kubelet signals sidecar → sidecar's `trap` runs `git add/commit/push` → a `feat/<sessionId>` branch appears on GitHub containing the edit. The push happens **after** main has exited and **before** the pod is removed — proving the SIGTERM cascade is wired correctly. **No agent yet** — that's Phase 7.
+**Demo checkpoint at end of phase:** A session created via `POST /sessions` runs with the placeholder `nginx:alpine` main container plus a `git-finalizer` native sidecar. The implementer `kubectl exec`s into the pod, creates or modifies a file in `/workspace/repo`, then issues `DELETE /sessions/<sid>`. The SIGTERM cascade fires: kubelet signals main → main exits → kubelet signals sidecar → sidecar's `trap` runs `git add/commit/push` → a `feat/<sessionId>` branch appears on GitHub containing the edit. The push happens **after** main has exited and **before** the pod is removed — proving the SIGTERM cascade is wired correctly. **No agent yet** — that's Phase 6.
 
 > Rev 5: this phase moved from the original (rev 4) Phase 7 position. The rationale is in "Resolved during Phase 4 verification (rev 5)" above. By proving clone+modify+push end-to-end against a known-simple main container (nginx, PID 1 trivially correct), we de-risk the single biggest architectural unknown — does the native sidecar SIGTERM trap actually push reliably? — *before* layering on OpenCode. The original Phase 7's content (units, scenarios, idempotency) is preserved here; what changes is the demo workload (`kubectl exec` instead of agent prompts) and the dependency (Phase 4 only — there's no Helm chart and no OpenCode at this point). Chart-parameterization of the finalizer image and grace period moves to Phase 6's Unit 6.2.
 
@@ -871,12 +872,12 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Requirements:** R1 (commit-on-shutdown is the load-bearing exit path); Threat Model PAT-hardening.
 
-**Dependencies:** Phase 4 complete. (Rev 5: previously depended on Phase 6 OpenCode; now the main container remains the Phase 4 placeholder nginx, and the agent integration is Phase 7's responsibility.)
+**Dependencies:** Phase 4 complete. (Rev 5: previously depended on rev-4 Phase 6 OpenCode; now the main container remains the Phase 4 placeholder nginx, and the agent integration is Phase 6's responsibility.)
 
 **Files:**
 - Create: `infra/images/git-finalizer/Dockerfile` (only if we want a custom-tagged image; otherwise use upstream `alpine/git:2.45.2` directly).
 - Create: `infra/images/git-finalizer/entrypoint.sh` — the SIGTERM-trap script. Distroless-incompatible (uses `/bin/sh` and `sleep`); we ship it on `alpine/git` which has both.
-- Modify: `services/session-api/src/k8s/client.ts` — `buildSessionPodManifest` adds the native sidecar to `initContainers` (with `restartPolicy: Always`), with the same `volumeMount` for `/workspace`, `volumeMount` for `git-creds` (separate from the main container — the credential must never appear in main, even when main is just nginx; the isolation guarantee is what carries forward into Phase 7's OpenCode swap), and env wiring for `BRANCH` and `GIT_TOKEN`.
+- Modify: `services/session-api/src/k8s/client.ts` — `buildSessionPodManifest` adds the native sidecar to `initContainers` (with `restartPolicy: Always`), with the same `volumeMount` for `/workspace`, `volumeMount` for `git-creds` (separate from the main container — the credential must never appear in main, even when main is just nginx; the isolation guarantee is what carries forward into Phase 6's OpenCode swap), and env wiring for `BRANCH` and `GIT_TOKEN`.
 - Modify: `services/session-api/test/routes.sessions.test.ts` — assert the sidecar shape and that the credential mount is on the sidecar only, not the main container.
 
 **Approach:**
@@ -896,7 +897,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
   ```
 - The `& wait` idiom is load-bearing — without it, the shell isn't responsive to signals while in `sleep`.
 - Branch name derives from the session-id-suffix in the pod's hostname (which the Session API sets as `session-<sessionId-lowercased>` per Phase 3).
-- The credential mount is `volumeMount: /etc/git-creds` on the sidecar **only**; the main container's spec has no `volumeMount` for `git-creds`. *(Rev 5: this isolation is established now, against nginx, so when Phase 7 swaps in OpenCode the agent simply inherits a credential-free filesystem.)* Phase 8's `opencode.json` will further deny `read` on `/etc/git*` as belt-and-braces once the agent is in.
+- The credential mount is `volumeMount: /etc/git-creds` on the sidecar **only**; the main container's spec has no `volumeMount` for `git-creds`. *(Rev 5: this isolation is established now, against nginx, so when Phase 6 swaps in OpenCode the agent simply inherits a credential-free filesystem.)* Phase 8's `opencode.json` will further deny `read` on `/etc/git*` as belt-and-braces once the agent is in.
 
 **Execution note:** test-first. Add the sidecar shape to the unit-test assertions before modifying the manifest. The hardest part of this work is signal handling, which is exercised in Unit 5.2's integration tests; getting the manifest shape right first keeps the code change small.
 
@@ -908,7 +909,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Happy path (unit): manifest's `initContainers` includes both `git-clone` (no `restartPolicy`) and `git-finalizer` (with `restartPolicy: Always`).
 - Happy path (unit): the sidecar's command is the entrypoint script; image is `alpine/git:2.45.2`; mounts include `/workspace` and `/etc/git-creds`.
 - Edge case (unit): the main container's `volumeMounts` does **not** include `/etc/git-creds` (credential isolation regression guard).
-- Edge case (unit): `terminationGracePeriodSeconds` is set on the Pod (default 180; hard-coded as a constant in `client.ts` for v1; graduates to a chart value in Phase 6).
+- Edge case (unit): `terminationGracePeriodSeconds` is set on the Pod (default 180; hard-coded as a constant in `client.ts` for v1; graduates to a chart value in Phase 7).
 
 **Verification:**
 - `pnpm --filter @openvoid/session-api test` passes.
@@ -926,7 +927,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Files:**
 - Modify: `infra/images/git-finalizer/entrypoint.sh` — handle the empty-commit case (`|| true`), log meaningfully so failures are debuggable in `kubectl logs`, retry the push once on transient failure (network blips), use `git push --force-with-lease` so retry of a partial earlier push converges rather than failing.
-- Modify: `services/session-api/src/k8s/client.ts` — set `terminationGracePeriodSeconds: 180` on the Pod (hard-coded constant; chart parameterization in Phase 6.2).
+- Modify: `services/session-api/src/k8s/client.ts` — set `terminationGracePeriodSeconds: 180` on the Pod (hard-coded constant; chart parameterization in Phase 7.2).
 - Create: `services/session-api/test/integration/finalizer.test.ts` — integration test (skipped in CI per the plan's CI scope decision; runs locally on kind via a `pnpm test:integration` script).
 
 **Approach:**
@@ -961,135 +962,21 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-### Phase 6: Helm chart + Session API in chart (Slice 6 — rev 5)
+### Phase 6: OpenCode image as the per-session main container (Slice 6 — rev 5)
 
-**Demo checkpoint at end of phase:** `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against kind installs the Session API (replacing Phase 3's raw `infra/local/session-api.yaml`). Tilt drives the chart via `helm_resource` (or equivalent). The implementer can `helm template` to inspect what's rendered, `helm upgrade` to roll changes, and the Tilt UI shows the same `session-api` resource as before — but now Helm-managed. The chart also parameterizes the `git-finalizer` sidecar values introduced in Phase 5 (image, grace period), graduating them from `client.ts` constants to chart values.
+**Demo checkpoint at end of phase:** A `POST /sessions` produces a Pod with the `git-clone` initContainer (Phase 4), the **real OpenCode agent** as the main container (replacing `nginx:alpine`), the `git-finalizer` native sidecar from Phase 5, and the cloned repo mounted at `/workspace/repo`. `kubectl port-forward` to the agent pod's `:8080` returns OpenCode's `/global/health` 200 with the version string. The agent can be prompted via `POST /session/<sid>/message` and emits SSE events on `/global/event`. The full lifecycle works end-to-end: prompt the agent to edit a file → `DELETE /sessions/<sid>` → the Phase 5 sidecar pushes a `feat/<sid>` branch with the agent's edit. **This is the second "magic moment"** — first was Phase 5 with `kubectl exec`, this is the real agent. No Helm chart yet — that's Phase 7; in this phase the Session API still runs from the raw `infra/local/session-api.yaml` and the OpenCode `OPENCODE_SERVER_PASSWORD` Secret is applied out-of-band, mirroring the Phase 4 `git-creds` pattern.
 
-> Rev 5: phase position moved from 5→6. Content is largely the same as the rev 4 Phase 5, with one addition: now the chart's `session.*` values block also covers the finalizer-sidecar values (`session.gitFinalizer.image`, `session.terminationGracePeriodSeconds`) introduced in Phase 5, graduating them from `client.ts` constants to chart values. The Phase 5 sidecar's own implementation is unchanged — Phase 6 is purely the packaging concern, applied after the lifecycle is proven.
+> Rev 5: phase position is OpenCode-before-Helm. The original (rev 4) order was Helm (5) → OpenCode (6) → sidecar (7); rev 5 first reordered to sidecar (5) → Helm (6) → OpenCode (7), then a follow-up swap moved OpenCode to Phase 6 and Helm to Phase 7. Rationale: the OpenCode-specific gotchas (PID 1 forwarding, `opencode.json` loading, server-password wiring, agent's read of `/workspace/repo`, model/provider config) cluster naturally with Phase 5's lifecycle-validation work — both phases are about "make a real session pod work end-to-end" — while Helm is a clean conceptual chunk on its own ("packaging"). The out-of-band Secret pattern is already familiar from Phase 4's `git-creds`, so reusing it costs zero new K8s knowledge. The full-graduation-to-chart work is then a single big consolidation in Phase 7.
 
-> Rev 4: this phase replaces the original "Session Operator skeleton" phase. There is **no operator** to author. The chart's first consumer is the Session API; Phase 9 will add `templates/web/`, `templates/cloudflared/`, and `templates/routing/` to the same chart. ArgoCD wiring (was Unit 5.9) moves to Phase 9. NetworkPolicy (was Unit 5.7) moves to Phase 8.
+> Rev 4: largely the same image work as the rev-1–3 Phase 6, but the operator dependencies are gone. The Session API's `buildSessionPodManifest` swaps `nginx:alpine` → OpenCode and adds the OpenCode-specific env-var wiring; no `Operator builds the OpenCode Pod spec` unit is needed because there's no operator.
 
-- [ ] **Unit 6.1: Helm chart skeleton + Session API as the first consumer**
-
-**Goal:** `infra/helm/openvoid/` is a Helm v3 chart that templates the Session API's namespaces, ServiceAccount, RBAC, Deployment, and Service. The chart's values cover both kind (`infra/helm/values/local.yaml`) and DOKS (`infra/helm/values/dev.yaml`) defaults.
-
-**Requirements:** R3 (CI scoping is enabled by Helm-rendering); supports R1 deployment story on both clusters; rev-3 OpenShift readiness (the seam for `routing.mode` lands here even though the routing template itself is empty in this phase).
-
-**Dependencies:** Phase 5 complete.
-
-**Files:**
-- Create: `infra/helm/openvoid/Chart.yaml` (apiVersion v2, version 0.1.0).
-- Create: `infra/helm/openvoid/values.yaml` — defaults (Session API + chart-wide). Values: `namespace.{system,sessions}`, `sessionApi.{image.repository,image.tag,replicas,jwt.secretName}`, `session.{image,activeDeadlineSeconds,workspace.type,workspace.sizeLimit,terminationGracePeriodSeconds,gitFinalizer.image}`, `gitCreds.secretName`, `networkPolicies.enabled` (Phase 8 toggles), `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` per rev 3).
-- Create: `infra/helm/openvoid/templates/namespaces.yaml`.
-- Create: `infra/helm/openvoid/templates/session-api/{serviceaccount,role,rolebinding,deployment,service}.yaml` — port `infra/local/session-api.yaml` into Helm templates.
-- Create: `infra/helm/openvoid/templates/_helpers.tpl` — common labels, fully-qualified naming.
-- Create: `infra/helm/openvoid/templates/routing/.gitkeep` — empty seam directory; Phase 9 fills `cloudflared.yaml` here.
-- Create: `infra/helm/values/local.yaml` (kind defaults).
-- Create: `infra/helm/values/dev.yaml` (DOKS defaults — image=`ghcr.io/openvoid/session-api:<sha>`, networkPolicies enabled).
-- Create: `infra/helm/openvoid/README.md` — values reference, chart usage notes, link to the Cross-Platform Parity Matrix at the top of this plan.
-
-**Approach:**
-- Author by porting `infra/local/session-api.yaml` (Phase 3) into templates one resource at a time. The chart's first install on kind should produce a diff-clean equivalent of Phase 3's manifest.
-- Per-session Pod manifests are *not* in the chart — pods are created at runtime by the Session API. The chart provides the **values** the Session API reads to configure those pods (image, activeDeadlineSeconds, workspace size, finalizer grace period, etc.).
-- Phase 3's `infra/local/session-api.yaml` is **deleted** at the end of this phase (replaced by the chart). Tilt switches from `k8s_yaml('infra/local/session-api.yaml')` to a `helm_resource` or `helm_remote`-style equivalent.
-
-**Patterns to follow:**
-- Bitnami chart conventions for `_helpers.tpl` (named templates, fully qualified names).
-- The compass research's recommendation that operators are over-engineering for per-pod concerns — the chart contains *only* persistent infra (Session API), not session pods.
-
-**Test scenarios:**
-- Happy path: `helm template infra/helm/openvoid -f infra/helm/values/local.yaml` produces valid YAML; output includes the namespaces, ServiceAccount, Role, RoleBinding, Deployment, Service.
-- Happy path: `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against `kind-openvoid-local` installs cleanly; `helm list -A` shows the release; Phase 5's clone+modify+push flow continues to work.
-- Edge case: `helm upgrade` with an image tag bump rolls the Deployment without disrupting in-flight pods (zero-downtime check).
-- Edge case: `helm template ... --set routing.mode=openshift-route` rendering doesn't error even though `templates/routing/openshift-route.yaml` doesn't exist in v1 (the empty-seam validation).
-
-**Verification:**
-- `helm list -A` shows the `openvoid` release in `openvoid-system`.
-- `kubectl get all -n openvoid-system` includes the Session API Deployment + Service.
-- Phase 5 demo flow still works: POST creates a session pod, `kubectl exec` + edit + DELETE produces a `feat/<sid>` branch on GitHub.
-
----
-
-- [ ] **Unit 6.2: Session API reads chart values for per-session Pod parameters (incl. finalizer values)**
-
-**Goal:** Hard-coded constants in `services/session-api/src/k8s/client.ts` (image, `activeDeadlineSeconds`, workspace size limit, finalizer image, finalizer grace period, etc.) graduate to environment variables sourced from the chart's `session.*` values block. The chart and the Session API agree on a small env-var contract; this is the pivot's analog of "CRD spec is intentionally lean."
-
-**Requirements:** R1; Key Technical Decision "Pod-spec is intentionally lean."
-
-**Dependencies:** Unit 6.1.
-
-**Files:**
-- Modify: `services/session-api/src/k8s/client.ts` — read `process.env.OPENVOID_STUB_IMAGE` (already exists from Phase 3), `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS`, `OPENVOID_SESSION_WORKSPACE_SIZE_LIMIT`, `OPENVOID_GIT_IMAGE`, `OPENVOID_GIT_FINALIZER_IMAGE` (rev 5), `OPENVOID_SESSION_TERMINATION_GRACE_PERIOD_SECONDS` (rev 5). Defaults preserved as fallbacks.
-- Modify: `infra/helm/openvoid/templates/session-api/deployment.yaml` — `env:` block populates the variables from `.Values.session.*`.
-- Modify: `infra/helm/openvoid/values.yaml` — defaults for the values listed above.
-- Modify: `services/session-api/test/routes.sessions.test.ts` — env-var-driven defaults are exercised in tests.
-
-**Approach:**
-- The Session API stays the only place that knows how to assemble a Pod spec; the chart only supplies the parameters. This keeps the per-session pod creation logic colocated with the API's HTTP handlers and test suite.
-- Reading env vars at boot (not per-request) is fine for v1; chart upgrades restart the Deployment, picking up new values.
-- Rev 5: the finalizer's image and grace period join the env-var contract. Phase 5 hard-coded these as constants; this unit graduates them. Behaviour is unchanged — only configurability gains.
-
-**Patterns to follow:**
-- The Phase 3 pattern of `process.env.OPENVOID_STUB_IMAGE ?? "nginx:alpine"` — extend to the new variables.
-
-**Test scenarios:**
-- Happy path (unit): with env vars unset, defaults apply; manifest carries the documented defaults (including `terminationGracePeriodSeconds: 180` and `git-finalizer` image `alpine/git:2.45.2`).
-- Happy path (unit): with env vars set to overrides, manifest carries the override values.
-- Edge case (unit): malformed numeric env var (e.g., `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS=not-a-number`) — the Session API rejects loudly at boot rather than silently defaulting (fail-fast).
-
-**Verification:**
-- `kubectl exec -n openvoid-system <session-api-pod> -- env | grep OPENVOID_SESSION_` shows the variables populated from the chart.
-- Demo: `helm upgrade` with `--set session.activeDeadlineSeconds=600`; create a session; `kubectl get pod -n openvoid-sessions <pod> -o jsonpath='{.spec.activeDeadlineSeconds}'` returns 600.
-- Demo: `helm upgrade` with `--set session.terminationGracePeriodSeconds=300`; create a session; the manifest carries the override.
-
----
-
-- [ ] **Unit 6.3: Tilt becomes Helm-aware**
-
-**Goal:** The root `Tiltfile` switches from `k8s_yaml('infra/local/session-api.yaml')` to a Helm-driven flow. The dev experience stays identical (single `tilt up`, hot-reload still works on `services/session-api/src`), but the chart is now the source of truth.
-
-**Requirements:** R9 (kind + Tilt as local dev), R10 (single bootstrap command).
-
-**Dependencies:** Unit 6.1, Unit 6.2.
-
-**Files:**
-- Modify: `Tiltfile` — replace `k8s_yaml('infra/local/session-api.yaml')` with `helm('infra/helm/openvoid', name='openvoid', namespace='openvoid-system', values=['infra/helm/values/local.yaml'])`. Keep the existing `docker_build` for `services/session-api`. Keep the kind-context guard.
-- Delete: `infra/local/session-api.yaml` (superseded by the chart).
-- Modify: `README.md` — refresh the "Local dev with Tilt" section to mention Helm rendering and the chart location.
-
-**Approach:**
-- Tilt's `helm()` extension renders the chart and feeds the resulting manifests into Tilt's reconciliation. The image-name match between `docker_build` and the chart's templated image makes live-update continue to work.
-- The kind-context guard from Phase 3 stays in place.
-
-**Patterns to follow:**
-- Tilt docs, "Helm" extension recipe.
-- Cluster API's Tiltfile (originally referenced for operator dev; the Helm subset still applies).
-
-**Test scenarios:**
-- Test expectation: none for the Tiltfile itself (config). Verified by demo.
-
-**Verification:**
-- `tilt alpha tiltfile-result` parses cleanly.
-- `tilt up` against kind still produces a healthy `session-api` resource; editing `services/session-api/src/server.ts` still triggers a live update within ~5 s.
-- Phases 3, 4, 5 demo flows continue to work end-to-end.
-
----
-
-### Phase 7: OpenCode image as the per-session main container (Slice 7 — rev 5)
-
-**Demo checkpoint at end of phase:** A `POST /sessions` produces a Pod with the `git-clone` initContainer (Phase 4), the **real OpenCode agent** as the main container (replacing `nginx:alpine`), the `git-finalizer` native sidecar from Phase 5 (now reading its image and grace period from the chart values established in Phase 6), and the cloned repo mounted at `/workspace/repo`. `kubectl port-forward` to the agent pod's `:8080` returns OpenCode's `/global/health` 200 with the version string. The agent can be prompted via `POST /session/<sid>/message` and emits SSE events on `/global/event`. The lifecycle from Phase 5 is unchanged — what changes is *what the workspace contains* on DELETE: real agent edits instead of `kubectl exec` test edits.
-
-> Rev 5: phase position moved from 6→7. Content is the same OpenCode-image-and-wiring work; what differs is the surrounding context. The lifecycle (clone→main→push) is already proven against nginx in Phase 5; this phase swaps the placeholder for OpenCode. Failure modes specific to OpenCode (PID 1 swallowing SIGTERM, agent-side write semantics) surface here, isolated from sidecar-pattern uncertainty. The chart from Phase 6 is the source of truth for the OpenCode image and the cluster-wide `OPENCODE_SERVER_PASSWORD` Secret.
-
-> Rev 4: largely the same image work as the original Phase 6, but the operator dependencies are gone. The Session API's `buildSessionPodManifest` swaps `nginx:alpine` → OpenCode and adds the OpenCode-specific env-var wiring; no `Operator builds the OpenCode Pod spec` unit is needed because there's no operator.
-
-- [ ] **Unit 7.1: OpenCode container image (rev 4 — SCC-friendly)**
+- [ ] **Unit 6.1: OpenCode container image (rev 4 — SCC-friendly)**
 
 **Goal:** A minimal Dockerfile installs OpenCode and runs `opencode serve --host 0.0.0.0 --port 8080`. The image is built into both the kind local registry (`localhost:5001/openvoid/opencode:dev`) and GHCR (`ghcr.io/openvoid/opencode:<sha>` for DOKS).
 
 **Requirements:** Brainstorm Slice 6; rev-3 OpenShift readiness.
 
-**Dependencies:** Phase 6 complete.
+**Dependencies:** Phase 5 complete.
 
 **Files:**
 - Create: `infra/images/opencode/Dockerfile`.
@@ -1134,40 +1021,161 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 7.2: Session API uses OpenCode as the per-session main container**
+- [ ] **Unit 6.2: Session API uses OpenCode as the per-session main container (out-of-band Secret)**
 
-**Goal:** `services/session-api/src/k8s/client.ts`'s `buildSessionPodManifest` swaps the placeholder `nginx:alpine` for OpenCode. Env-var wiring threads `OPENCODE_SERVER_PASSWORD` (from the cluster-wide Secret authored in Phase 6 and templated by the chart), `OPENVOID_REPO_PATH=/workspace/repo`, etc. `automountServiceAccountToken: false` is set on the per-session pod (untrusted). The Phase 5 sidecar and Phase 4 init container are untouched — this is a pure main-container swap.
+**Goal:** `services/session-api/src/k8s/client.ts`'s `buildSessionPodManifest` swaps the placeholder `nginx:alpine` for OpenCode. Env-var wiring threads `OPENCODE_SERVER_PASSWORD` (from a cluster-scoped Secret applied out-of-band, mirroring Phase 4's `git-creds` pattern), `OPENVOID_REPO_PATH=/workspace/repo`, etc. `automountServiceAccountToken: false` is set on the per-session pod (untrusted). The Phase 5 sidecar and Phase 4 init container are untouched — this is a pure main-container swap.
 
 **Requirements:** R1; Threat Model — `automountServiceAccountToken: false` on session pods.
 
-**Dependencies:** Unit 7.1; Phase 6 complete (chart provides the OpenCode image value and the `OPENCODE_SERVER_PASSWORD` Secret).
+**Dependencies:** Unit 6.1.
 
 **Files:**
-- Modify: `services/session-api/src/k8s/client.ts` — main container is OpenCode; ports `agent-http` (8080) named for Phase 9 routing; `automountServiceAccountToken: false` on the Pod.
-- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the OpenCode image, port name, `automountServiceAccountToken`, and Secret reference for `OPENCODE_SERVER_PASSWORD`.
-- Modify: `infra/helm/openvoid/values.yaml` — `session.image` default switches from `nginx:alpine` to `localhost:5001/openvoid/opencode:dev` (kind) / `ghcr.io/openvoid/opencode:<sha>` (DOKS).
-- Create: `infra/helm/openvoid/templates/secrets/opencode-server-password.yaml` — chart-managed Secret in `openvoid-system` with the cluster-wide password, referenced by every per-session pod via `valueFrom.secretKeyRef`.
+- Modify: `services/session-api/src/k8s/client.ts` — main container becomes OpenCode by default; `OPENVOID_STUB_IMAGE` env var continues to override (so the Phase 5 nginx demo flow stays reproducible). Port `agent-http` (8080) named for Phase 9 routing. `automountServiceAccountToken: false` on the Pod. The main container's env wires `OPENCODE_SERVER_PASSWORD` via `valueFrom.secretKeyRef` referencing the out-of-band Secret.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the OpenCode image default, port name, `automountServiceAccountToken`, and Secret reference for `OPENCODE_SERVER_PASSWORD`.
+- Create: `infra/local/opencode-password-secret.yaml.example` — example Secret manifest documenting the `password` key shape; not committed with a real value. README pointer for "create your own" mirroring `git-creds-secret.yaml.example`.
+- Modify: `.gitignore` — exclude `infra/local/opencode-password-secret.yaml` (without the `.example` suffix), same pattern as `git-creds-secret.yaml`.
 
 **Approach:**
-- The cluster-wide `OPENCODE_SERVER_PASSWORD` Secret is created via the chart (not out-of-band); v1 single-user posture, per-session generation deferred to v1.5 multi-tenancy.
+- The cluster-wide `OPENCODE_SERVER_PASSWORD` Secret is applied out-of-band by the implementer in v1 (one Secret per kind cluster, lives in `openvoid-system`). This mirrors Phase 4's `git-creds` pattern — same example-file convention, same `kubectl apply` step, same `.gitignore` rule. Phase 7 graduates this to a chart-templated Secret with auto-generated default value.
 - Port naming matters: Phase 9 routes `agent-http` (the OpenCode SSE) and `preview-http` (user's web preview) to different cloudflared subdomains; naming them now keeps Phase 9's templates simple.
 - `automountServiceAccountToken: false` ensures the agent can't reach the K8s API (defense in depth alongside Phase 8's NetworkPolicy).
-- Rev 5: the `OPENVOID_STUB_IMAGE=nginx:alpine` fallback path remains supported in the env-var contract (set via Helm value or env). This keeps the Phase 5 lifecycle demo (sidecar against nginx) reproducible after Phase 7 lands — useful for debugging if OpenCode-specific issues surface later.
+- The `OPENVOID_STUB_IMAGE=nginx:alpine` override remains supported. This keeps the Phase 5 lifecycle demo (sidecar against nginx) reproducible after Phase 6 lands — useful for debugging if OpenCode-specific issues surface later.
 
 **Patterns to follow:**
+- Phase 4's `git-creds` out-of-band Secret pattern (`infra/local/git-creds-secret.yaml.example`, `.gitignore` rule).
 - Existing Phase 3/4 manifest-construction patterns.
 - The compass research's §10 sidecar YAML — the per-pod credentials-injection shape.
 
 **Test scenarios:**
-- Happy path (unit): manifest's main container is OpenCode, port `agent-http` declared at 8080, `OPENCODE_SERVER_PASSWORD` references the cluster-wide Secret.
+- Happy path (unit): manifest's main container is OpenCode by default, port `agent-http` declared at 8080, `OPENCODE_SERVER_PASSWORD` references the out-of-band Secret via `valueFrom.secretKeyRef`.
 - Happy path (unit): manifest carries `automountServiceAccountToken: false`.
-- Edge case (unit): the `nginx:alpine` Phase 4 default still works as a fallback when `OPENVOID_STUB_IMAGE` is set (preserves the Phase 5 sidecar-against-placeholder demo flow as a debugging affordance).
-- Integration (manual demo, kind): create a session against a small repo; `kubectl logs -n openvoid-sessions <pod> -c session` shows OpenCode booting; `curl localhost:<forwarded>/global/health` returns 200.
-- Integration (manual demo, kind, end-to-end): create a session, prompt the agent to edit a file, `DELETE /sessions/<sid>`; the Phase 5 sidecar pushes a `feat/<sid>` branch with the agent's edit. *(Rev 5: this is the second "magic moment" — first was Phase 5 with kubectl exec; this is the real agent.)*
+- Edge case (unit): with `OPENVOID_STUB_IMAGE=nginx:alpine` set, the manifest carries the nginx image (Phase 5 demo path stays reproducible).
+- Integration (manual demo, kind): apply the password Secret (`kubectl apply -f infra/local/opencode-password-secret.yaml`); create a session against a small repo; `kubectl logs -n openvoid-sessions <pod> -c session` shows OpenCode booting; `curl localhost:<forwarded>/global/health` returns 200.
+- Integration (manual demo, kind, end-to-end): create a session, prompt the agent to edit a file, `DELETE /sessions/<sid>`; the Phase 5 sidecar pushes a `feat/<sid>` branch with the agent's edit. *(This is the second "magic moment" — first was Phase 5 with kubectl exec; this is the real agent.)*
+- Error path: with the password Secret absent, the pod fails with `CreateContainerConfigError` (same failure shape as Phase 4's `git-creds`-missing case — expected, documented).
 
 **Verification:**
 - Demo: POST → wait → `curl http://localhost:<forwarded>/global/health` returns 200; `curl http://localhost:<forwarded>/session` (with HTTP Basic auth using the password) returns the session list.
 - Demo: full agent-driven cycle (POST → prompt → edit → DELETE) lands a `feat/<sid>` branch on GitHub.
+
+---
+
+### Phase 7: Helm chart + Session API in chart (Slice 7 — rev 5)
+
+**Demo checkpoint at end of phase:** `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against kind installs the Session API (replacing Phase 3's raw `infra/local/session-api.yaml`) **and** the cluster-wide `OPENCODE_SERVER_PASSWORD` Secret. Tilt drives the chart via `helm_resource` (or equivalent). The implementer can `helm template` to inspect what's rendered, `helm upgrade` to roll changes, and the Tilt UI shows the same `session-api` resource as before — but now Helm-managed. The chart consolidates everything that was hard-coded or applied out-of-band in earlier phases: Session API templates, `session.image` (OpenCode by default), `session.activeDeadlineSeconds`, `session.workspace.sizeLimit`, `session.terminationGracePeriodSeconds`, `session.gitFinalizer.image`, the `OPENCODE_SERVER_PASSWORD` Secret template (auto-generated default), and references to the still-out-of-band `git-creds` Secret.
+
+> Rev 5: phase position is Helm-after-OpenCode. Helm is now the **consolidation phase** — every constant in `client.ts` and every out-of-band Secret applied in Phases 4–6 graduates to chart values or chart templates here. This is a single conceptual chunk ("packaging"), unlike the rev 4 Phase 5 ordering which mixed the chart skeleton with the lifecycle work and left OpenCode integration to land afterward. The Session API's `infra/local/session-api.yaml` (Phase 3) is replaced by the chart at the end of this phase. `git-creds` stays out-of-band even after this phase — it holds a real third-party PAT that must come from outside the platform; only `OPENCODE_SERVER_PASSWORD` (auto-generatable) graduates into the chart.
+
+> Rev 4: this phase replaces the original "Session Operator skeleton" phase. There is **no operator** to author. The chart's first consumer is the Session API; Phase 9 will add `templates/web/`, `templates/cloudflared/`, and `templates/routing/` to the same chart. ArgoCD wiring (was Unit 5.9) moves to Phase 9. NetworkPolicy (was Unit 5.7) moves to Phase 8.
+
+- [ ] **Unit 7.1: Helm chart skeleton + Session API + OpenCode Secret + finalizer values**
+
+**Goal:** `infra/helm/openvoid/` is a Helm v3 chart that templates: the namespaces, the Session API's ServiceAccount/RBAC/Deployment/Service, the cluster-wide `OPENCODE_SERVER_PASSWORD` Secret (auto-generated default), and the values that parameterize per-session Pods (image, deadlines, finalizer config). The chart's values cover both kind (`infra/helm/values/local.yaml`) and DOKS (`infra/helm/values/dev.yaml`) defaults.
+
+**Requirements:** R3 (CI scoping is enabled by Helm-rendering); supports R1 deployment story on both clusters; rev-3 OpenShift readiness (the seam for `routing.mode` lands here even though the routing template itself is empty in this phase).
+
+**Dependencies:** Phase 6 complete.
+
+**Files:**
+- Create: `infra/helm/openvoid/Chart.yaml` (apiVersion v2, version 0.1.0).
+- Create: `infra/helm/openvoid/values.yaml` — defaults (Session API + chart-wide). Values: `namespace.{system,sessions}`, `sessionApi.{image.repository,image.tag,replicas,jwt.secretName}`, `session.{image,activeDeadlineSeconds,workspace.type,workspace.sizeLimit,terminationGracePeriodSeconds,gitFinalizer.image}`, `gitCreds.secretName` (referenced; the Secret itself stays out-of-band), `opencodePassword.{secretName,autoGenerate,value}` (defaults: auto-generate), `networkPolicies.enabled` (Phase 8 toggles), `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` per rev 3).
+- Create: `infra/helm/openvoid/templates/namespaces.yaml`.
+- Create: `infra/helm/openvoid/templates/session-api/{serviceaccount,role,rolebinding,deployment,service}.yaml` — port `infra/local/session-api.yaml` into Helm templates.
+- Create: `infra/helm/openvoid/templates/secrets/opencode-server-password.yaml` — chart-managed Secret in `openvoid-system`, auto-generated password by default (`{{ randAlphaNum 32 }}` with a `lookup` guard so re-installs don't rotate). Replaces the out-of-band Secret from Phase 6 — at install time, the implementer's hand-applied `infra/local/opencode-password-secret.yaml` is deleted and the chart-managed one takes over.
+- Create: `infra/helm/openvoid/templates/_helpers.tpl` — common labels, fully-qualified naming.
+- Create: `infra/helm/openvoid/templates/routing/.gitkeep` — empty seam directory; Phase 9 fills `cloudflared.yaml` here.
+- Create: `infra/helm/values/local.yaml` (kind defaults).
+- Create: `infra/helm/values/dev.yaml` (DOKS defaults — image=`ghcr.io/openvoid/session-api:<sha>`, networkPolicies enabled).
+- Create: `infra/helm/openvoid/README.md` — values reference, chart usage notes, link to the Cross-Platform Parity Matrix at the top of this plan.
+
+**Approach:**
+- Author by porting `infra/local/session-api.yaml` (Phase 3) into templates one resource at a time. The chart's first install on kind should produce a diff-clean equivalent of Phase 3's manifest plus the new Secret template.
+- Per-session Pod manifests are *not* in the chart — pods are created at runtime by the Session API. The chart provides the **values** the Session API reads to configure those pods (image, activeDeadlineSeconds, workspace size, finalizer grace period, etc.).
+- Phase 3's `infra/local/session-api.yaml` is **deleted** at the end of this phase (replaced by the chart). The implementer's hand-applied `infra/local/opencode-password-secret.yaml` is also deleted (replaced by the chart's templated Secret). `infra/local/git-creds-secret.yaml` stays — `git-creds` is a real third-party PAT that openvoid can't auto-generate.
+- Tilt switches from `k8s_yaml('infra/local/session-api.yaml')` to a `helm_resource` or `helm_remote`-style equivalent.
+
+**Patterns to follow:**
+- Bitnami chart conventions for `_helpers.tpl` (named templates, fully qualified names).
+- Helm's `lookup` function pattern for "auto-generate once, persist on re-install" Secret idiom (avoids password rotation churn).
+- The compass research's recommendation that operators are over-engineering for per-pod concerns — the chart contains *only* persistent infra (Session API + Secret), not session pods.
+
+**Test scenarios:**
+- Happy path: `helm template infra/helm/openvoid -f infra/helm/values/local.yaml` produces valid YAML; output includes the namespaces, ServiceAccount, Role, RoleBinding, Deployment, Service, and OPENCODE_SERVER_PASSWORD Secret.
+- Happy path: `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against `kind-openvoid-local` installs cleanly; `helm list -A` shows the release; Phase 6's clone+modify+push flow continues to work, now driven by the chart-managed Secret.
+- Happy path: `helm uninstall openvoid && helm install openvoid …` regenerates a fresh password (no `lookup` cache) — documented as expected during dev; `helm upgrade` preserves the existing password (`lookup` returns the existing value).
+- Edge case: `helm upgrade` with an image tag bump rolls the Deployment without disrupting in-flight pods (zero-downtime check).
+- Edge case: `helm template ... --set routing.mode=openshift-route` rendering doesn't error even though `templates/routing/openshift-route.yaml` doesn't exist in v1 (the empty-seam validation).
+
+**Verification:**
+- `helm list -A` shows the `openvoid` release in `openvoid-system`.
+- `kubectl get all -n openvoid-system` includes the Session API Deployment + Service + the OpenCode password Secret.
+- Phases 5 and 6 demo flows still work end-to-end (kubectl-exec lifecycle and agent-driven lifecycle both produce `feat/<sid>` branches on GitHub).
+
+---
+
+- [ ] **Unit 7.2: Session API reads chart values for per-session Pod parameters**
+
+**Goal:** Hard-coded constants in `services/session-api/src/k8s/client.ts` (image, `activeDeadlineSeconds`, workspace size limit, finalizer image, finalizer grace period, etc.) graduate to environment variables sourced from the chart's `session.*` values block. The chart and the Session API agree on a small env-var contract; this is the pivot's analog of "CRD spec is intentionally lean."
+
+**Requirements:** R1; Key Technical Decision "Pod-spec is intentionally lean."
+
+**Dependencies:** Unit 7.1.
+
+**Files:**
+- Modify: `services/session-api/src/k8s/client.ts` — read `process.env.OPENVOID_STUB_IMAGE` (already exists from Phase 3; default switches to OpenCode in Phase 6), `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS`, `OPENVOID_SESSION_WORKSPACE_SIZE_LIMIT`, `OPENVOID_GIT_IMAGE`, `OPENVOID_GIT_FINALIZER_IMAGE`, `OPENVOID_SESSION_TERMINATION_GRACE_PERIOD_SECONDS`, `OPENVOID_OPENCODE_PASSWORD_SECRET_NAME` (rev 5 swap — was hard-coded in Phase 6). Defaults preserved as fallbacks.
+- Modify: `infra/helm/openvoid/templates/session-api/deployment.yaml` — `env:` block populates the variables from `.Values.session.*` and `.Values.opencodePassword.secretName`.
+- Modify: `infra/helm/openvoid/values.yaml` — defaults for the values listed above.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — env-var-driven defaults are exercised in tests.
+
+**Approach:**
+- The Session API stays the only place that knows how to assemble a Pod spec; the chart only supplies the parameters. This keeps the per-session pod creation logic colocated with the API's HTTP handlers and test suite.
+- Reading env vars at boot (not per-request) is fine for v1; chart upgrades restart the Deployment, picking up new values.
+- Behaviour is unchanged from Phase 6 — only configurability gains. Constants graduate to env vars; out-of-band Secret reference graduates to chart-templated.
+
+**Patterns to follow:**
+- The Phase 3 pattern of `process.env.OPENVOID_STUB_IMAGE ?? "nginx:alpine"` — extend to the new variables.
+
+**Test scenarios:**
+- Happy path (unit): with env vars unset, defaults apply; manifest carries the documented defaults (including `terminationGracePeriodSeconds: 180`, `git-finalizer` image `alpine/git:2.45.2`, OpenCode image, and the configured `opencodePassword.secretName`).
+- Happy path (unit): with env vars set to overrides, manifest carries the override values.
+- Edge case (unit): malformed numeric env var (e.g., `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS=not-a-number`) — the Session API rejects loudly at boot rather than silently defaulting (fail-fast).
+
+**Verification:**
+- `kubectl exec -n openvoid-system <session-api-pod> -- env | grep OPENVOID_` shows the variables populated from the chart.
+- Demo: `helm upgrade` with `--set session.activeDeadlineSeconds=600`; create a session; `kubectl get pod -n openvoid-sessions <pod> -o jsonpath='{.spec.activeDeadlineSeconds}'` returns 600.
+- Demo: `helm upgrade` with `--set session.terminationGracePeriodSeconds=300`; create a session; the manifest carries the override.
+
+---
+
+- [ ] **Unit 7.3: Tilt becomes Helm-aware**
+
+**Goal:** The root `Tiltfile` switches from `k8s_yaml('infra/local/session-api.yaml')` to a Helm-driven flow. The dev experience stays identical (single `tilt up`, hot-reload still works on `services/session-api/src`), but the chart is now the source of truth.
+
+**Requirements:** R9 (kind + Tilt as local dev), R10 (single bootstrap command).
+
+**Dependencies:** Unit 7.1, Unit 7.2.
+
+**Files:**
+- Modify: `Tiltfile` — replace `k8s_yaml('infra/local/session-api.yaml')` with `helm('infra/helm/openvoid', name='openvoid', namespace='openvoid-system', values=['infra/helm/values/local.yaml'])`. Keep the existing `docker_build` for `services/session-api`. Keep the kind-context guard.
+- Delete: `infra/local/session-api.yaml` (superseded by the chart).
+- Delete: any locally-applied `infra/local/opencode-password-secret.yaml` (superseded by the chart-managed Secret); note in the README that the example file remains for reference but is no longer the live install path.
+- Modify: `README.md` — refresh the "Local dev with Tilt" section to mention Helm rendering and the chart location.
+
+**Approach:**
+- Tilt's `helm()` extension renders the chart and feeds the resulting manifests into Tilt's reconciliation. The image-name match between `docker_build` and the chart's templated image makes live-update continue to work.
+- The kind-context guard from Phase 3 stays in place.
+
+**Patterns to follow:**
+- Tilt docs, "Helm" extension recipe.
+- Cluster API's Tiltfile (originally referenced for operator dev; the Helm subset still applies).
+
+**Test scenarios:**
+- Test expectation: none for the Tiltfile itself (config). Verified by demo.
+
+**Verification:**
+- `tilt alpha tiltfile-result` parses cleanly.
+- `tilt up` against kind still produces a healthy `session-api` resource; editing `services/session-api/src/server.ts` still triggers a live update within ~5 s.
+- Phases 3, 4, 5, 6 demo flows continue to work end-to-end.
 
 ---
 
@@ -1183,7 +1191,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Requirements:** Threat Model — network isolation in v1.
 
-**Dependencies:** Phase 6 complete (so the chart can template the policy).
+**Dependencies:** Phase 7 complete (so the chart can template the policy).
 
 **Files:**
 - Create: `infra/helm/openvoid/templates/sessions/networkpolicy.yaml` — default-deny + explicit egress allowlist; gated on `.Values.networkPolicies.enabled`.
@@ -1223,7 +1231,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Modify: `infra/images/opencode/opencode.json` — full denylist per threat model.
 
 **Approach:**
-- Replace the Phase 7 placeholder permissive config with:
+- Replace the Phase 6 placeholder permissive config with:
   ```json
   {
     "$schema": "https://opencode.ai/config.json",
@@ -1254,7 +1262,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Edge case (manual demo): from the agent, ask it to `rm -rf /workspace` — denied.
 
 **Verification:**
-- The Phase 5 demo flow still works (clone, edit, push) and the Phase 7 agent demo still works (prompt, edit, push) — none of the denylists block the legitimate clone/push path.
+- The Phase 5 demo flow still works (clone, edit, push) and the Phase 6 agent demo still works (prompt, edit, push) — none of the denylists block the legitimate clone/push path.
 
 ---
 
@@ -1598,7 +1606,7 @@ The session detail page shows different content per `status.phase` and `status.c
 
 | Risk | Mitigation |
 |------|------------|
-| OpenCode upstream breaks the `serve` mode CLI before Phase 7 | Phase 0.3 spike verified endpoint surface at v1.14.31; pin `opencode-ai` version in the Phase 7 Dockerfile; document upgrade procedure |
+| OpenCode upstream breaks the `serve` mode CLI before Phase 6 | Phase 0.3 spike verified endpoint surface at v1.14.31; pin `opencode-ai` version in the Phase 6 Dockerfile; document upgrade procedure |
 | **PID 1 swallows SIGTERM** in the agent or finalizer sidecar | Phase 7's entrypoint script `exec`s into the binary; Phase 5's finalizer entrypoint uses the canonical `trap 'finalize; exit 0' TERM INT` + `while true; do sleep 3600 & wait $!; done` shape. Both verified by integration test in Unit 5.2. *(Rev 4 risk — load-bearing for the sidecar pattern; rev 5 reorders so the finalizer half is exercised in Phase 5 against placeholder nginx, isolating sidecar-pattern failures from agent-specific ones.)* |
 | **`terminationGracePeriodSeconds` exhausted mid-push** on slow networks | Default 180 s in Unit 5.2 (compass research §4 recommendation); configurable via Helm (parameterized in Phase 6). Push is idempotent (Unit 5.2) so the next session converges. v1 accepts the trade-off; v1.5 may add periodic snapshots |
 | **Hard node failure** (kubelet dies before SIGTERM cascade runs) | Accepted in v1 — sidecar pattern fundamentally cannot recover from this. Mitigated by encouraging users to click Save & Stop periodically; v1.5 may add periodic snapshots or graduate to a controller for cluster-wide pod-loss recovery. *(Rev 4 — explicitly documented as out-of-scope.)* |
@@ -1648,10 +1656,10 @@ The phases above are exactly the phased delivery. Recommended execution order:
 2. **Week 2 (DONE):** Phase 3 (Session API + TypeSpec).
 3. **Week 3 (DONE):** Phase 4 (workspace volume + git-clone init container). Init containers, shared volumes, `fsGroup`, annotations.
 4. **Week 4 — current:** Phase 5 (`git-finalizer` native sidecar against placeholder). **The hardest single phase in v1** — signal handling, PID 1, grace-period sizing, idempotency, integration testing against real GitHub. Reserve focus time. Demo workload is `kubectl exec` editing `/workspace/repo`; main container is still nginx, so PID 1 is trivially correct and the suspect surface for any failure is purely the sidecar pattern. Phase 5's commit-on-shutdown demo is the **first** v1.0 "magic moment" — the first time the lifecycle works end-to-end, no agent required.
-5. **Week 5:** Phase 6 (Helm chart + Session API in chart). Pure packaging concern, independent of the lifecycle. Also graduates the finalizer's image and grace period from constants in `client.ts` to chart-managed values. Tilt becomes Helm-aware.
-6. **Week 6:** Phase 7 (OpenCode image as main container). Real agent in the loop, slotted into a proven lifecycle. Includes the SCC-friendly Dockerfile pattern (rev 3) and the PID-1-clean entrypoint. Phase 7's demo is the **second** magic moment — agent edits real code, lifecycle pushes a `feat/<sid>` branch.
+5. **Week 5:** Phase 6 (OpenCode image as main container). Real agent slotted into the proven lifecycle. Includes the SCC-friendly Dockerfile pattern (rev 3) and the PID-1-clean entrypoint. `OPENCODE_SERVER_PASSWORD` is applied out-of-band, mirroring Phase 4's `git-creds` pattern — same example file, same `kubectl apply` step, same `.gitignore` rule. Phase 6's demo is the **second** magic moment — agent edits real code, lifecycle pushes a `feat/<sid>` branch.
+6. **Week 6:** Phase 7 (Helm chart consolidates everything). Every hard-coded constant in `client.ts` (image, deadlines, finalizer values) and the out-of-band `OPENCODE_SERVER_PASSWORD` Secret graduate to chart values or templates. Tilt becomes Helm-aware. `git-creds` stays out-of-band even after this phase — it's a real third-party PAT.
 7. **Week 7:** Phase 8 (safety rails — NetworkPolicy + opencode.json + activeDeadlineSeconds documentation). Smaller phase; mostly chart values + permissions config.
-8. **Week 8:** Phase 9 (Web UI + presence + Save & Stop + cloudflared + ArgoCD + CI). The chart already exists from Phase 6 — Phase 9 adds `web/`, `routing/cloudflared.yaml`, and the SSE presence path. Includes the previously-Phase-5.9 ArgoCD wiring.
+8. **Week 8:** Phase 9 (Web UI + presence + Save & Stop + cloudflared + ArgoCD + CI). The chart already exists from Phase 7 — Phase 9 adds `web/`, `routing/cloudflared.yaml`, and the SSE presence path. Includes the previously-Phase-5.9 ArgoCD wiring.
 
 Total wall time post-pivot: **~6 calendar weeks of remaining work** at part-time learning pace; ~2 weeks at full-time. The pivot saves an estimated 2–4 weeks (formerly Phase 4 CRD + Phase 5 Operator; now collapsed into "workspace + chart"). Phases 1, 2, and 9 (ArgoCD path, cloudflared) can be done against DOKS; Phases 4–8 stay on kind to control cost.
 
