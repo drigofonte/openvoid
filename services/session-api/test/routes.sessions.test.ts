@@ -8,6 +8,9 @@ import {
   SESSION_LABEL,
   MANAGED_BY_LABEL,
   MANAGED_BY_VALUE,
+  WORKSPACE_VOLUME_NAME,
+  WORKSPACE_MOUNT_PATH,
+  WORKSPACE_FS_GROUP,
 } from "../src/k8s/client.js";
 
 function makeMockOps(): PodOps & {
@@ -30,6 +33,40 @@ function podWith(phase: string, podIP?: string): V1Pod {
     status: { phase, podIP },
   };
 }
+
+describe("buildSessionPodManifest (Phase 4.1: workspace volume + fsGroup)", () => {
+  const spec: SessionPodSpec = { sessionId: "01HABCDEF", image: "nginx:alpine" };
+
+  it("declares an emptyDir `workspace` volume on the Pod", () => {
+    const manifest = buildSessionPodManifest(spec);
+    const volumes = manifest.spec?.volumes ?? [];
+    const workspace = volumes.find((v) => v.name === WORKSPACE_VOLUME_NAME);
+    expect(workspace, "workspace volume should be declared").toBeDefined();
+    expect(workspace?.emptyDir).toEqual({});
+  });
+
+  it("mounts the workspace volume on the main container", () => {
+    const manifest = buildSessionPodManifest(spec);
+    const mounts = manifest.spec?.containers?.[0]?.volumeMounts ?? [];
+    expect(mounts).toContainEqual({
+      name: WORKSPACE_VOLUME_NAME,
+      mountPath: WORKSPACE_MOUNT_PATH,
+    });
+  });
+
+  it("sets fsGroup so all containers can read/write the volume regardless of UID", () => {
+    const manifest = buildSessionPodManifest(spec);
+    expect(manifest.spec?.securityContext?.fsGroup).toBe(WORKSPACE_FS_GROUP);
+  });
+
+  it("preserves Phase 3 labels and managed-by metadata when the volume is added", () => {
+    const manifest = buildSessionPodManifest(spec);
+    expect(manifest.metadata?.labels).toEqual({
+      [SESSION_LABEL]: spec.sessionId,
+      [MANAGED_BY_LABEL]: MANAGED_BY_VALUE,
+    });
+  });
+});
 
 describe("sessionsRouter", () => {
   let ops: ReturnType<typeof makeMockOps>;

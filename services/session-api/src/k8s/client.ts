@@ -5,6 +5,10 @@ export const SESSION_LABEL = "openvoid.io/session-id";
 export const MANAGED_BY_LABEL = "openvoid.io/managed-by";
 export const MANAGED_BY_VALUE = "session-api";
 
+export const WORKSPACE_VOLUME_NAME = "workspace";
+export const WORKSPACE_MOUNT_PATH = "/usr/share/nginx/html";
+export const WORKSPACE_FS_GROUP = 65533;
+
 export type SessionPodSpec = {
   sessionId: string;
   image: string;
@@ -30,11 +34,26 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
     },
     spec: {
       restartPolicy: "Never",
+      securityContext: {
+        fsGroup: WORKSPACE_FS_GROUP,
+      },
+      volumes: [
+        {
+          name: WORKSPACE_VOLUME_NAME,
+          emptyDir: {},
+        },
+      ],
       containers: [
         {
           name: "session",
           image: spec.image,
           ports: [{ containerPort: 80 }],
+          volumeMounts: [
+            {
+              name: WORKSPACE_VOLUME_NAME,
+              mountPath: WORKSPACE_MOUNT_PATH,
+            },
+          ],
         },
       ],
     },
