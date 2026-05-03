@@ -3,8 +3,9 @@ title: "feat: v1 staged walkthrough — coding-session lifecycle proof"
 type: feat
 status: active
 date: 2026-05-01
-revision: 3
+revision: 4
 origin: docs/brainstorms/2026-05-01-monorepo-layout-requirements.md
+deepened: 2026-05-03
 ---
 
 # v1 Staged Walkthrough — Coding-Session Lifecycle Proof
@@ -13,36 +14,42 @@ origin: docs/brainstorms/2026-05-01-monorepo-layout-requirements.md
 
 This plan implements openvoid v1: a layered, learn-by-doing walkthrough that proves the coding-session lifecycle works end-to-end. v1 is **not** a polished platform; it is a runnable demo that an implementer (Kubernetes-novice) can build slice by slice, with every step ending in a concrete checkpoint they can `kubectl` and `curl` against.
 
-The plan is structured as **9 phases (one per vertical slice from the brainstorm)**, plus a **Phase 0 toolchain setup**. Each phase ends in a demoable artifact. Earlier phases use simpler stand-ins (raw `kubectl apply`, no Helm, no CI) and graduate to richer machinery (kustomize, then Helm, then nightly CI) only when a slice demonstrably needs it.
+The plan is structured as **9 phases (one per vertical slice from the brainstorm)**, plus a **Phase 0 toolchain setup**. Each phase ends in a demoable artifact. Earlier phases use simpler stand-ins (raw `kubectl apply`, no Helm, no CI) and graduate to richer machinery (Helm, then nightly CI) only when a slice demonstrably needs it.
+
+**Architecture (rev 4 — sidecar pattern, not custom operator).** Each coding session is a single Pod. A regular `initContainer` clones the repo into a shared workspace volume; a Kubernetes-native sidecar (init container with `restartPolicy: Always`, GA in K8s 1.33+) idles for the lifetime of the agent and runs `git add/commit/push` on `SIGTERM`; the main container is OpenCode talking to the workspace. The Session API is the only openvoid-side controller — it creates and deletes Pods directly, with no `CodingSession` custom resource and no Go reconciler. Lifecycle is **user-driven**: the Web UI's "Save & Stop" button issues `DELETE /sessions/:id`; an SSE keep-alive between Web UI and Session API doubles as the presence signal so a closed tab triggers cleanup; `activeDeadlineSeconds = 4h` is the kubelet-level failsafe. Activity-aware idle, cluster-level CR observability, and node-failure recovery are explicitly deferred to v1.5. The full rationale and the operator-path trade-offs are documented in [`docs/research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md`](../research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md) and recorded in "Resolved during pivot review (rev 4)" below.
 
 ## Problem Frame
 
-openvoid is a greenfield open-source platform (Replit/v0/Lovable alternative). The repo currently contains only `LICENSE`. The implementer is comfortable with Docker but has no hands-on Kubernetes experience. v1 must prove the coding-session lifecycle works — start a session, run an OpenCode pod, let the agent edit code in a Git workspace, see a live preview, idle-stop the pod, push the work back to a `feat/<session-id>` branch — across both a local kind cluster and a remote DigitalOcean Kubernetes (DOKS) cluster.
+openvoid is a greenfield open-source platform (Replit/v0/Lovable alternative). At rev 1 the repo contained only `LICENSE`; at rev 4 Phases 0–3 have shipped (toolchain, kind+DOKS, hello-world, Session API skeleton). The implementer is comfortable with Docker but has no hands-on Kubernetes experience. v1 must prove the coding-session lifecycle works — **start a session, run an OpenCode pod, let the agent edit code in a Git workspace, see a live preview, stop the session (user-initiated via Save & Stop or implicit via Web-UI disconnect), push the work back to a `feat/<session-id>` branch** — across both a local kind cluster and a remote DigitalOcean Kubernetes (DOKS) cluster. *(Rev 4: replaced "idle-stop" with the user-driven stop verbiage; activity-aware idle is deferred to v1.5.)*
 
 (See origin: `docs/brainstorms/2026-05-01-monorepo-layout-requirements.md` — sections "v1 Milestone & Build Strategy" and "Success Criteria".)
 
 ## Requirements Trace
 
-The plan satisfies the brainstorm's milestone success criterion and the supporting monorepo-property criteria:
+The plan satisfies the brainstorm's milestone success criterion and the supporting monorepo-property criteria, **reframed in rev 4** to reflect the sidecar pivot:
 
-- **R1 (milestone).** Local + DOKS end-to-end: Web UI → Session API → CodingSession CR → Operator → OpenCode Pod → Git workspace → live preview → idle-stop → `feat/<session-id>` push.
+- **R1 (milestone).** Local + DOKS end-to-end: Web UI → Session API → per-session Pod (init-clone + main agent + finalizer sidecar) → live preview → user-driven session-stop (Save button or Web-UI disconnect) → `feat/<session-id>` push. *Rev 4: replaces the original "...CodingSession CR → Operator → OpenCode Pod → ... idle-stop ..." chain with a leaner one. Activity-aware idle is deferred to v1.5; v1's stop signal is user-initiated, not LLM-activity-driven.*
 - **R2 (one-source-file API contract).** Phase 3 introduces TypeSpec; Phase 4+ keep it as the only edit point for the HTTP/WS contract.
-- **R3 (per-service CI scoping).** Phase 2 establishes the monorepo layout; CI is layered in incrementally — minimum viable CI in Phase 5 (operator unit tests), end-to-end CI gate added in Phase 9.
-- **R4 (Go developer reasoning in isolation).** Phase 4–5 produce a self-contained `services/session-operator/` Go module.
-- **R5 (drift bounded by integration tests).** Phase 5+ exercise API → CR → operator end-to-end via integration tests.
+- **R3 (per-service CI scoping).** Phase 2 establishes the monorepo layout; CI is layered in incrementally — minimum viable CI in Phase 5 (Session API + chart linting), end-to-end CI gate added in Phase 9.
+- **R4** *(retired in rev 4).* The brainstorm's "Go developer reasoning in isolation" requirement assumed a `services/session-operator/` Go module. The sidecar pivot removes the operator entirely — there is no Go module in v1. R4 graduates to v1.5 if the activity-aware idle reconciler ever needs to be built as a controller. No v1 unit advances R4.
+- **R5 (drift bounded by integration tests).** Phase 5+ exercise API → Pod (with init + sidecar) end-to-end via integration tests. *Rev 4: same intent, smaller surface — no CR layer to drift between.*
 
-(All Rs above map to the brainstorm's R1–R17. Cross-references in implementation units use the brainstorm's IDs verbatim.)
+(R1, R2, R3, R5 map to the brainstorm's R1–R17. The brainstorm's R6 — "Go-authored CRD types so the operator owns its schema in Go" — is also superseded by rev 4 alongside R4. Cross-references in implementation units use the brainstorm's IDs verbatim, with the supersession noted where it applies.)
 
 ## Scope Boundaries
 
 Carried from the brainstorm; reaffirmed here so the plan stays disciplined:
 
+- **No `CodingSession` CRD in v1.** *(rev 4 — supersedes the brainstorm's R6.)* The session lifecycle is modelled directly as a Pod with init container + main agent + native sidecar finalizer. No custom resource, no admission/validation webhooks, no `kubectl get codingsessions`. The Session API is the user-facing contract; `kubectl get pods -l openvoid.io/session-id` is the operator-facing one.
+- **No `services/session-operator` in v1.** *(rev 4 — supersedes the brainstorm's R4.)* No Go module, no controller-runtime, no kubebuilder, no reconciliation loop. The Session API creates and deletes Pods directly via `@kubernetes/client-node`. Activity-aware idle (the original justification for the operator) is deferred to v1.5; v1's session-stop signal is user-initiated.
 - **No `services/deploy-controller` in v1.** ArgoCD reconciles `infra/helm/` (introduced in Phase 9). No openvoid-side deploy controller.
 - **No `cli/` workspace, no `openvoid` CLI in v1.**
 - **No microVM/Firecracker runtime.** v1 uses standard Pods.
 - **No multi-cluster topology.** v1 = one kind cluster locally, one DOKS cluster remotely.
-- **No Go emission from `packages/protocol`.** The operator does not consume HTTP/WS contracts.
-- **No automated API↔CRD schema-compat tooling.** Drift is bounded by integration tests in Phases 5, 7, 8.
+- **No Go emission from `packages/protocol`.** *(rev 4: with no operator, this becomes definitional rather than a deliberate exclusion.)*
+- **No activity-aware idle-stop in v1.** *(rev 4.)* v1 cleans up sessions via the explicit Save & Stop button (Phase 9), via Web-UI disconnect (SSE keep-alive close + 60s grace, Phase 9), and via `activeDeadlineSeconds = 4h` (kubelet failsafe, Phase 8). Polling the agent's `/session/:id` for `time.updated` and treating long inactivity as "stop the pod" is a v1.5 add-on; the Phase 0.3 spike's findings remain valid for that future work.
+- **No node-failure recovery in v1.** *(rev 4.)* If a node dies hard mid-session, the Pod dies with it and any uncommitted work in the workspace is lost. This is a fundamental limitation of any in-Pod cleanup mechanism (sidecar or otherwise) and is the one capability an operator + external snapshot would add. Mitigation in v1 is the user's habit of clicking Save periodically; v1.5 may add a snapshot loop or graduate to a controller.
+- **No automated `OpenAPI ↔ Pod-spec` schema-compat tooling.** Drift between the API contract and the Pod-creation logic is bounded by integration tests in Phases 5, 7, 8 — same shape as the original plan, just without a CR in the middle.
 - **No Changesets / NPM publishing in v1.**
 - **No livenessProbe on the OpenCode pod** (per best-practice research — a thinking LLM looks dead but isn't). Readiness only. `activeDeadlineSeconds` is the failsafe.
 - **No semver tags on services in v1.** SHA-tagged images, ArgoCD reconciles values updates in `infra/helm/`.
@@ -56,9 +63,10 @@ Recorded so reviewers and future contributors know what is in/out of v1's securi
 
 **Trust boundaries:**
 - Web UI is publicly reachable through cloudflared but requires a valid GitHub OAuth session.
-- Session API requires a valid signed JWT on every request.
-- Session pod is treated as **untrusted** even for v1's single user — an LLM agent following user prompts can be steered by prompt injection in cloned-repo content or webfetch responses.
-- The operator and Session API are trusted (they manage cluster state and credentials).
+- Session API requires a valid signed JWT on every request, including the SSE keep-alive that doubles as the presence channel (rev 4).
+- Session pod (init-clone container, OpenCode main container, finalizer sidecar) is treated as **untrusted** even for v1's single user — an LLM agent following user prompts can be steered by prompt injection in cloned-repo content or webfetch responses. The finalizer sidecar runs `git push` with a PAT it reads from a mounted Secret, so the sidecar's threat model matters too: the sidecar must run from a known-good image, must inject the token only at push time (never on disk in `.git/config`), and must not expose the token to the main container's filesystem (separate `volumeMounts` for the credential).
+- The Session API is trusted (it manages cluster state and credentials). *(Rev 4: the operator is no longer in the trust set; there is no operator. This is a contraction of the trusted control plane, not an expansion.)*
+- Web UI ↔ Session API ↔ Session pod is the only call chain that leaves cluster boundaries. The agent's HTTP endpoint is **never** exposed to the public internet directly — chat SSE is proxied through the Session API (Phase 9 decision in rev 4). Live-preview ports are routed via cloudflared but only the agent's `:8080` (chat) and the user's web preview port; nothing else.
 
 **In-scope mitigations for v1:**
 - Authn at the Web UI (GitHub OAuth via NextAuth, username allowlist).
@@ -87,19 +95,20 @@ The plan's R1 success criterion requires the milestone to work on both kind and 
 | Concern | kind (local) | DOKS (remote) | Where it surfaces |
 |---|---|---|---|
 | Cluster context | `kind-openvoid-local` | `do-nyc1-openvoid-dev` | Phase 1 |
-| Storage class | `standard` | `do-block-storage` | Phase 7.1 — Helm value |
-| PVC provision latency | <1 s | 15–45 s | Phase 7 UX (provisioning state) |
-| Container registry | `localhost:5001/openvoid/...` | `ghcr.io/openvoid/...` | Phase 5+ — operator env var |
-| Image build flow | Tilt + ko/buildx → local registry | CI builds + pushes to GHCR; Helm values updated | Phase 5, 9 |
-| Live preview routing | `kubectl port-forward` (Tilt-managed) | `cloudflared` tunnel + wildcard CNAMEs | Phase 9.4 |
+| K8s minor version | 1.32+ (1.35.0 confirmed in use) | 1.32 (DOKS) | Both ≥1.29; native sidecars are GA in 1.33+ — both are well past the gate (rev 4) |
+| Workspace volume | `emptyDir` per Pod | `emptyDir` per Pod (DOKS Block Storage RWO is overkill for ephemeral v1 sessions) | Phase 4 — Helm value `session.workspace.type` (PVC reserved for v1.5) |
+| Container registry | `localhost:5001/openvoid/...` | `ghcr.io/openvoid/...` | Phase 5+ — Helm value `images.<svc>.repository` |
+| Image build flow | Tilt + buildx → local registry | CI builds + pushes to GHCR; Helm values updated | Phase 5, 9 |
+| Live preview routing | `kubectl port-forward` (Tilt-managed; per-session port allocated by Web UI) | cloudflared tunnel + wildcard CNAMEs (`<sid>.preview.<domain>`) | Phase 9 |
 | Web UI public URL | `localhost:3000` | `https://app.<domain>` | Phase 9 |
 | Session pod public URL | `localhost:<port>` (port-forwarded) | `<sessionId>.{agent,preview}.<domain>` | Phase 9 |
-| Network policies | Optional in v1 (kind doesn't enforce by default without a CNI plugin); document but don't require | **Required** — DOKS uses Cilium/Calico, NetworkPolicies enforced | Phase 5+ — Helm value `networkPolicies.enabled` |
+| Presence channel (Web UI ↔ Session API) | SSE (rev 4) | SSE (rev 4) | Phase 9 — same wire on both fabrics |
+| Network policies | Optional in v1 (kind doesn't enforce by default without a CNI plugin); document but don't require | **Required** — DOKS uses Cilium/Calico, NetworkPolicies enforced | Phase 8 — Helm value `networkPolicies.enabled` |
 | Auth | NextAuth still required (consistent UX) | NextAuth required | Phase 9 |
 | Cluster cost | $0 | ~$24/mo while running | `infra/remote/doks-destroy.sh` between sessions |
 | Concurrent sessions | Limited by laptop RAM | 1 on `s-2vcpu-4gb`; bump to `s-2vcpu-8gb` ($48/mo) for ≥2 | Document in `infra/remote/README.md` |
-| `cloudflared` Deployment | Not present | Present | Phase 9.4 — Helm value `cloudflared.enabled` |
-| ArgoCD | Not present (Tilt manages reconciliation locally) | Present | Phase 6+ |
+| `cloudflared` Deployment | Not present | Present | Phase 9 — Helm value `routing.mode == "cloudflared"` |
+| ArgoCD | Not present (Tilt manages reconciliation locally) | Present | Phase 9 (rev 4: ArgoCD wiring moves from Phase 5.9 — there's no operator earlier to manage) |
 
 **Implementer rule:** Every Helm value with cluster-specific behavior MUST appear in both `infra/helm/values/local.yaml` and `infra/helm/values/dev.yaml` so a value-set diff between them tells you exactly what changes per cluster.
 
@@ -124,80 +133,109 @@ Recorded so v1 design choices don't paint v1.5 into a corner. v1 keeps the seams
 
 ### Repository state
 
-Greenfield. Only `LICENSE`. Existing planning artifacts at `docs/ideation/`, `docs/brainstorms/`. `.claude/settings.local.json` already permits `git`, `github.com`, and `tilt.dev`. No `package.json`, `go.mod`, `tsconfig.json`, Dockerfile, or CI workflow yet.
+*(Updated rev 4 — at the time the pivot was decided.)* Phases 0–3 shipped: kind cluster bring-up, DOKS bootstrap, hello-world Pod, and the Session API skeleton (`packages/protocol` TypeSpec contract, `services/session-api` Hono service, root `Tiltfile`). Working tree includes:
+- `packages/protocol/` — TypeSpec source, generated OpenAPI 3.1 + TS types, `scripts/generate.sh`.
+- `services/session-api/` — Hono on `:4000`, `PodOps` interface backed by `@kubernetes/client-node`, multi-stage Dockerfile (builder + dev + runtime), 18 vitest tests, Scalar UI at `/`.
+- `infra/local/{kind-cluster,hello-world,session-api}.yaml` — kind config + Phase 2 nginx + Phase 3 Session API manifest with namespace-scoped RBAC.
+- `infra/remote/` — DOKS create/destroy scripts.
+- `Tiltfile` — kind-only (`allow_k8s_contexts("kind-openvoid-local")`), tsx-watch hot-reload for the Session API.
+- `docs/solutions/best-practices/helm-routing-abstraction-2026-05-03.md` — first institutional learning.
+- `docs/research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md` — sidecar-vs-operator research that triggered rev 4.
+
+No `services/session-operator/` (and per rev 4, never will be in v1). No `go.mod`. No CI workflow yet.
 
 ### Key technologies and versions (pinned at planning time)
 
 | Layer | Choice | Version (May 2026) | Notes |
 |---|---|---|---|
-| Local cluster | `kind` | v0.27+ | Containerd-config-path patch optional in v0.27+ |
+| Local cluster | `kind` | v0.27+ | Confirmed running v1.35.0 — well past the 1.33 GA gate for native sidecars |
 | Local registry | `localhost:5001` | per kind doc | Standard "kind + local registry" pattern |
 | Local dev orchestrator | `Tilt` | latest stable | Tiltfile in Starlark; `cluster-api` Tiltfile is the gold-standard reference |
-| Remote cluster | DOKS | k8s 1.32 | `s-2vcpu-4gb` × 1 node = ~$24/mo; skip HA control plane |
+| Remote cluster | DOKS | k8s 1.32+ | `s-2vcpu-4gb` × 1 node = ~$24/mo; skip HA control plane. Native sidecars require ≥1.29; 1.32 is comfortably past the gate |
 | Remote CLI | `doctl` | latest | `--update-kubeconfig` and `--set-current-context` default true |
-| Operator framework | `kubebuilder` | v4.14.0 | Min Go 1.22; pairs with controller-runtime v0.23.x |
-| Operator language | Go | latest stable (1.x) | Single Go module rooted at `services/session-operator/` |
+| ~~Operator framework~~ | ~~`kubebuilder`~~ | — | *Removed in rev 4. No operator in v1.* |
+| ~~Operator language~~ | ~~Go~~ | — | *Removed in rev 4. No Go module in v1.* |
 | TS package manager | `pnpm` | 9+ | Workspaces |
 | TS task runner | `Turborepo` | latest major | Affected-task detection |
-| Contract IDL | `@typespec/openapi3` | latest | Configure `openapi-versions: ["3.1.0"]` |
-| TS client codegen | `openapi-typescript` | v7.x | Consumes 3.1 cleanly |
-| Go container builds | `ko` | latest | Tilt: `ko_build()` extension |
+| Contract IDL | `@typespec/openapi3` | 1.11.0 | `openapi-versions: ["3.1.0"]`; pinned in `packages/protocol/package.json` |
+| TS client codegen | `openapi-typescript` | 7.13.0 | Consumes 3.1 cleanly |
+| TS API framework | `hono` + `@hono/node-server` | 4.12+ | Phase 3 baseline |
+| K8s client (TS) | `@kubernetes/client-node` | 1.4.0 | In-cluster + kubeconfig fallback |
 | TS container builds | `docker buildx` | latest | Tilt: `docker_build()` with `live_update` |
+| Sidecar git image | `alpine/git` | 2.45+ | Used by both the `git-clone` init container (Phase 4) and the `git-finalizer` native sidecar (Phase 7). ~25 MB |
 | Container registry | GHCR | n/a | `ghcr.io/openvoid/...`; v1 is repo-public so anonymous pulls work |
-| Helm | latest 3.x | n/a | Introduced in Phase 9 only |
-| ArgoCD | latest stable | n/a | Introduced in Phase 9 only |
-| OpenCode | `opencode-ai` | latest | `opencode serve` mode; install via `npm i -g opencode-ai` or `curl ... | bash` |
-| Live preview (kind) | `kubectl port-forward` | n/a | Tilt-managed |
+| Helm | 3.x latest | n/a | Introduced in Phase 5 (rev 4 — earlier than the original Phase 9, since the chart is now the only deploy artifact) |
+| ArgoCD | latest stable | n/a | Introduced in Phase 9 (unchanged) |
+| OpenCode | `opencode-ai` | 1.14+ | `opencode serve` mode; tested in Phase 0.3 spike at v1.14.31 |
+| Live preview (kind) | `kubectl port-forward` | n/a | Tilt-managed; per-session ports allocated by the Web UI |
 | Live preview (DOKS) | Cloudflare Tunnel (`cloudflared`) | latest | Zero LB cost; no DNS/cert wiring needed for v1 |
-| TS test framework | `vitest` | v2+ | Fast, ESM-native |
-| Go test framework | stdlib `testing` + `envtest` | per kubebuilder v4.14 | `make envtest` resolves binaries |
+| TS test framework | `vitest` | 4.x | Phase 3 baseline |
 
 ### Patterns to follow (external references)
 
-- **Cluster API Tiltfile** (`cluster-api.sigs.k8s.io/developer/core/tilt`) — gold standard for kubebuilder-style operator dev with Tilt.
-- **kind local registry** (`kind.sigs.k8s.io/docs/user/local-registry/`) — copy verbatim for Phase 1.
-- **kubebuilder cronjob tutorial** (`book.kubebuilder.io`) — canonical reconciler skeleton; mirror in Phase 5.
-- **kubernetes.io container-lifecycle-hooks** — `preStop` semantics for Phase 8.
+*(Updated rev 4 — operator-specific references removed; sidecar-specific references added.)*
+
+- **kind local registry** (`kind.sigs.k8s.io/docs/user/local-registry/`) — applied verbatim in Phase 1.
+- **Kubernetes Native Sidecar Containers** (`kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/`) and **KEP-753** — termination-signal ordering, restart-policy semantics, OOM-priority adjustments. Load-bearing for Phases 4 and 7.
+- **kubernetes/git-sync** (`github.com/kubernetes/git-sync`) — canonical reference sidecar for git-into-filesystem patterns. Pull-only (we don't use it directly), but its volume-permissions and credential-mount conventions transfer to our `git-clone` init and `git-finalizer` sidecar.
+- **Tekton `git-clone` task** (`github.com/tektoncd/catalog/blob/main/task/git-clone/`) — closest analogue to our clone+modify+push workflow. Workspace-volume layout and credential-injection patterns are directly applicable.
 - **OpenCode docs** (`opencode.ai/docs/`) — install, `serve` mode, permissions config.
+- **`docs/research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md`** — internal: the sidecar-vs-operator comparison that triggered rev 4. Reference for: Pod-lifecycle phases (§2), termination-handling pitfalls (§4), git-from-sidecar concerns (§5), comparison matrix (§9), concrete YAML (§10), and the formal recommendation (§11).
+- **`docs/spikes/2026-05-02-opencode-endpoints.md`** — internal: OpenCode endpoint surface (Phase 0.3 spike). Defines the chat SSE shape that Phase 9 reuses as the presence channel.
 
 ### Institutional learnings
 
-`docs/solutions/` does not exist. Recommend starting it during Phase 5+ to capture operator gotchas as they're discovered (use `/ce:compound`).
+`docs/solutions/` was seeded during Phase 3 with [`best-practices/helm-routing-abstraction-2026-05-03.md`](../solutions/best-practices/helm-routing-abstraction-2026-05-03.md) (cluster-portability via Helm-level routing abstraction). The store will continue to grow as Phases 4–9 land — sidecar gotchas (signal handling, PID 1, grace-period sizing) and the SSE-presence pattern are obvious next compound candidates. Use `/ce:compound` after each phase's checkpoint clears.
 
 ### 2026-current gotchas surfaced by research
 
-- **kubebuilder v4 envtest binaries** moved away from the legacy bucket; always run `make envtest` and let it resolve.
-- **DOKS Block Storage is RWO only.** Don't attempt RWX; one PVC per session, attached to one pod.
-- **Provisioning latency on DOKS PVCs is 15–45 s.** This dominates cold-start UX — show a "provisioning workspace…" state in Phase 9.
+- **DOKS Block Storage is RWO only.** Don't attempt RWX. *(Rev 4: v1 uses `emptyDir` for the workspace, so this is now defensive — applies if v1.5 introduces a session-PVC.)*
+- **Provisioning latency on DOKS PVCs is 15–45 s.** *(Rev 4: not on the v1 critical path with `emptyDir`. Re-relevant if v1.5 adds PVCs.)*
 - **OpenCode has no official container image.** We build a thin Dockerfile in Phase 6.
-- **`preStop` does not run on `--grace-period=0 --force`.** Document as "do not force-delete sessions."
+- **`preStop` does not run on `--grace-period=0 --force`.** Document as "do not force-delete sessions." *(Rev 4: same applies to the SIGTERM trap inside the finalizer sidecar — force-delete bypasses graceful shutdown entirely and the push will not happen.)*
 - **Don't use livenessProbe on the agent pod.** A thinking LLM looks dead but isn't.
 - **OpenShift SCC `restricted-v2` assigns a random per-namespace UID** that overrides the image's `USER` directive. Images that work on stock K8s (`USER 1000`) fail on OpenShift unless `/app` (or wherever the process writes) is owned by GID 0 and group-writable. Canonical Dockerfile pattern: `RUN chgrp -R 0 /app && chmod -R g=u /app`. Cheap to apply, and aligns with K8s security best-practice anyway.
-- **OpenShift NetworkPolicy is enforced by default** (OVN-Kubernetes). Unit 5.7's default-deny will *immediately* block traffic on OpenShift; the same policy on kind is silently inert. Don't rely on kind to validate the policy.
+- **OpenShift NetworkPolicy is enforced by default** (OVN-Kubernetes). The Phase 8 default-deny will *immediately* block traffic on OpenShift; the same policy on kind is silently inert. Don't rely on kind to validate the policy.
+
+**Sidecar pattern gotchas (rev 4 — load-bearing for Phases 4, 7, and 8):**
+
+- **Native sidecars are an `initContainers` entry with `restartPolicy: Always`.** No new top-level field; they're listed alongside regular init containers. The kubelet treats them specially: they start in init order but don't block, they get probes (regular init containers don't), and they receive SIGTERM **only after all main containers have exited**. GA in K8s 1.33+; both kind 1.35 and DOKS 1.32 are past the gate.
+- **PID 1 swallows SIGTERM** unless you `exec`. A Dockerfile `CMD ["/bin/sh", "-c", "myapp ..."]` makes `/bin/sh` PID 1, and shells don't forward signals to children. Either use `exec myapp ...` in the entrypoint, or set `command:` to the binary directly, or add `tini`. The finalizer sidecar's shell entrypoint must use `trap ... TERM` and `wait` correctly to actually run on shutdown.
+- **Distroless images don't have `/bin/sh` or `sleep`.** A `preStop` exec command using `sleep` will fail with `FailedPreStopHook`. Phase 7's finalizer uses `alpine/git`, which has both, so this is already mitigated for v1; flagged for v1.5 if anyone tries to slim further.
+- **`terminationGracePeriodSeconds` is shared between `preStop` and SIGTERM handling.** v1 uses 180 s for session pods, which budgets a slow git push over a flaky network. Going below ~60 s is risky for the push leg.
+- **Sidecar exit code 0 is not guaranteed at Pod end.** If the grace period runs out mid-push, the kubelet sends SIGKILL and the sidecar exits non-zero. The push needs to be **idempotent** — `git commit --allow-empty || true` for the empty case, and the next session's push converges from where the previous one left off.
+- **Pod deletion vs. node failure.** SIGTERM cascade only fires if the kubelet on the node is alive. Hard node death = no push. v1 accepts this loss; v1.5 may add periodic snapshots or graduate to a controller.
+- **Web UI presence is a per-process state in v1.** v1 runs the Session API at `replicas: 1`. Adding replicas in v1.5 requires either sticky sessions on the SSE connection or shared presence state (Redis, etc.). Documented in Risks.
 
 ## Key Technical Decisions
 
-- **Slice independently before scaling structure.** Slices 1–4 use raw `kubectl apply`. Slice 5 introduces a Helm chart (operator is the first consumer); subsequent slices add to it. ArgoCD wires up at the end of Slice 6. This keeps the K8s novice's surface area small while avoiding a Phase 9 Helm/ArgoCD cliff.
-- **One namespace per logical concern, not per session.** v1: `openvoid-system` (operator + Session API + Web UI + cloudflared), `openvoid-sessions` (per-session Pods/PVCs). v1.5 may split per-tenant.
-- **Authentication via GitHub OAuth (NextAuth) on Web UI; Session API verifies a signed JWT.** The auth boundary lives at the Web UI; Session API rejects requests without a valid JWT signed with a shared signing key from a Secret. Single OAuth app for v1; users authorized by GitHub username allowlist (env var) until v1.5 multi-tenancy lands. cloudflared still exposes the public URLs but every request must hold a valid session.
-- **Cloudflare Tunnel over Ingress for v1 DOKS demos.** Zero LoadBalancer cost; one `cloudflared` Deployment routes both the agent's WS and the live-preview port. **Prerequisites (not optional):** (a) a Cloudflare-managed DNS zone for the demo domain, (b) a manually-created wildcard CNAME (`*.agent.<domain>`, `*.preview.<domain>`) pointing at `<tunnel-id>.cfargotunnel.com`, (c) Cloudflare Universal SSL covers one wildcard depth — accept that constraint or budget for Advanced Certificate Manager. Implementers without a domain use the Cloudflare Quick Tunnel fallback (`cloudflared tunnel --url ...`, ephemeral `*.trycloudflare.com` URL). ingress-nginx + cert-manager + wildcard DNS is deferred to v1.5.
-- **Operator polls agent activity via HTTP — implementation determined by the Phase 0.3 spike.** Path (a) native `/last-activity` if upstream exposes it, (b) thin wrapper sidecar that fronts `opencode serve` and exposes the endpoint, or (c) creation-time-based idle-only with activity-awareness deferred to v1.5. The Phase 0.3 spike picks one before Phase 5.
-- **Pod-level failsafe: `activeDeadlineSeconds = idleTimeoutSeconds * 4`.** K8s kills the session pod when the deadline passes regardless of operator state. Defends against operator crash, panic, or API-throttle without adding new components. preStop still runs within the activeDeadlineSeconds window if the deadline trips during normal operation.
-- **Periodic auto-commits as belt-and-braces alongside `preStop` push.** Per best-practice research, `preStop` is best-effort. Phase 8 adds a 60-s background commit loop in the agent container; `preStop` becomes the final flush.
-- **Fine-grained GitHub PAT scoped to one test repo + tightened agent permissions.** PAT is mounted at `/etc/git-credentials` for the initContainer + preStop hook. `opencode.json` denies `read` on `/etc/git*`, denies `bash` for `cat /etc/* | curl *` patterns, and denies `webfetch` to `*.github.com` (push goes through git over HTTPS, not webfetch). v1.5 graduates to GitHub App installation tokens to remove the long-lived secret entirely.
-- **Default-deny NetworkPolicy on `openvoid-sessions` namespace.** Session pods can egress only to: the configured Git host (e.g., GitHub HTTPS:443), the configured LLM provider domain(s) (Anthropic/OpenAI APIs as required by OpenCode), and DNS. Cannot reach the K8s API server (also enforced by `automountServiceAccountToken: false` from Unit 6.2), the metadata service (169.254.169.254), or other namespaces.
+*Decisions marked **(rev 4)** were added or modified by the sidecar pivot. Decisions marked **(superseded — rev 4)** were retired by the pivot but kept here in struck-through form so the rev history is legible.*
+
+- **(rev 4) Sidecar pattern, not custom operator + CRD.** The session lifecycle is modelled as a Pod with three roles: a regular `initContainer: git-clone` that clones the workspace, a main container running OpenCode, and a Kubernetes-native sidecar (`initContainer` with `restartPolicy: Always`, GA in 1.33+) that idles for the agent's lifetime and runs `git add/commit/push` on `SIGTERM`. No `CodingSession` CRD, no Go reconciler, no controller-runtime. Rationale: per the compass research (`docs/research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md`), the operator pattern earns its keep on cluster-wide stateful concerns (ArgoCD, Tekton, Vault) — none of which apply to "clone a repo, run an agent, push on exit." Native sidecars were designed precisely for this shape. The sidecar pattern saves us a Go module, controller-runtime, kubebuilder scaffolding, CRD schema versioning, admission webhooks, leader election, and a controller Deployment. **Superseded:** ~~CodingSession CRD~~, ~~Session Operator skeleton~~.
+- **(rev 4) Lifecycle is user-driven, not activity-driven.** Three signals, in priority order: (1) explicit "Save & Stop" button in the Web UI → `DELETE /sessions/:id`; (2) Web-UI presence via SSE keep-alive — connection close starts a 60 s grace timer in the Session API; if no reconnect, the pod is deleted; (3) `activeDeadlineSeconds = 4h` as a kubelet-level failsafe for forgotten sessions. Activity-aware idle (polling the agent's `/session/:id` for `time.updated`) is deferred to v1.5; the Phase 0.3 spike's findings remain valid for that future work.
+- **(rev 4) Web UI's chat SSE flows through the Session API, not directly to the agent.** This resolves the "deferred to implementation" question from rev 2 about routing. Two benefits: the SSE connection lifecycle becomes the presence channel (no separate heartbeat wire), and the agent's HTTP endpoint stays cluster-internal (the Web UI never needs `<sessionId>.agent.<domain>` access in v1). The `<sessionId>.preview.<domain>` cloudflared subdomain is still used for the user's running web preview.
+- **Slice independently before scaling structure.** *(Rev 4: timing shifts.)* Slices 1–3 use raw `kubectl apply`. Slice 5 introduces a Helm chart (the Session API is the first consumer; rev 4 — there is no operator). Subsequent slices add to the chart. ArgoCD wires up in Phase 9. The K8s-novice surface area stays small while avoiding a Phase 9 Helm/ArgoCD cliff.
+- **One namespace per logical concern, not per session.** v1: `openvoid-system` (Session API + Web UI + cloudflared), `openvoid-sessions` (per-session Pods). *(Rev 4: removed "operator" from the system namespace inhabitants.)* v1.5 may split per-tenant.
+- **Authentication via GitHub OAuth (NextAuth) on Web UI; Session API verifies a signed JWT.** The auth boundary lives at the Web UI; Session API rejects requests without a valid JWT signed with a shared signing key from a Secret. *(Rev 4: same JWT requirement applies to the SSE keep-alive endpoint that doubles as the presence channel.)* Single OAuth app for v1; users authorized by GitHub username allowlist (env var) until v1.5 multi-tenancy lands. **OAuth scopes are identity-only** (`read:user`, `user:email`) — openvoid never requests `repo` scope from end users, because users do not own the repos they edit (see "Tenancy & repo-ownership model" below). cloudflared still exposes the public URLs but every request must hold a valid session.
+- **Tenancy & repo-ownership model: many users, one platform-owned source-control account.** openvoid (the platform) owns a single account on the configured source-control host (e.g., a GitHub organization); every user app is a repo under *that* account, named e.g. `<platform-org>/<userId>-<appId>`. End users authenticate against the Web UI but never authorize openvoid against their own GitHub — they have no repos of their own in the loop. Implications that propagate through the plan: (1) the v1 PAT and the v1.5 GitHub App are always credentials of the **platform** account, not per-user; (2) repo provisioning on first Start Session is openvoid's responsibility, performed with the same platform credential (v1 demo skips this by reusing the implementer's pre-existing test repo as the single-repo stand-in); (3) ToS, quota, and abuse exposure for the source-control host live with the platform operator, not with end users; (4) "bring-your-own-repo" / "bring-your-own-GitHub-account" is explicitly **not** a v1 or v1.5 mode — it would be a separate post-v1.5 product direction with its own threat model.
+- **Cloudflare Tunnel over Ingress for v1 DOKS demos.** Zero LoadBalancer cost; one `cloudflared` Deployment routes the Web UI, the Session API (including the SSE chat path), and the live-preview port. **Prerequisites (not optional):** (a) a Cloudflare-managed DNS zone for the demo domain, (b) a manually-created wildcard CNAME (`*.preview.<domain>` and `app.<domain>`) pointing at `<tunnel-id>.cfargotunnel.com`, (c) Cloudflare Universal SSL covers one wildcard depth — accept that constraint or budget for Advanced Certificate Manager. Implementers without a domain use the Cloudflare Quick Tunnel fallback (`cloudflared tunnel --url ...`, ephemeral `*.trycloudflare.com` URL). ingress-nginx + cert-manager + wildcard DNS is deferred to v1.5.
+- ~~**Operator polls agent activity via HTTP — implementation determined by the Phase 0.3 spike.**~~ **(superseded — rev 4)** Activity-aware idle-stop is deferred to v1.5; v1's session-stop is user-driven. The spike's findings (OpenCode emits SSE on `/global/event`, `time.updated` is the activity field, no `/last-activity` endpoint exists) remain valid context for v1.5 and inform Phase 9's chat-SSE-through-Session-API decision.
+- **Pod-level failsafe: `activeDeadlineSeconds = 14400` (4 h).** *(Rev 4: simplified — was `idleTimeoutSeconds * 4` when activity-aware idle was the primary signal. With user-driven lifecycle as the primary signal, the failsafe becomes a flat wall-clock cap on forgotten sessions.)* The kubelet kills the pod when the deadline passes regardless of any other state. Defends against Session-API crash, network partition, or browser doing something weird. The SIGTERM cascade still fires within the deadline window, so the finalizer sidecar gets its push attempt before SIGKILL.
+- ~~**Periodic auto-commits as belt-and-braces alongside `preStop` push.**~~ **(superseded — rev 4)** The original belt-and-braces was driven by `preStop`'s "best-effort" reputation. Native sidecars with a SIGTERM trap are materially more reliable than `preStop`-only — SIGTERM to the sidecar arrives **after** main containers have exited, giving a clean signal of "the work is done, push now." v1 ships only the SIGTERM-trap path. Periodic mid-session commits are a v1.5 add-on if real users need them.
+- **Fine-grained GitHub PAT scoped to one test repo + tightened agent permissions.** The PAT belongs to the **platform's** source-control account (per the tenancy decision above), not to any end user. In v1 it is fine-grained and scoped to the implementer's single test repo, which stands in for "the one repo per user app under the platform org" until repo provisioning lands. PAT is mounted at `/etc/git-credentials` for the `git-clone` initContainer and the `git-finalizer` sidecar (rev 4: separate volume mounts so the main container's filesystem never sees the credential). `opencode.json` denies `read` on `/etc/git*`, denies `bash` for `cat /etc/* | curl *` patterns, and denies `webfetch` to `*.github.com` (push goes through git over HTTPS, not webfetch). v1.5 graduates to a GitHub App **installed on the platform org** to remove the long-lived secret entirely; the App is still platform-owned, never per-user.
+- **Default-deny NetworkPolicy on `openvoid-sessions` namespace.** *(Rev 4: moved from Unit 5.7 to Phase 8 — same intent, different home.)* Session pods can egress only to: the configured Git host (e.g., GitHub HTTPS:443), the configured LLM provider domain(s) (Anthropic/OpenAI APIs as required by OpenCode), and DNS. Cannot reach the K8s API server (also enforced by `automountServiceAccountToken: false`), the metadata service (169.254.169.254), or other namespaces.
 - **Single cluster-wide `OPENCODE_SERVER_PASSWORD` Secret for v1.** Per-session generation is unjustified for single-user hosted-first; one Secret in `openvoid-system` is referenced by every session pod via `valueFrom.secretKeyRef`. Rotates manually; per-session generation graduates with multi-tenancy.
-- **CRD spec is intentionally lean.** v1 spec fields: `repo`, `branch`, `idleTimeoutSeconds`. Dropped from v1: `image` (operator env-var driven), `userId` (no consumer), `workspaceSize` (operator default 10Gi), `spec.stop` (use CR DELETE — finalizer handles graceful shutdown). Easy to add back when there's a real consumer.
-- **Use `kubectl port-forward` end-to-end for kind, `cloudflared` for DOKS.** No conditional Ingress logic in the operator; the cloudflared Deployment is environment-specific (only present in DOKS).
-- **Routing is a Helm-level abstraction, not an operator-level one.** The operator always creates a `Service` per session with named ports `agent-http` and `preview-http`. *How* that Service is exposed publicly is decided by Helm values: `routing.mode: cloudflared` ships in v1; `openshift-route` and `ingress` are reserved values that v1.5 fills in. The operator never branches on cluster type. Cost: ~one extra Helm template directory (`templates/routing/`) authored in Phase 9.4. Benefit: porting to OpenShift in v1.5 is a net-new template, not a refactor.
-- **No kind-based e2e CI in v1.** Per-PR CI runs lint + typecheck + unit tests + envtest + generated-artifact freshness. The full kind-spinning e2e (brainstorm R13 with team-scale assumptions) defers to v1.5 when there's a team to benefit from a PR-level safety net. Manual demo verification at each phase's checkpoint replaces the gate for solo v1.
+- ~~**CRD spec is intentionally lean.**~~ **(superseded — rev 4)** With no CRD, the equivalent is **Pod-spec is intentionally lean**: the Session API parameterizes per-session Pods with only `repo` and `branch` (consumed by the `git-clone` init container as env vars). Workspace size, agent image, idle behavior, and stop semantics are all chart-value-driven (`session.workspace.sizeLimit`, `session.image`, `session.activeDeadlineSeconds`) — same lean philosophy, expressed at the Helm-values layer instead of a CR.
+- **Use `kubectl port-forward` end-to-end for kind, `cloudflared` for DOKS.** No conditional routing logic in the Session API; the cloudflared Deployment is environment-specific (only present in DOKS via `routing.mode: cloudflared` Helm value).
+- **Routing is a Helm-level abstraction, not an application-level one.** *(Rev 4: reframed — was "Helm-level, not operator-level"; now "Helm-level, not application-level" since there's no operator.)* The Session API always creates a `Service` per session with named ports `agent-http` and `preview-http`. *How* that Service is exposed publicly is decided by Helm values: `routing.mode: cloudflared` ships in v1; `openshift-route` and `ingress` are reserved values that v1.5 fills in. The Session API never branches on cluster type. Cost: ~one extra Helm template directory (`templates/routing/`) authored in Phase 9. Benefit: porting to OpenShift in v1.5 is a net-new template, not a refactor.
+- **No kind-based e2e CI in v1.** Per-PR CI runs lint + typecheck + unit tests + generated-artifact freshness. *(Rev 4: removed "envtest" — no Go module to envtest.)* The full kind-spinning e2e (brainstorm R13 with team-scale assumptions) defers to v1.5 when there's a team to benefit from a PR-level safety net. Manual demo verification at each phase's checkpoint replaces the gate for solo v1.
 
 ## Open Questions
 
 ### Resolved during planning (rev 1)
 
 - Per-slice scaffolding granularity. Each slice scaffolds only what it needs.
-- Generated TypeSpec artifact location: TS + OpenAPI under `packages/protocol/generated/`; CRD YAML under `infra/crds/`.
+- Generated TypeSpec artifact location: TS + OpenAPI under `packages/protocol/generated/`. *(Rev 4: the original second clause about CRD YAML under `infra/crds/` is superseded — there is no CRD in v1.)*
 - OpenCode mode in-pod: `opencode serve`.
 - Tilt-managed local registry on `localhost:5001`, per kind documentation.
 
@@ -220,20 +258,38 @@ Greenfield. Only `LICENSE`. Existing planning artifacts at `docs/ideation/`, `do
 
 Triggered by a real-world question during the Phase 3 demo: "we'd like to replicate this inside our company on OpenShift; what changes?" The answer should not be "rearchitect Phase 5–9," so v1 absorbs a small structural commitment now.
 
-- **Routing layer is a Helm-level abstraction** (see Key Technical Decisions). v1 ships only the `cloudflared` mode; the seam is `routing.mode` plus a `templates/routing/` directory in the chart. Operator never branches on cluster type.
-- **OpenCode image is SCC-friendly by construction** (Unit 6.1 — `chgrp 0 + chmod g=u`). Cheap; the same pattern is best-practice on stock K8s. v1 still runs as UID 1000 on kind/DOKS; the file ownership change just means OpenShift won't reject the image at admission.
-- **Per-session port-forward orchestration on kind** is the Web UI's responsibility (Phase 9), not the operator's. `kubectl port-forward` against the per-session `Service` produces `localhost:<port>`; the iframe embeds that. No operator code changes versus the v1 plan.
+- **Routing layer is a Helm-level abstraction** (see Key Technical Decisions). v1 ships only the `cloudflared` mode; the seam is `routing.mode` plus a `templates/routing/` directory in the chart. *(Rev 4 update: now framed as "Helm-level, not application-level" since there's no operator.)*
+- **OpenCode image is SCC-friendly by construction** (Phase 6 — `chgrp 0 + chmod g=u`). Cheap; the same pattern is best-practice on stock K8s. v1 still runs as UID 1000 on kind/DOKS; the file ownership change just means OpenShift won't reject the image at admission.
+- **Per-session port-forward orchestration on kind** is the Web UI's responsibility (Phase 9), not the operator's. `kubectl port-forward` against the per-session `Service` produces `localhost:<port>`; the iframe embeds that.
 - **OpenShift implementation itself stays out of v1 scope.** No `oc` in Phase 0; no CRC; no second remote cluster. v1's two-target story (kind + DOKS) is unchanged.
+
+### Resolved during pivot review (rev 4 — sidecar pattern adoption)
+
+Triggered by a deliberate technical-direction review using the [`compass research`](../research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md). The research compares the sidecar pattern against custom CRD + Operator for openvoid's specific shape (orchestrator-driven init, agent runs, finalizer pushes on exit, K8s novice on the implementing side). The conclusion was unambiguous: sidecars are the right tool; an operator earns its keep on cluster-wide stateful concerns that openvoid v1 simply doesn't have.
+
+The session-3 demo discussion that followed sharpened two further decisions about lifecycle and routing.
+
+- **Architecture: native sidecar, not custom operator + CRD.** The session is one Pod with `initContainer: git-clone` (regular init, exits before main), `container: opencode-agent` (main), and `initContainer: git-finalizer` with `restartPolicy: Always` (native sidecar; SIGTERM trap pushes to `feat/<sessionId>` on shutdown). Eliminates: `services/session-operator/` (Go module), CRD schemas, controller-runtime, kubebuilder, admission webhooks, leader election, `services/session-operator`'s Dockerfile. Saves an estimated 2–4 weeks of work and removes a whole class of failure modes (controller crash, finalizer deadlocks, schema drift).
+- **Lifecycle is user-driven, not activity-driven.** Three signals, in priority order:
+  1. **Save & Stop button** in the Web UI → `DELETE /sessions/:id` → SIGTERM cascade → push.
+  2. **Web-UI presence** via SSE keep-alive — the chat-stream connection close starts a 60 s grace timer in the Session API; if the Web UI doesn't reconnect within the window, the pod is deleted.
+  3. **`activeDeadlineSeconds = 14400` (4 h)** — kubelet-level failsafe for forgotten sessions.
+  
+  Activity-aware idle (polling agent's `/session/:id` for `time.updated`) is **deferred to v1.5**. The Phase 0.3 spike's findings stay valid for that future work; in the meantime, the cleaner user-driven signal is also a stronger one (presence > activity, since an LLM "thinking" doesn't mean the user is paying attention).
+- **Web UI's chat SSE flows through the Session API.** This resolves the previously deferred-to-implementation question about routing the agent stream. Two concrete benefits: the SSE connection lifecycle is the presence channel (no separate heartbeat wire), and the agent's `:8080` HTTP endpoint stays cluster-internal (Web UI never gets a `<sessionId>.agent.<domain>` cloudflared subdomain in v1; only the user's web preview gets a public subdomain).
+- **Brainstorm requirements R4 (Go developer reasoning in isolation) and R6 (Go-authored CRD types) are retired in v1.** The pivot supersedes them. They graduate to v1.5 only if a controller is reintroduced; otherwise they remain dropped.
 
 ### Deferred to implementation
 
 - **Exact OpenCode CLI flags for `opencode serve`** (`--port`, `--host`, model selection): resolve in Phase 6 once running the image locally.
-- **Whether to route the agent WS through Session API or directly via cloudflared subdomain**: resolve in Phase 9 when the live-preview UX is built. Default in Phase 6: cloudflared subdomain (simpler).
-- **Tiltfile final shape** (resource ordering, port-forward strategy): resolve incrementally — start in Phase 3 with the minimum and grow it.
-- **GitHub App vs PAT credentials**: PAT in v1 (decided); App migration deferred to v1.5.
-- **Helm chart structure** (one chart per service vs umbrella): defer to Phase 9 planning detail.
+- ~~**Whether to route the agent WS through Session API or directly via cloudflared subdomain**~~: **resolved in rev 4** as "Session API proxies the chat SSE." The original framing ("WS") was also superseded by the spike's SSE finding. The user's web preview port still uses a `<sessionId>.preview.<domain>` cloudflared subdomain.
+- **Tiltfile final shape** (resource ordering, port-forward strategy): resolve incrementally — Phase 3 baseline + Phase 5 Helm-aware refresh.
+- **GitHub App vs PAT credentials**: PAT in v1 (decided); App migration deferred to v1.5. Both are credentials of the **platform's** source-control account, not per-user — see the "Tenancy & repo-ownership model" key decision.
+- **Repo provisioning on first Start Session**: deferred. v1 hard-codes the implementer's single test repo as the workspace target. The "create `<platform-org>/<userId>-<appId>` if it doesn't exist, then clone" step is a v1.5 unit that fits cleanly behind the existing `repo` request field — Session API gains a "ensure repo exists" call before pod creation, using the same platform credential.
+- **Helm chart structure** (one chart per service vs umbrella): defer to Phase 5's Unit 5.1 detail.
 - **Wildcard DNS + cert-manager for ingress**: deferred to v1.5+ self-host concession.
-- **PVC provisioning UX** (preview state, retry, cleanup of orphaned PVCs): the operator garbage-collects via owner refs; the UX state is a Phase 9 concern.
+- **PVC for workspace** (vs `emptyDir`): rev 4 makes `emptyDir` the v1 default — sessions are ephemeral and the SIGTERM-cascade push is the persistence mechanism. PVC reserved for v1.5 if "resume my session tomorrow" becomes a real requirement.
+- **Activity-aware idle reconciler shape** (if v1.5 reintroduces it): Session API runs a `setInterval` polling each pod's `/session/:id` and deleting on stale `time.updated`. The seam is small; the v1.5 work is one `services/session-api/src/reconciler/idle.ts` module.
 
 ## High-Level Technical Design
 
@@ -246,32 +302,42 @@ graph TB
     P0[Phase 0: Tooling] --> P1[Phase 1: Clusters]
     P1 --> P2[Phase 2: Hello-world Pod]
     P2 --> P3[Phase 3: Session API + TypeSpec]
-    P3 --> P4[Phase 4: CodingSession CRD]
-    P4 --> P5[Phase 5: Session Operator]
-    P5 --> P6[Phase 6: OpenCode Image]
-    P6 --> P7[Phase 7: PVC + Git Workspace]
-    P7 --> P8[Phase 8: Commit-on-Shutdown]
-    P5 --> P9a[Phase 9a: Web UI scaffold]
-    P9a --> P9b[Phase 9b: Live preview wiring]
+    P3 --> P4[Phase 4: Workspace volume + git-clone init]
+    P4 --> P5[Phase 5: Helm chart + Session API in chart]
+    P5 --> P6[Phase 6: OpenCode image as main container]
+    P6 --> P7[Phase 7: git-finalizer native sidecar]
+    P7 --> P8[Phase 8: Safety rails — NetworkPolicy + activeDeadlineSeconds + opencode.json]
+    P5 --> P9a[Phase 9a: Web UI scaffold + Save & Stop UX]
+    P9a --> P9b[Phase 9b: SSE chat path + presence + cloudflared + ArgoCD]
     P8 --> P9b
 ```
 
-Phase 9a (Web UI scaffold) can run in parallel with Phases 6–8 if the implementer wants to interleave; Phase 9b (live preview wiring) requires Phase 8 complete.
+*(Rev 4: dropped Phases "CodingSession CRD" and "Session Operator." Replaced with workspace+init in Phase 4 and Helm-chart-first in Phase 5. Phase 7 is now the sidecar finalizer (the hardest learning unit). Phase 8 is reframed as safety rails — its old "belt-and-braces commit" content collapses into Phase 7's idempotent push.)*
 
-### CodingSession CRD lifecycle (phases when each transition is implemented)
+Phase 9a (Web UI scaffold) can run in parallel with Phases 6–8 if the implementer wants to interleave; Phase 9b (presence + live preview wiring) requires Phase 8 complete.
+
+### Per-session Pod lifecycle (sidecar pattern, rev 4)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending: CR created (Phase 5)
-    Pending --> Running: Pod Ready (Phase 5)
-    Running --> Stopping: idle timeout OR explicit stop (Phase 5 / Phase 8)
-    Stopping --> Stopped: preStop completes, Pod Succeeded (Phase 8)
-    Stopped --> [*]: CR deleted (Phase 5 finalizer)
-    Running --> Failed: Pod CrashLoopBackOff or operator error (Phase 5)
-    Failed --> [*]
+    state "init: git-clone (regular initContainer, exits)" as Init
+    state "main + sidecar (running)" as Running
+    state "Terminating: SIGTERM cascade" as Terminating
+    state "git-finalizer: SIGTERM trap fires push" as Finalizing
+    state "Pod Completed (or activeDeadlineSeconds tripped → Failed)" as End
+
+    [*] --> Init: Session API → POST → kubectl create pod (Phase 4 onward)
+    Init --> Running: clone OK, agent main + finalizer sidecar start
+    Running --> Terminating: DELETE /sessions/:id (Save & Stop) OR Web-UI presence lost OR activeDeadlineSeconds tripped
+    Terminating --> Finalizing: kubelet sends SIGTERM to main; main exits; kubelet sends SIGTERM to finalizer (LIFO)
+    Finalizing --> End: git add/commit/push → exit 0 (or SIGKILL if grace period exhausted)
+    Init --> [*]: clone fails → Pod Failed (no main, no sidecar)
+    End --> [*]
 ```
 
-### Session-creation request flow at v1 milestone
+Key reliability point: the finalizer sidecar receives SIGTERM **only after** all main containers have exited (per K8s native-sidecar termination semantics, KEP-753). This means "main work is done, push now" is a clean signal — no race against the agent's writes.
+
+### Session-creation request flow at v1 milestone (rev 4)
 
 ```mermaid
 sequenceDiagram
@@ -279,31 +345,38 @@ sequenceDiagram
     participant Web as apps/web (Next.js)
     participant API as services/session-api
     participant K8s as K8s API server
-    participant Op as services/session-operator
-    participant Pod as OpenCode Pod
-    participant PVC as PVC (do-block-storage)
+    participant Pod as Session Pod (init + main + sidecar)
     participant Tunnel as cloudflared (DOKS only)
+    participant Git as GitHub
+
     User->>Web: Click "Start session"
-    Web->>API: POST /sessions {repo, idleTimeout}
-    API->>K8s: Create CodingSession CR
-    K8s->>Op: Reconcile event
-    Op->>K8s: Create PVC (RWO, 10Gi)
-    Op->>K8s: Create Pod (initContainer: git clone; main: opencode serve)
-    K8s->>PVC: Provision (15–45s on DOKS)
-    K8s->>Pod: Start
-    Pod-->>Op: /healthz Ready (poll)
-    Op->>K8s: status.phase = Running
-    User->>Web: Stream chat to OpenCode
-    Web->>Tunnel: WS connect (DOKS) or port-forward (kind)
-    Tunnel->>Pod: WS to opencode serve
-    Note over Pod: Periodic background git commit (60s)
-    Note over Op,Pod: Op polls /last-activity every 30s
-    Op->>K8s: idle > 1800s → status.phase = Stopping
-    Op->>K8s: Delete Pod (graceful)
-    Pod->>Pod: preStop: git push feat/<session-id>
-    K8s->>Op: Pod Succeeded
-    Op->>K8s: Detach + delete PVC (owner ref GC)
-    Op->>K8s: status.phase = Stopped
+    Web->>API: POST /sessions {repo, branch}
+    API->>K8s: Create Pod (initContainer git-clone; main opencode-agent; sidecar git-finalizer)
+    K8s->>Pod: Schedule
+    Note over Pod: initContainer git-clone runs<br/>clones into emptyDir workspace<br/>exits 0
+    Note over Pod: main + sidecar start<br/>sidecar idles waiting for SIGTERM
+    Pod-->>API: /global/health 200 (poll)
+    API-->>Web: GET /sessions/:id → status: Running, endpointUrl
+    Web->>API: GET /sessions/:id/events (SSE keep-alive — chat + presence)
+    API->>Pod: GET /global/event (proxied SSE)
+    User->>Web: Chat with OpenCode
+    Web->>Tunnel: HTTPS to <sessionId>.preview.<domain> (DOKS only; kind uses port-forward)
+    Tunnel->>Pod: live-preview port
+
+    alt User clicks Save & Stop
+        Web->>API: DELETE /sessions/:id
+        API->>K8s: kubectl delete pod
+    else Web UI disconnects (tab close, network drop)
+        Note over API: SSE close → 60s grace timer
+        API->>K8s: kubectl delete pod (timer expires without reconnect)
+    else activeDeadlineSeconds tripped
+        Note over K8s: kubelet kills pod after 4h wall-clock
+    end
+
+    K8s->>Pod: SIGTERM cascade (preStop hooks, then main containers)
+    Note over Pod: main agent exits<br/>kubelet sends SIGTERM to git-finalizer<br/>trap fires
+    Pod->>Git: git add / commit / push to feat/<sessionId>
+    Pod->>K8s: All containers exit; Pod Completed
 ```
 
 ## Implementation Units
@@ -544,7 +617,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Demo checkpoint at end of phase:** A TS Session API runs in kind, exposes one OpenAPI endpoint (`POST /sessions`), and creating a session via the OpenAPI page (`GET /` → Scalar UI) results in a Pod appearing in the cluster.
 
-- [ ] **Unit 3.1: TypeSpec contract package**
+- [x] **Unit 3.1: TypeSpec contract package**
 
 **Goal:** `packages/protocol` exists, defines the v1 HTTP API surface in TypeSpec, and emits OpenAPI 3.1 + TS types.
 
@@ -578,7 +651,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 3.2: Session API service skeleton**
+- [x] **Unit 3.2: Session API service skeleton**
 
 **Goal:** `services/session-api` compiles, runs, serves the OpenAPI spec at `/openapi.yaml`, renders Scalar at `/`, and has a single `POST /sessions` handler that creates a stub Pod via the in-cluster K8s client.
 
@@ -623,7 +696,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 3.3: Tilt up — kind-deployed Session API hot-reloading**
+- [x] **Unit 3.3: Tilt up — kind-deployed Session API hot-reloading**
 
 **Goal:** Single command `tilt up` starts the Session API in kind with file-sync hot-reload from `services/session-api/src/`.
 
@@ -638,7 +711,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 **Approach:**
 - Image name `localhost:5001/openvoid/session-api:dev` so kind's local registry serves it.
 - Live update: sync `src/` and restart Node when `package.json` changes.
-- This Tiltfile grows in Phases 5 (operator), 6 (OpenCode image), 9 (Web UI).
+- This Tiltfile grows in Phases 5 (Helm chart), 6 (OpenCode image), 9 (Web UI). *(Rev 4: Phase 5 was originally "operator" — superseded by sidecar pivot.)*
 
 **Patterns to follow:**
 - Tilt's "Live Update with Node" recipe.
@@ -655,430 +728,476 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-### Phase 4: CodingSession CRD (Slice 4)
+### Phase 4: Workspace volume + git-clone init container (Slice 4 — rev 4)
 
-**Demo checkpoint at end of phase:** `kubectl get codingsessions -n openvoid-sessions` lists CRs created by the Session API. No reconciler logic yet — CRs are just typed records in etcd.
+**Demo checkpoint at end of phase:** `POST /sessions {repo: "https://github.com/<your-org>/<small-repo>"}` results in a Pod whose `git-clone` initContainer succeeds, the (still-stub) `nginx:alpine` main container starts with the cloned tree mounted at `/usr/share/nginx/html`, and `kubectl port-forward` to that pod returns the repo's `README.md` (or any committed file). No CRD, no operator. The Session API now creates richer Pod specs.
 
-- [ ] **Unit 4.1: kubebuilder init + create api**
+> Rev 4: this phase replaces the original "CodingSession CRD" phase. Its educational role — teaching the K8s primitives of pod creation — is preserved, but it teaches **init containers, shared volumes, and `fsGroup`** instead of CRDs. The CR-creation path is gone; the Session API still calls `createNamespacedPod` from `@kubernetes/client-node` (Phase 3 baseline), with a richer body.
 
-**Goal:** `services/session-operator/` exists as a kubebuilder v4 project with the `CodingSession` v1alpha1 API scaffolded.
+- [ ] **Unit 4.1: Pod-spec evolution — shared workspace volume**
 
-**Requirements:** R6 (CRD types Go-authored), brainstorm Slice 4.
+**Goal:** The Session API's per-session Pod spec gains a shared `emptyDir` volume mounted at `/workspace` in the (placeholder) main container. `securityContext.fsGroup` ensures all containers can read/write the volume regardless of their UID. No git yet — this unit proves the volume mounts cleanly before the next unit adds the clone.
 
-**Dependencies:** Unit 0.1 (kubebuilder + Go).
+**Requirements:** R1 (foundation for clone + push lifecycle).
+
+**Dependencies:** Phase 3 complete (Session API + PodOps interface).
 
 **Files:**
-- Create: `services/session-operator/PROJECT` (kubebuilder generates).
-- Create: `services/session-operator/go.mod`, `go.sum`.
-- Create: `services/session-operator/api/v1alpha1/codingsession_types.go` (kubebuilder generates skeleton; Unit 4.2 fills in fields).
-- Create: `services/session-operator/internal/controller/codingsession_controller.go` (kubebuilder generates skeleton; Unit 5.1 fills it).
-- Create: `services/session-operator/cmd/main.go`.
-- Create: `services/session-operator/Makefile`.
-- Create: `services/session-operator/config/...` (kubebuilder generates kustomize manifests).
+- Modify: `services/session-api/src/k8s/client.ts` — `buildSessionPodManifest` adds the `workspace` volume and `volumeMounts` on the main container; sets `securityContext.fsGroup: 65533` on the Pod.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the manifest includes the workspace volume + mount + fsGroup.
 
 **Approach:**
-- Run from `services/session-operator/`:
-  - `kubebuilder init --domain=openvoid.io --repo=github.com/openvoid/openvoid/services/session-operator`
-  - `kubebuilder create api --group=session --version=v1alpha1 --kind=CodingSession --resource --controller`
-- Don't deviate from `internal/controller/` — kubebuilder CLI assumes it.
-- Single Go module per brainstorm R1 — no `go.work` until v1.5.
+- Volume name: `workspace`. Type: `emptyDir: {}` (sufficient for v1's ephemeral sessions; PVC reserved for v1.5).
+- Mount path: `/workspace`. Same path in every container that touches the volume — keeps cognitive load low.
+- `fsGroup: 65533` matches the `nogroup` GID; this is what `kubernetes/git-sync`'s docs recommend, and it composes with OpenShift's per-namespace GID assignment (see `docs/solutions/best-practices/helm-routing-abstraction-2026-05-03.md`).
+- The placeholder main container (still `nginx:alpine` from Phase 3) gets its `volumeMounts` updated to mount the workspace at `/usr/share/nginx/html` so the `git-clone` init container's output becomes immediately observable via curl.
 
 **Patterns to follow:**
-- `book.kubebuilder.io` "Quick Start" verbatim through `create api`.
+- Phase 3's existing `buildSessionPodManifest` shape — add to it, don't restructure.
+- `kubernetes/git-sync` README's "Permissions / fsGroup" section.
 
 **Test scenarios:**
-- Test expectation: none — scaffolding only. The kubebuilder-generated test stubs in `internal/controller/codingsession_controller_test.go` will be replaced in Unit 5.1.
+- Happy path (unit, mocked K8s): `buildSessionPodManifest` output includes a `volumes[].name === "workspace"` entry with `emptyDir: {}`, and `containers[0].volumeMounts` includes `{ name: "workspace", mountPath: "/usr/share/nginx/html" }`.
+- Happy path (unit): `securityContext.fsGroup === 65533` on the Pod spec.
+- Edge case (unit): existing labels and managed-by metadata are preserved when the volume is added (regression guard for Phase 3 tests).
 
 **Verification:**
-- `cd services/session-operator && make build` succeeds.
-- `cd services/session-operator && make manifests` produces `config/crd/bases/session.openvoid.io_codingsessions.yaml`.
+- `pnpm --filter @openvoid/session-api test` passes (existing 18 tests + new ones).
+- `tilt up` against kind; `curl -X POST localhost:4000/sessions -d '{"repo":"x"}'`; `kubectl describe pod -n openvoid-sessions -l openvoid.io/session-id=<sid>` shows the volume + mount + fsGroup.
 
 ---
 
-- [ ] **Unit 4.2: CodingSession spec/status types**
+- [ ] **Unit 4.2: `git-clone` init container**
 
-**Goal:** `CodingSession` CRD has the v1 fields needed for Phases 5–9.
+**Goal:** The Session API's per-session Pod gains a regular `initContainer: git-clone` (alpine/git, no `restartPolicy`) that runs before the main container, clones the requested repo into `/workspace`, and exits. Credentials come from the cluster-wide `git-creds` Secret; the token is injected into the URL only at clone time and stripped from the persisted remote.
 
-**Requirements:** R6, brainstorm Slice 4.
+**Requirements:** R1, threat-model PAT-hardening item.
 
 **Dependencies:** Unit 4.1.
 
 **Files:**
-- Modify: `services/session-operator/api/v1alpha1/codingsession_types.go`.
+- Modify: `services/session-api/src/k8s/client.ts` — `buildSessionPodManifest` adds the `git-clone` initContainer with env vars `REPO_URL`, `BRANCH` (from the request body) and `GIT_TOKEN` (from the Secret via `valueFrom.secretKeyRef`). Same `volumeMount` on `/workspace`.
+- Create: `infra/local/git-creds-secret.yaml.example` — example Secret manifest documenting the `token` key shape; not committed with a real value. README pointer for "create your own from a fine-grained PAT scoped to one test repo."
+- Modify: `services/session-api/src/routes/sessions.ts` — `POST /sessions` validation accepts `branch` (already in TypeSpec contract from Phase 3.1; verify the field still surfaces correctly).
+- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the init container shape, env-var wiring, and that `GIT_TOKEN` references a Secret (not a literal value).
 
 **Approach:**
-- Spec fields (intentionally lean — see Key Technical Decisions: "CRD spec is intentionally lean"):
-  - `repo` (string, required) — Git URL of workspace.
-  - `branch` (string, optional, default "main") — branch to clone.
-  - `idleTimeoutSeconds` (int32, default 1800) — operator stops session after this much inactivity.
-- Deferred from v1 spec (operator/env-var driven instead): `image` (`OPENVOID_DEFAULT_AGENT_IMAGE`), `workspaceSize` (operator default 10Gi), `userId` (no v1 consumer), `spec.stop` (use CR DELETE; finalizer handles graceful shutdown).
-- Status fields:
-  - `phase` (string enum: `Pending|Running|Stopping|Stopped|Failed`).
-  - `endpointUrl` (string, optional) — populated when Pod ready.
-  - `lastActivityTime` (metav1.Time, optional).
-  - `lastCommitSha` (string, optional) — set by Phase 8.
-  - `branchName` (string, optional) — set by Phase 8 (`feat/<sessionId>`).
-  - `conditions` ([]metav1.Condition).
-- Annotate the type with `+kubebuilder:subresource:status` so status updates use the subresource (per best-practice research).
-- Annotate with printer columns: `Phase`, `Repo`, `Age` for `kubectl get codingsessions -o wide`.
+- Init container image: `alpine/git:2.45.2` (pinned for reproducibility).
+- Entrypoint command (inline shell, with `set -eu` and `exec`-clean signal handling):
+  - Build `AUTH_URL` by injecting `https://x-access-token:${GIT_TOKEN}@<host>/<repo>` only at clone time.
+  - `git clone --branch "$BRANCH" "$AUTH_URL" /workspace/repo`
+  - `git -C /workspace/repo remote set-url origin "$REPO_URL"` — strip the token from the persisted remote so the working tree on disk has no credential.
+  - Configure `user.email`/`user.name` for downstream commits.
+- The `git-creds` Secret lives in `openvoid-sessions` (created out-of-band by the implementer using the example manifest). Phase 5 will graduate to chart-templated.
 
 **Patterns to follow:**
-- kubebuilder cronjob tutorial's `CronJob_types.go`.
+- The compass research's `Sidecar approach` YAML, §10 — clone-init shape mirrors that example exactly.
+- Tekton `git-clone` task's credential-injection pattern (token only in URL, never on disk).
 
 **Test scenarios:**
-- Happy path: `make manifests && make generate` succeed; `config/crd/bases/session.openvoid.io_codingsessions.yaml` includes the new fields with correct OpenAPI schema.
-- Edge case: omit `repo` field on a CR; `kubectl apply` is rejected with a validation error mentioning `repo` is required.
-- Edge case: set `idleTimeoutSeconds: -1`; `kubectl apply` is rejected (validation: minimum=0).
+- Happy path (unit, mocked K8s): manifest's `initContainers[0]` has name `git-clone`, image `alpine/git:2.45.2`, env including `REPO_URL` and `BRANCH` populated from the request, and `GIT_TOKEN` referencing the `git-creds` Secret.
+- Edge case (unit): omitting `branch` in POST body defaults to `main`.
+- Error path (unit): if the request body's `repo` is malformed, the existing 400 path still fires (no init container is built).
+- Integration (manual demo, kind): POST a real public-or-token-accessible repo; init container completes with exit 0; `kubectl exec -n openvoid-sessions <pod> -- ls /usr/share/nginx/html` shows cloned files.
+- Integration (manual demo, kind): POST a private repo with an invalid token; init container fails with `git clone` authentication error; main container never starts; pod stuck in `Init:Error` (which is the expected failure mode).
 
 **Verification:**
-- `kubectl --context kind-openvoid-local apply -f services/session-operator/config/crd/bases/session.openvoid.io_codingsessions.yaml` succeeds.
-- `kubectl explain codingsession.spec` describes the fields.
+- `pnpm --filter @openvoid/session-api test` passes.
+- Demo: `tilt up`; create a session against a small public repo; `curl localhost:<forwarded-port>` returns content from the repo's root file.
 
 ---
 
-- [ ] **Unit 4.3: Update Session API to create CRs (not Pods)**
+- [ ] **Unit 4.3: Pod annotations + `activeDeadlineSeconds` failsafe stub**
 
-**Goal:** `POST /sessions` creates a `CodingSession` CR; `GET /sessions/{id}` reads it; `DELETE` deletes it. The pod-creation logic from Unit 3.2 is removed (the operator will reintroduce it in Phase 5).
+**Goal:** The Pod spec carries `metadata.annotations` for session metadata (`openvoid.io/repo`, `openvoid.io/branch`, `openvoid.io/created-at`) and a placeholder `spec.activeDeadlineSeconds = 14400` (4 h hard cap). Annotations replace the would-have-been CRD spec/status fields for reflection via `kubectl get pod -o jsonpath`. `activeDeadlineSeconds` is the kubelet-level failsafe established by the rev 4 lifecycle decision.
 
-**Requirements:** R7 (translation boundary lives in API).
+**Requirements:** R1; "Pod-level failsafe" decision in Key Technical Decisions.
 
-**Dependencies:** Units 4.1, 4.2; the CRD must be installed (`kubectl apply -f services/session-operator/config/crd/bases/...`).
+**Dependencies:** Unit 4.2.
 
 **Files:**
-- Modify: `services/session-api/src/routes/sessions.ts` — replace Pod ops with `CustomObjectsApi` calls against `session.openvoid.io/v1alpha1/codingsessions`.
-- Modify: `services/session-api/src/k8s/client.ts` — expose a typed wrapper for the custom-resource calls.
-- Modify: `services/session-api/test/routes.sessions.test.ts` — adjust mocks.
-- Modify: `infra/local/session-api.yaml` — RBAC: replace pod permissions with `codingsessions.session.openvoid.io` create/get/delete/watch in `openvoid-sessions`.
-- Modify: `Tiltfile` — apply the CRD before bringing up the Session API.
+- Modify: `services/session-api/src/k8s/client.ts` — annotations + `activeDeadlineSeconds`. Default value sourced from a constant (chart will override in Phase 5).
+- Modify: `services/session-api/src/routes/sessions.ts` — `GET /sessions/:id` reads annotations to populate the response's `repo`, `branch`, and `createdAt` fields (extending the Phase 3 response shape — TypeSpec contract update if needed in Phase 3's `packages/protocol/main.tsp`).
+- Modify: `packages/protocol/main.tsp` — add `repo`, `branch`, `createdAt` (RFC 3339) to the `Session` model. Regenerate `openapi.yaml` + `types.ts` via `pnpm --filter @openvoid/protocol generate`.
 
 **Approach:**
-- Use `CustomObjectsApi.createNamespacedCustomObject({ group, version, namespace, plural, body })`. Group: `session.openvoid.io`, Version: `v1alpha1`, Plural: `codingsessions`.
-- `GET /sessions/{id}` becomes a get of the CR; status is `Pending` until Phase 5 lands.
-- The `endpointUrl` field is empty until Phase 5/6.
+- Annotations are written-only by the Session API at creation time; no in-pod process modifies them in v1. (A v1.5 activity-aware idle reconciler might add `openvoid.io/last-seen-at`.)
+- `activeDeadlineSeconds = 14400` is hard-coded in v1; Phase 5's chart parameterizes it as `session.activeDeadlineSeconds`.
 
 **Patterns to follow:**
-- `@kubernetes/client-node` examples for custom resources.
+- Phase 3's existing label conventions — annotations follow the same `openvoid.io/*` namespace.
 
 **Test scenarios:**
-- Happy path (unit, mocked): `POST /sessions { repo, idleTimeoutSeconds: 600 }` calls `createNamespacedCustomObject` with the expected CR body; response 201.
-- Happy path (unit, mocked): `GET /sessions/{id}` calls `getNamespacedCustomObject`; returns the `status.phase`.
-- Error path: K8s rejects (e.g., CRD not installed → 404 from K8s); API returns 503.
-- Edge case: `POST /sessions` with `idleTimeoutSeconds` outside the validation range; the K8s API enforces and returns 422; the API surfaces it as 400 to the client.
+- Happy path (unit): manifest carries the three annotations with expected values.
+- Happy path (unit): manifest carries `activeDeadlineSeconds: 14400`.
+- Happy path (unit): `GET /sessions/:id` returns `repo`, `branch`, `createdAt` populated from the pod's annotations.
+- Edge case (unit): `GET /sessions/:id` for a session created before annotations existed (defensive — returns nulls/undefined for the new fields without throwing).
+- Test expectation: regenerating `packages/protocol` is idempotent (`scripts/generate.sh` produces no diff on a no-op rerun).
 
 **Verification:**
-- `tilt up` (kind context); `curl -X POST localhost:4000/sessions -d '{"repo":"x"}'` returns 201.
-- `kubectl get codingsessions -n openvoid-sessions` lists the new CR with `Phase: Pending` (no operator yet).
+- `kubectl get pod -n openvoid-sessions <pod> -o jsonpath='{.metadata.annotations}'` shows the three annotations.
+- `kubectl get pod -n openvoid-sessions <pod> -o jsonpath='{.spec.activeDeadlineSeconds}'` returns `14400`.
+- `curl localhost:4000/sessions/<sid>` response body includes `repo`, `branch`, `createdAt`.
 
 ---
 
-### Phase 5: Session Operator Skeleton (Slice 5)
+### Phase 5: Helm chart + Session API in chart (Slice 5 — rev 4)
 
-**Demo checkpoint at end of phase:** Creating a CodingSession CR via `POST /sessions` causes an `nginx:alpine` Pod to appear; the CR's `status.phase` cycles `Pending → Running → Stopping → Stopped`; idle-stop and force-stop both work; deleting the CR cleanly removes the Pod via owner references.
+**Demo checkpoint at end of phase:** `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against kind installs the Session API (replacing Phase 3's raw `infra/local/session-api.yaml`). Tilt drives the chart via `helm_resource` (or equivalent). The implementer can `helm template` to inspect what's rendered, `helm upgrade` to roll changes, and the Tilt UI shows the same `session-api` resource as before — but now Helm-managed.
 
-- [ ] **Unit 5.1: Reconciler creates Pod from CR spec**
+> Rev 4: this phase replaces the original "Session Operator skeleton" phase. There is **no operator** to author. The chart's first consumer is the Session API; Phase 9 will add `templates/web/`, `templates/cloudflared/`, and `templates/routing/` to the same chart. ArgoCD wiring (was Unit 5.9) moves to Phase 9. NetworkPolicy (was Unit 5.7) moves to Phase 8.
 
-**Goal:** The reconciler observes `CodingSession` CRs and creates a child Pod with owner references.
+- [ ] **Unit 5.1: Helm chart skeleton + Session API as the first consumer**
 
-**Requirements:** R6, brainstorm Slice 5.
+**Goal:** `infra/helm/openvoid/` is a Helm v3 chart that templates the Session API's namespaces, ServiceAccount, RBAC, Deployment, and Service. The chart's values cover both kind (`infra/helm/values/local.yaml`) and DOKS (`infra/helm/values/dev.yaml`) defaults.
 
-**Dependencies:** Units 4.1–4.3.
+**Requirements:** R3 (CI scoping is enabled by Helm-rendering); supports R1 deployment story on both clusters; rev-3 OpenShift readiness (the seam for `routing.mode` lands here even though the routing template itself is empty in this phase).
+
+**Dependencies:** Phase 4 complete.
 
 **Files:**
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go` — reconcile logic.
-- Modify: `services/session-operator/cmd/main.go` — start the manager (kubebuilder default is fine).
-- Create: `services/session-operator/internal/controller/pod_builder.go` — pure function `buildPod(cs *v1alpha1.CodingSession) *corev1.Pod`. Phase 6 fills it with the OpenCode image; Phase 7 adds PVC; Phase 8 adds preStop.
+- Create: `infra/helm/openvoid/Chart.yaml` (apiVersion v2, version 0.1.0).
+- Create: `infra/helm/openvoid/values.yaml` — defaults (Session API + chart-wide). Values: `namespace.{system,sessions}`, `sessionApi.{image.repository,image.tag,replicas,jwt.secretName}`, `session.{image,activeDeadlineSeconds,workspace.type,workspace.sizeLimit}`, `gitCreds.secretName`, `networkPolicies.enabled` (Phase 8 toggles), `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` per rev 3).
+- Create: `infra/helm/openvoid/templates/namespaces.yaml`.
+- Create: `infra/helm/openvoid/templates/session-api/{serviceaccount,role,rolebinding,deployment,service}.yaml` — port `infra/local/session-api.yaml` into Helm templates.
+- Create: `infra/helm/openvoid/templates/_helpers.tpl` — common labels, fully-qualified naming.
+- Create: `infra/helm/openvoid/templates/routing/.gitkeep` — empty seam directory; Phase 9 fills `cloudflared.yaml` here.
+- Create: `infra/helm/values/local.yaml` (kind defaults).
+- Create: `infra/helm/values/dev.yaml` (DOKS defaults — image=`ghcr.io/openvoid/session-api:<sha>`, networkPolicies enabled).
+- Create: `infra/helm/openvoid/README.md` — values reference, chart usage notes, link to the Cross-Platform Parity Matrix at the top of this plan.
 
 **Approach:**
-- Reconciler logic (idempotent):
-  1. Fetch the CR. If `DeletionTimestamp != nil`, handle deletion (Unit 5.5 finalizer).
-  2. Compute the desired Pod spec via `buildPod(cs)`.
-  3. `controllerutil.CreateOrUpdate` against the existing Pod (by name `<sessionId>` in `openvoid-sessions`).
-  4. Set `controllerutil.SetControllerReference(&cs, &pod, r.Scheme)` so K8s GC removes the Pod when the CR is deleted.
-  5. Update CR status (Unit 5.2).
-  6. Return `ctrl.Result{}` (or `RequeueAfter` for polling — Unit 5.3).
-- RBAC markers above `Reconcile`:
-  - `+kubebuilder:rbac:groups=session.openvoid.io,resources=codingsessions,verbs=get;list;watch;create;update;patch;delete`
-  - `+kubebuilder:rbac:groups=session.openvoid.io,resources=codingsessions/status,verbs=get;update;patch`
-  - `+kubebuilder:rbac:groups=session.openvoid.io,resources=codingsessions/finalizers,verbs=update`
-  - `+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete`
-- `make manifests` regenerates Role/ClusterRole.
-
-**Execution note:** Implement test-first using `envtest`. Kubebuilder scaffolds the harness; fill in scenarios before writing reconciler code.
+- Author by porting `infra/local/session-api.yaml` (Phase 3) into templates one resource at a time. The chart's first install on kind should produce a diff-clean equivalent of Phase 3's manifest.
+- Per-session Pod manifests are *not* in the chart — pods are created at runtime by the Session API. The chart provides the **values** the Session API reads to configure those pods (image, activeDeadlineSeconds, workspace size, etc.).
+- Phase 3's `infra/local/session-api.yaml` is **deleted** at the end of this phase (replaced by the chart). Tilt switches from `k8s_yaml('infra/local/session-api.yaml')` to a `helm_resource` or `helm_remote`-style equivalent.
 
 **Patterns to follow:**
-- kubebuilder cronjob tutorial's reconciler structure.
-- `controllerutil.CreateOrUpdate` from `sigs.k8s.io/controller-runtime/pkg/controller/controllerutil`.
+- Bitnami chart conventions for `_helpers.tpl` (named templates, fully qualified names).
+- The compass research's recommendation that operators are over-engineering for per-pod concerns — the chart contains *only* persistent infra (Session API), not session pods.
 
 **Test scenarios:**
-- Happy path (envtest): create a `CodingSession`; reconcile fires; a Pod with the expected labels appears; owner reference points back to the CR.
-- Idempotency (envtest): reconcile twice in a row; no spurious updates (`pod.ResourceVersion` unchanged on second reconcile if nothing in spec changed).
-- Edge case (envtest): mutate the Pod's labels by hand (`kubectl patch`); next reconcile restores them (or accepts them — pick the policy and test it).
-- Error path (envtest): `buildPod` returns invalid spec (e.g., negative `terminationGracePeriodSeconds`); reconcile returns an error and the CR has a `Failed` condition.
-- Integration (envtest, full lifecycle): create CR → Pod appears → delete CR → Pod is GC'd via owner ref.
+- Happy path: `helm template infra/helm/openvoid -f infra/helm/values/local.yaml` produces valid YAML; output includes the namespaces, ServiceAccount, Role, RoleBinding, Deployment, Service.
+- Happy path: `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against `kind-openvoid-local` installs cleanly; `helm list -A` shows the release; Phase 3's session creation flow continues to work.
+- Edge case: `helm upgrade` with an image tag bump rolls the Deployment without disrupting in-flight pods (zero-downtime check).
+- Edge case: `helm template ... --set routing.mode=openshift-route` rendering doesn't error even though `templates/routing/openshift-route.yaml` doesn't exist in v1 (the empty-seam validation).
 
 **Verification:**
-- `cd services/session-operator && make test` — envtest passes.
-- `tilt up` (with the operator now in the Tiltfile); `curl -X POST localhost:4000/sessions -d '{"repo":"x"}'`; `kubectl get pods -n openvoid-sessions` shows the child Pod.
-- `kubectl delete codingsession <name>`; the Pod disappears within seconds.
+- `helm list -A` shows the `openvoid` release in `openvoid-system`.
+- `kubectl get all -n openvoid-system` includes the Session API Deployment + Service.
+- The Phase 3 demo flow still works: POST creates a session pod in `openvoid-sessions`.
 
 ---
 
-- [ ] **Unit 5.2: Status subresource updates (Pending → Running → Failed)**
+- [ ] **Unit 5.2: Session API reads chart values for per-session Pod parameters**
 
-**Goal:** `kubectl get codingsessions` shows meaningful phase + Pod readiness.
+**Goal:** Hard-coded constants in `services/session-api/src/k8s/client.ts` (image, `activeDeadlineSeconds`, workspace size limit, etc.) graduate to environment variables sourced from the chart's `session.*` values block. The chart and the Session API agree on a small env-var contract; this is the pivot's analog of "CRD spec is intentionally lean."
 
-**Requirements:** R6, R5 (drift bounded by integration tests).
+**Requirements:** R1; Key Technical Decision "Pod-spec is intentionally lean."
 
 **Dependencies:** Unit 5.1.
 
 **Files:**
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go`.
-- Modify: `services/session-operator/internal/controller/codingsession_controller_test.go` — add status assertions.
+- Modify: `services/session-api/src/k8s/client.ts` — read `process.env.OPENVOID_STUB_IMAGE` (already exists from Phase 3), `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS`, `OPENVOID_SESSION_WORKSPACE_SIZE_LIMIT`, `OPENVOID_GIT_IMAGE`. Defaults preserved as fallbacks.
+- Modify: `infra/helm/openvoid/templates/session-api/deployment.yaml` — `env:` block populates the four variables from `.Values.session.*`.
+- Modify: `infra/helm/openvoid/values.yaml` — defaults for the four values.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — env-var-driven defaults are exercised in tests.
 
 **Approach:**
-- After Pod creation, watch its phase. Update CR status:
-  - `Pending` until Pod has `status.phase == Running` AND readiness probe passing.
-  - `Running` once both above hold; populate `status.endpointUrl` (Phase 6; for now leave empty).
-  - `Failed` if Pod is `Failed` or stuck `CrashLoopBackOff` for > N reconcile attempts.
-- Track `observedGeneration` so external readers can tell if status reflects current spec.
-- Update via `r.Status().Update(ctx, &cs)` — never via the main `Update` (per best-practice research).
-- Watch the child Pod via `Owns(&corev1.Pod{})` so reconcile fires on Pod state changes.
-
-**Test scenarios:**
-- Happy path (envtest): create CR → status.phase progresses Pending → Running once Pod is Ready.
-- Edge case (envtest): Pod transitions Running → Failed (simulated); status.phase becomes Failed; condition has a useful message.
-- Integration (envtest): API integration — POST /sessions, then GET /sessions/{id} returns `Pending`; wait for Pod ready; GET returns `Running`. (Run via the in-test K8s client; full HTTP integration deferred to Phase 9 e2e.)
-
-**Verification:**
-- `kubectl get codingsessions -n openvoid-sessions` shows the `Phase` column populating correctly across the lifecycle.
-
----
-
-- [ ] **Unit 5.3: Idle-stop via timer**
-
-**Goal:** A session whose CR was created more than `idleTimeoutSeconds` ago (and has no recorded recent activity yet) transitions to Stopping → Stopped, deleting the Pod.
-
-**Requirements:** Brainstorm Slice 5 (idle-stop).
-
-**Dependencies:** Unit 5.2.
-
-**Files:**
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go`.
-
-**Approach:**
-- For v1, idle = "time since CR creation, with `lastActivityTime` overriding when set." Phase 6 will populate `lastActivityTime` from the agent's `/last-activity` HTTP endpoint.
-- Reconcile compares `now - max(creationTimestamp, status.lastActivityTime)` to `spec.idleTimeoutSeconds`.
-- If exceeded, set `status.phase = Stopping`, then delete the Pod. Owner-ref GC handles cleanup. Once Pod is gone, set `status.phase = Stopped`.
-- Use `RequeueAfter: <remaining-time-until-idle>` to wake up at the right moment; don't poll every second.
-
-**Test scenarios:**
-- Happy path (envtest, with fake clock): create CR with `idleTimeoutSeconds: 60`; advance the clock 61s; reconcile fires and Pod is deleted; status.phase progresses Stopping → Stopped.
-- Edge case (envtest): `lastActivityTime` is updated mid-flight (simulating Phase 6); the idle deadline shifts forward; the Pod is not deleted prematurely.
-- Edge case (envtest): `idleTimeoutSeconds: 0` (allow immediate stop) — define behavior (e.g., disallow via validation, or stop within next reconcile). Decide and test.
-- Error path (envtest): Pod deletion fails (simulated); reconcile retries with backoff; status remains Stopping until the Pod is gone.
-
-**Verification:**
-- Demo: `curl -X POST localhost:4000/sessions -d '{"repo":"x","idleTimeoutSeconds":30}'`; wait; observe the Pod disappear and the CR's status.phase reach Stopped.
-
----
-
-- [ ] **Unit 5.4: Explicit-stop via CR DELETE**
-
-**Goal:** A user (or the Session API) can stop a session by deleting the CR. Finalizer (Unit 5.5) ensures preStop runs before GC.
-
-**Requirements:** Brainstorm Slice 5 (manual lifecycle).
-
-**Dependencies:** Unit 5.3.
-
-**Files:**
-- Modify: `services/session-api/src/routes/sessions.ts` — `DELETE /sessions/{id}` issues a single CR delete (`deleteNamespacedCustomObject`). Phase 8 adds `?force=true` for `--grace-period=0` (skipping preStop).
-
-**Approach:**
-- No `spec.stop` field — see Key Technical Decisions. CR DELETE alone triggers the finalizer-gated Stopping → preStop → Stopped flow.
-- Force-stop (`?force=true`) maps to `--grace-period=0`; document loudly that preStop won't run and any uncommitted work is lost.
-
-**Test scenarios:**
-- Happy path (envtest): create CR; delete CR; reconcile transitions Stopping → Stopped, finalizer runs, CR is GC'd.
-- Edge case (envtest): delete CR with no Pod (already cleaned up); finalizer removed immediately.
-- Integration (env+API): API DELETE causes the operator to stop; verifiable end-to-end via integration test.
-
-**Verification:**
-- `kubectl delete codingsession <name>` causes the Pod to terminate within ~5s; CR status reaches Stopped before GC.
-
----
-
-- [ ] **Unit 5.5: Finalizer for clean deletion**
-
-**Goal:** Deleting a CR runs cleanup before K8s GC removes the object, so Phase 8's git-push hook has somewhere to live.
-
-**Requirements:** R6, brainstorm Slice 5; Phase 8 builds on this.
-
-**Dependencies:** Unit 5.4.
-
-**Files:**
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go`.
-
-**Approach:**
-- Add finalizer `session.openvoid.io/git-push` on first reconcile.
-- On deletion (`DeletionTimestamp != nil`):
-  1. If the Pod still exists, request graceful deletion and requeue (preStop runs in Phase 8).
-  2. Once the Pod is gone, remove the finalizer.
-- Add a timeout-and-force-remove path: if the CR has been Stopping for > 5 minutes, remove the finalizer to avoid stuck objects.
-- Note: owner-ref GC handles Pod cleanup; we just block CR deletion until the Pod's preStop has had a chance to run.
-
-**Test scenarios:**
-- Happy path (envtest): delete CR; finalizer prevents immediate GC; Pod terminates; finalizer is removed; CR is GC'd.
-- Edge case (envtest): Pod stuck terminating (simulated); after 5 minutes, finalizer is force-removed and CR is GC'd.
-- Edge case (envtest): delete CR with no Pod (already cleaned up); finalizer removed immediately.
-- Error path (envtest): cluster API errors during finalizer removal; reconcile retries.
-
-**Verification:**
-- `kubectl delete codingsession <name>` blocks for ~10–15s while Pod terminates, then completes cleanly. (Demo really lands in Phase 8 once preStop is doing real work.)
-
----
-
-- [ ] **Unit 5.6: Helm chart skeleton — operator as the first consumer**
-
-**Goal:** `infra/helm/openvoid` is a Helm chart that templates the operator's CRD, RBAC, and manager Deployment. Subsequent phases add components to the same chart incrementally — avoiding a Phase 9 cliff.
-
-**Requirements:** R15 (Helm-driven trunk-based deploy).
-
-**Dependencies:** Units 5.1–5.5.
-
-**Files:**
-- Create: `infra/helm/openvoid/Chart.yaml` (apiVersion v2).
-- Create: `infra/helm/openvoid/values.yaml` — operator-only at this stage. Values: `namespace.system`, `namespace.sessions`, `operator.image.{repository,tag}`, `operator.replicas`, `operator.defaultAgentImage` (becomes `OPENVOID_DEFAULT_AGENT_IMAGE` env), `operator.idleTimeoutSecondsDefault`, `networkPolicies.enabled`, `storageClass`, `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` for v1.5; see "Routing is a Helm-level abstraction" decision), `routing.cloudflared.{tunnelId,domain}` (only consumed when `routing.mode == "cloudflared"`).
-- Create: `infra/helm/openvoid/templates/operator/{crd.yaml,rbac.yaml,deployment.yaml}` and `templates/namespaces.yaml` — port the kubebuilder-generated kustomize manifests into Helm templates.
-- Create: `infra/helm/values/local.yaml` (kind defaults: image=`localhost:5001/openvoid/session-operator:dev`, networkPolicies disabled, storageClass=`standard`).
-- Create: `infra/helm/values/dev.yaml` (DOKS defaults: image=`ghcr.io/openvoid/session-operator:<sha>`, networkPolicies enabled, storageClass=`do-block-storage`).
-
-**Approach:**
-- Author the chart by porting the kubebuilder kustomize output. Verification: `helm template ... | diff - <(kustomize build services/session-operator/config/default)` should be a small, explicable diff (mostly label conventions and namespace handling).
-- Subsequent phases add: `templates/session-api/` (Phase 3 backfill into chart), `templates/routing/cloudflared.yaml` (Phase 9.4 — gated on `routing.mode == "cloudflared"`), `templates/web/` (Phase 9), `templates/sessions/networkpolicy.yaml` (Unit 5.8 below). The `templates/routing/` directory is the v1.5 OpenShift seam — adding `templates/routing/openshift-route.yaml` later requires no operator change.
-- Document in the chart README which values are kind-specific vs DOKS-specific. The Cross-Platform Parity Matrix at the top of the plan is the canonical reference.
+- The Session API stays the only place that knows how to assemble a Pod spec; the chart only supplies the parameters. This keeps the per-session pod creation logic colocated with the API's HTTP handlers and test suite.
+- Reading env vars at boot (not per-request) is fine for v1; chart upgrades restart the Deployment, picking up new values.
 
 **Patterns to follow:**
-- Bitnami's chart structure for `tpl` env-var expansion and named templates for boilerplate.
+- The Phase 3 pattern of `process.env.OPENVOID_STUB_IMAGE ?? "nginx:alpine"` — extend to the new variables.
 
 **Test scenarios:**
-- Happy path: `helm template infra/helm/openvoid -f infra/helm/values/local.yaml` produces valid YAML.
-- Happy path: `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` (against kind) installs the operator; CRD is registered; manager Deployment becomes Ready.
-- Edge case: `helm upgrade` with a values change rolls the manager Deployment without disrupting in-flight CRs.
+- Happy path (unit): with env vars unset, defaults apply; manifest carries the documented defaults.
+- Happy path (unit): with env vars set to overrides, manifest carries the override values.
+- Edge case (unit): malformed numeric env var (e.g., `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS=not-a-number`) — the Session API rejects loudly at boot rather than silently defaulting (fail-fast).
 
 **Verification:**
-- `helm list -A` shows the `openvoid` release.
-- `kubectl get all -n openvoid-system` includes the operator Deployment + Service.
+- `kubectl exec -n openvoid-system <session-api-pod> -- env | grep OPENVOID_SESSION_` shows the four variables populated from the chart.
+- Demo: `helm upgrade` with `--set session.activeDeadlineSeconds=600`; create a session; `kubectl get pod -n openvoid-sessions <pod> -o jsonpath='{.spec.activeDeadlineSeconds}'` returns 600.
 
 ---
 
-- [ ] **Unit 5.7: Default-deny NetworkPolicy on `openvoid-sessions`**
+- [ ] **Unit 5.3: Tilt becomes Helm-aware**
 
-**Goal:** Session pods cannot reach the K8s API, the metadata service (169.254.169.254), or arbitrary external hosts. Allowed egress: DNS, the configured Git host, and configured LLM provider domains.
+**Goal:** The root `Tiltfile` switches from `k8s_yaml('infra/local/session-api.yaml')` to a Helm-driven flow. The dev experience stays identical (single `tilt up`, hot-reload still works on `services/session-api/src`), but the chart is now the source of truth.
 
-**Requirements:** Threat Model — network isolation in v1.
+**Requirements:** R9 (kind + Tilt as local dev), R10 (single bootstrap command).
 
-**Dependencies:** Unit 5.6.
+**Dependencies:** Unit 5.1, Unit 5.2.
 
 **Files:**
-- Create: `infra/helm/openvoid/templates/sessions/networkpolicy.yaml` — gated by `networkPolicies.enabled`.
-- Modify: `infra/helm/openvoid/values.yaml` — add `networkPolicies.allowedEgress.gitHosts` (list, default `["github.com"]`), `networkPolicies.allowedEgress.llmHosts` (list, default `["api.anthropic.com","api.openai.com"]`).
+- Modify: `Tiltfile` — replace `k8s_yaml('infra/local/session-api.yaml')` with `helm('infra/helm/openvoid', name='openvoid', namespace='openvoid-system', values=['infra/helm/values/local.yaml'])`. Keep the existing `docker_build` for `services/session-api`. Keep the kind-context guard.
+- Delete: `infra/local/session-api.yaml` (superseded by the chart).
+- Modify: `README.md` — refresh the "Local dev with Tilt" section to mention Helm rendering and the chart location.
 
 **Approach:**
-- Default-deny ingress + default-deny egress on `openvoid-sessions`.
-- Explicit allow-egress rules for each host in `gitHosts` and `llmHosts` (use `ipBlock` since NetworkPolicy doesn't support DNS — pre-resolve at chart-render time, or accept that hostname-based egress requires Cilium DNS-aware policies which DOKS supports via Calico GlobalNetworkPolicy in 2026; document the trade-off).
-- Allow ingress only from `openvoid-system` (the operator polling endpoints, the Session API relaying WS).
-- `kind` doesn't enforce NetworkPolicy without a CNI plugin; on local dev the policy is rendered but inert. DOKS uses Cilium, which enforces.
+- Tilt's `helm()` extension renders the chart and feeds the resulting manifests into Tilt's reconciliation. The image-name match between `docker_build` and the chart's templated image makes live-update continue to work.
+- The kind-context guard from Phase 3 stays in place.
+
+**Patterns to follow:**
+- Tilt docs, "Helm" extension recipe.
+- Cluster API's Tiltfile (originally referenced for operator dev; the Helm subset still applies).
 
 **Test scenarios:**
-- Happy path (DOKS): create CR; pod can `git push` to GitHub.
-- Edge case (DOKS): `kubectl exec` into session pod; `curl https://example.com` is blocked; `curl https://github.com` succeeds.
-- Edge case (DOKS): from session pod, `curl https://kubernetes.default.svc` fails (network-blocked AND token absent — defense in depth confirmed).
-- Edge case (DOKS): `curl http://169.254.169.254/...` (DOKS metadata service) fails.
+- Test expectation: none for the Tiltfile itself (config). Verified by demo.
 
 **Verification:**
-- DOKS deploy with `networkPolicies.enabled=true` blocks the negative cases above.
+- `tilt alpha tiltfile-result` parses cleanly.
+- `tilt up` against kind still produces a healthy `session-api` resource; editing `services/session-api/src/server.ts` still triggers a live update within ~5 s.
+- Phase 3 demo flow continues to work end-to-end.
 
 ---
 
-- [ ] **Unit 5.8: Tilt integration (Helm-aware)**
+### Phase 6: OpenCode image as the per-session main container (Slice 6 — rev 4)
 
-**Goal:** `tilt up` deploys the operator via Helm in kind with file-sync rebuilds.
+**Demo checkpoint at end of phase:** A `POST /sessions` produces a Pod with the `git-clone` initContainer (Phase 4), the **real OpenCode agent** as the main container (replacing `nginx:alpine`), and the cloned repo mounted at `/workspace/repo`. `kubectl port-forward` to the agent pod's `:8080` returns OpenCode's `/global/health` 200 with the version string. The agent can be prompted via `POST /session/<sid>/message` and emits SSE events on `/global/event`. No sidecar yet — that's Phase 7.
 
-**Requirements:** R9 (Tilt-driven local dev).
+> Rev 4: largely the same image work as the original Phase 6, but the operator dependencies are gone. The Session API's `buildSessionPodManifest` swaps `nginx:alpine` → OpenCode and adds the OpenCode-specific env-var wiring; no `Operator builds the OpenCode Pod spec` unit is needed because there's no operator.
 
-**Dependencies:** Units 5.6, 5.7.
+- [ ] **Unit 6.1: OpenCode container image (rev 4 — SCC-friendly)**
 
-**Files:**
-- Modify: `Tiltfile` — `load('ext://ko', 'ko_build')`; `ko_build('localhost:5001/openvoid/session-operator', './services/session-operator/cmd/manager', deps=['./services/session-operator/api','./services/session-operator/internal','./services/session-operator/cmd'])`; `k8s_yaml(helm('./infra/helm/openvoid', name='openvoid', values=['./infra/helm/values/local.yaml']))`; `k8s_resource('openvoid-controller-manager', port_forwards=8081)`.
+**Goal:** A minimal Dockerfile installs OpenCode and runs `opencode serve --host 0.0.0.0 --port 8080`. The image is built into both the kind local registry (`localhost:5001/openvoid/opencode:dev`) and GHCR (`ghcr.io/openvoid/opencode:<sha>` for DOKS).
 
-**Approach:**
-- Tilt re-renders the Helm chart on every change to templates or values. The operator binary rebuilds via `ko_build` on Go source change.
-- `helm()` Starlark generates manifests; Tilt applies them. Local-dev path; Phase 6 wires ArgoCD for DOKS.
-
-**Test scenarios:**
-- Test expectation: none — Tilt config + glue.
-
-**Verification:**
-- `tilt up` brings up the Helm-rendered CRD + operator. Tilt UI green.
-- Editing operator code triggers a `ko` rebuild + Pod restart within ~30s.
-- Editing a Helm template triggers a re-apply within ~5s.
-
----
-
-- [ ] **Unit 5.9: ArgoCD wiring for DOKS**
-
-**Goal:** ArgoCD watches `infra/helm/openvoid` against `infra/helm/values/dev.yaml` and reconciles the DOKS cluster.
-
-**Requirements:** R15 (Helm-driven trunk-based deploy with ArgoCD).
-
-**Dependencies:** Unit 5.6 (chart exists); DOKS cluster (Unit 1.2).
-
-**Files:**
-- Create: `infra/argocd/install.sh` — installs ArgoCD into the DOKS cluster (`kubectl create namespace argocd && kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/<pinned-version>/manifests/install.yaml`).
-- Create: `infra/argocd/application.yaml` — Argo `Application` pointing at the openvoid repo, path `infra/helm/openvoid`, values from `infra/helm/values/dev.yaml`. Auto-sync enabled; **auto-prune disabled** in v1 (per security-lens — auto-prune on a fresh chart is the textbook scenario for accidental cluster wipes).
-- Create: `infra/argocd/README.md` — login flow (`argocd admin initial-password`), how to access the UI via `kubectl port-forward svc/argocd-server -n argocd 8443:443`, how to enable auto-prune later.
-
-**Approach:**
-- ArgoCD installs via vanilla manifest (no Helm-of-Helm). Pinned version (e.g., `v2.13.0`).
-- The Application points at `main` branch initially; image tags in `values/dev.yaml` are SHA-driven (Phase 9.5 will add a CI step to rewrite the SHA after image push).
-- Auto-prune off in v1; flip on after the first release survives a manual prune review.
-- ArgoCD self-managing (the Application that manages openvoid is itself stored in `infra/argocd/application.yaml` and applied manually on cluster bring-up).
-
-**Test scenarios:**
-- Happy path (DOKS): `bash infra/argocd/install.sh`; `kubectl apply -f infra/argocd/application.yaml`; ArgoCD UI shows openvoid as Synced + Healthy.
-- Edge case: change `values/dev.yaml` operator image tag; ArgoCD auto-syncs and rolls the Deployment.
-- Edge case: a chart template change that would delete a resource — ArgoCD shows OutOfSync, requires manual sync (auto-prune off).
-
-**Verification:**
-- ArgoCD UI shows openvoid app Synced + Healthy on DOKS.
-- Editing `values/dev.yaml` and pushing to main triggers a sync within polling interval (default 3 min).
-
----
-
-### Phase 6: Real OpenCode Image (Slice 6)
-
-**Demo checkpoint at end of phase:** A `CodingSession` CR creates a real OpenCode pod. The user `kubectl port-forward`s into `opencode serve` and sends prompts via curl to the OpenCode HTTP API. The agent has bash, read, write, and webfetch permissions configured.
-
-- [ ] **Unit 6.1: OpenCode container image**
-
-**Goal:** A minimal Dockerfile installs OpenCode and runs `opencode serve`.
-
-**Requirements:** Brainstorm Slice 6.
+**Requirements:** Brainstorm Slice 6; rev-3 OpenShift readiness.
 
 **Dependencies:** Phase 5 complete.
 
 **Files:**
 - Create: `infra/images/opencode/Dockerfile`.
-- Create: `infra/images/opencode/opencode.json` — permissions config (allow `read`, `edit`, `bash` with denylist, `webfetch`).
-- Create: `infra/images/opencode/entrypoint.sh` — sources auth env vars; starts `opencode serve --host 0.0.0.0 --port 8080`.
-- Create: `infra/images/opencode/README.md` — explains the image's interface (port 8080, `OPENCODE_SERVER_PASSWORD` env var, `/healthz` endpoint per upstream).
+- Create: `infra/images/opencode/opencode.json` — permissions config (allow `read`, `edit`, `bash` with denylist, `webfetch`); detailed Phase 8 hardening pass.
+- Create: `infra/images/opencode/entrypoint.sh` — sources auth env vars; `exec`s into `opencode serve --host 0.0.0.0 --port 8080`. The `exec` is load-bearing (PID 1 receives SIGTERM cleanly per the rev 4 sidecar-pattern gotchas).
+- Create: `infra/images/opencode/README.md` — explains the image's interface (port 8080, `OPENCODE_SERVER_PASSWORD` env var, `/global/health` endpoint per the Phase 0.3 spike).
 
 **Approach:**
-- Base image: `node:20-alpine` (small, has tini available, OpenCode is npm-installable as `opencode-ai`).
+- Base image: `node:20-alpine` (small, OpenCode is npm-installable as `opencode-ai`).
 - Multi-stage to keep the runtime image lean; install only the binary.
-- Run as non-root (UID 1000); `opencode` doesn't need root.
-- **OpenShift-compatible by construction:** before declaring `USER 1000`, run `RUN chgrp -R 0 /opt/opencode /workspace && chmod -R g=u /opt/opencode /workspace` so the image is writable by *any* UID with GID 0. v1 still runs as UID 1000 on kind/DOKS — this just means the image won't be rejected when v1.5 introduces the OpenShift `restricted-v2` SCC (which assigns a random per-namespace UID and overrides `USER`). The pattern is also best-practice on stock K8s.
-- Permissions config (tightened per Threat Model — agent must not be able to read PAT or exfiltrate via webfetch):
+- **OpenShift-compatible by construction (rev 3):** before declaring `USER 1000`, `RUN chgrp -R 0 /opt/opencode /workspace && chmod -R g=u /opt/opencode /workspace` so the image is writable by *any* UID with GID 0. v1 still runs as UID 1000 on kind/DOKS.
+- **PID 1 + exec (rev 4):** the entrypoint script `exec`s into the binary so the binary itself is PID 1 and receives SIGTERM. Without this, the SIGTERM cascade in Phase 7 won't reliably stop the agent.
+- Permissions config (tightened in Phase 8 — placeholder allow-most config in this phase):
+  ```json
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "permission": {
+      "bash": "allow",
+      "edit": "allow",
+      "read": "allow",
+      "webfetch": "allow"
+    }
+  }
+  ```
+  Phase 8 adds the denylists.
+- Image tag pattern: `localhost:5001/openvoid/opencode:dev` for kind, `ghcr.io/openvoid/opencode:<sha>` for DOKS.
+
+**Patterns to follow:**
+- Phase 3's `services/session-api/Dockerfile` multi-stage shape (builder + runtime).
+- The compass research's §10 sidecar YAML for entrypoint signal-handling shape.
+
+**Test scenarios:**
+- Happy path: `docker build -t openvoid/opencode:dev infra/images/opencode/`; `docker run --rm -p 8080:8080 -e OPENCODE_SERVER_PASSWORD=dev openvoid/opencode:dev`; `curl localhost:8080/global/health` returns 200.
+- Error path: missing `OPENCODE_SERVER_PASSWORD` causes the entrypoint to fail loudly with a non-zero exit and a clear stderr message.
+- Edge case: image runs as UID 1000 by default (`docker exec ... id` confirms).
+- Edge case (rev 3 hardening): `docker run --user 99999999 ...` (random UID, mimics OpenShift SCC) still works because `/opt/opencode` is GID-0 + group-writable.
+- Edge case (rev 4 hardening): `docker stop` on a running container terminates within 2 s — proves the `exec` in `entrypoint.sh` correctly forwards SIGTERM to the OpenCode binary.
+
+**Verification:**
+- `docker run --rm openvoid/opencode:dev opencode --version` returns the pinned version.
+- The OpenCode HTTP API responds to a basic prompt request locally before deploying to kind.
+
+---
+
+- [ ] **Unit 6.2: Session API uses OpenCode as the per-session main container**
+
+**Goal:** `services/session-api/src/k8s/client.ts`'s `buildSessionPodManifest` swaps the placeholder `nginx:alpine` for OpenCode. Env-var wiring threads `OPENCODE_SERVER_PASSWORD` (from the cluster-wide Secret), `OPENVOID_REPO_PATH=/workspace/repo`, etc. `automountServiceAccountToken: false` is set on the per-session pod (untrusted).
+
+**Requirements:** R1; Threat Model — `automountServiceAccountToken: false` on session pods.
+
+**Dependencies:** Unit 6.1; Phase 4 complete.
+
+**Files:**
+- Modify: `services/session-api/src/k8s/client.ts` — main container is OpenCode; ports `agent-http` (8080) named for Phase 9 routing; `automountServiceAccountToken: false` on the Pod.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the OpenCode image, port name, `automountServiceAccountToken`, and Secret reference for `OPENCODE_SERVER_PASSWORD`.
+- Modify: `infra/helm/openvoid/values.yaml` — `session.image` default switches from `nginx:alpine` to `localhost:5001/openvoid/opencode:dev` (kind) / `ghcr.io/openvoid/opencode:<sha>` (DOKS).
+- Create: `infra/helm/openvoid/templates/secrets/opencode-server-password.yaml` — chart-managed Secret in `openvoid-system` with the cluster-wide password, referenced by every per-session pod via `valueFrom.secretKeyRef`.
+
+**Approach:**
+- The cluster-wide `OPENCODE_SERVER_PASSWORD` Secret is created via the chart (not out-of-band); v1 single-user posture, per-session generation deferred to v1.5 multi-tenancy.
+- Port naming matters: Phase 9 routes `agent-http` (the OpenCode SSE) and `preview-http` (user's web preview) to different cloudflared subdomains; naming them now keeps Phase 9's templates simple.
+- `automountServiceAccountToken: false` ensures the agent can't reach the K8s API (defense in depth alongside Phase 8's NetworkPolicy).
+
+**Patterns to follow:**
+- Existing Phase 3/4 manifest-construction patterns.
+- The compass research's §10 sidecar YAML — the per-pod credentials-injection shape.
+
+**Test scenarios:**
+- Happy path (unit): manifest's main container is OpenCode, port `agent-http` declared at 8080, `OPENCODE_SERVER_PASSWORD` references the cluster-wide Secret.
+- Happy path (unit): manifest carries `automountServiceAccountToken: false`.
+- Edge case (unit): the `nginx:alpine` Phase 3 default still works as a fallback when `OPENVOID_STUB_IMAGE` is set (preserves the smoke-test flow for Phase 4 work).
+- Integration (manual demo, kind): create a session against a small repo; `kubectl logs -n openvoid-sessions <pod> -c session` shows OpenCode booting; `curl localhost:<forwarded>/global/health` returns 200.
+
+**Verification:**
+- Demo: POST → wait → `curl http://localhost:<forwarded>/global/health` returns 200; `curl http://localhost:<forwarded>/session` (with HTTP Basic auth using the password) returns the session list.
+
+---
+
+### Phase 7: `git-finalizer` native sidecar (commit-on-shutdown — Slice 7+8 merged in rev 4)
+
+**Demo checkpoint at end of phase:** A session with edits to the cloned tree, when stopped via `DELETE /sessions/<sid>`, produces a `feat/<sessionId>` branch on GitHub containing those edits. The push happens **after** the agent has exited and **before** the pod is removed from the cluster — proving the SIGTERM cascade is wired correctly.
+
+> Rev 4: this phase combines what was originally Phase 7 (Workspace + Git) and Phase 8 (Commit-on-Shutdown). The workspace volume + clone init came in Phase 4; the SIGTERM-trap finalizer + idempotent push live here. This is the hardest learning unit in v1 — signal handling, PID 1 semantics, grace-period sizing, idempotency, credential safety. Plan to spend more time here than the surrounding phases.
+
+- [ ] **Unit 7.1: `git-finalizer` native sidecar — image and signal-handling shape**
+
+**Goal:** A minimal `alpine/git`-based image (or just the upstream `alpine/git` directly) runs as a native sidecar (`initContainer` with `restartPolicy: Always`) inside every session pod. Its entrypoint is a shell script that traps `TERM` and runs `git add/commit/push`; until SIGTERM arrives, it idles. PID 1 forwards signals correctly.
+
+**Requirements:** R1 (commit-on-shutdown is the load-bearing exit path); Threat Model PAT-hardening.
+
+**Dependencies:** Phase 6 complete (so the main container is the real agent, producing real edits to push).
+
+**Files:**
+- Create: `infra/images/git-finalizer/Dockerfile` (only if we want a custom-tagged image; otherwise use upstream `alpine/git:2.45.2` directly).
+- Create: `infra/images/git-finalizer/entrypoint.sh` — the SIGTERM-trap script. Distroless-incompatible (uses `/bin/sh` and `sleep`); we ship it on `alpine/git` which has both.
+- Modify: `services/session-api/src/k8s/client.ts` — `buildSessionPodManifest` adds the native sidecar to `initContainers` (with `restartPolicy: Always`), with the same `volumeMount` for `/workspace`, `volumeMount` for `git-creds` (separate from the main container — the agent must not see the credential), and env wiring for `BRANCH` and `GIT_TOKEN`.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the sidecar shape and that the credential mount is on the sidecar only, not the main container.
+
+**Approach:**
+- Entrypoint script (canonical SIGTERM-trap shape from compass research §10):
+  ```sh
+  #!/bin/sh
+  set -u
+  finalize() {
+    cd /workspace/repo || exit 0
+    git add -A
+    git commit -m "session $(hostname) $(date -Iseconds)" || true
+    AUTH_URL=$(git remote get-url origin | sed -e "s#https://#https://x-access-token:${GIT_TOKEN}@#")
+    git push "$AUTH_URL" "HEAD:feat/$(echo "${HOSTNAME}" | sed 's/^session-//')"
+  }
+  trap 'finalize; exit 0' TERM INT
+  while true; do sleep 3600 & wait $!; done
+  ```
+- The `& wait` idiom is load-bearing — without it, the shell isn't responsive to signals while in `sleep`.
+- Branch name derives from the session-id-suffix in the pod's hostname (which the Session API sets as `session-<sessionId-lowercased>` per Phase 3).
+- The credential mount is `volumeMount: /etc/git-creds` on the sidecar **only**; the main container's spec has no `volumeMount` for `git-creds`. `opencode.json` (Phase 8) further denies `read` on `/etc/git*` as belt-and-braces.
+
+**Execution note:** test-first. Add the sidecar shape to the unit-test assertions before modifying the manifest. The hardest part of this work is signal handling, which is exercised in Unit 7.2's integration tests; getting the manifest shape right first keeps the code change small.
+
+**Patterns to follow:**
+- Compass research §4 ("Termination Handling") and §10 (concrete sidecar YAML).
+- Tekton `git-clone` task's credential mount pattern.
+
+**Test scenarios:**
+- Happy path (unit): manifest's `initContainers` includes both `git-clone` (no `restartPolicy`) and `git-finalizer` (with `restartPolicy: Always`).
+- Happy path (unit): the sidecar's command is the entrypoint script; image is `alpine/git:2.45.2`; mounts include `/workspace` and `/etc/git-creds`.
+- Edge case (unit): the main container's `volumeMounts` does **not** include `/etc/git-creds` (credential isolation regression guard).
+- Edge case (unit): `terminationGracePeriodSeconds` is set on the Pod (default 180; configurable via chart value `session.terminationGracePeriodSeconds`).
+
+**Verification:**
+- `pnpm --filter @openvoid/session-api test` passes.
+- `kubectl describe pod -n openvoid-sessions <pod>` shows the native sidecar with the correct volume mounts.
+
+---
+
+- [ ] **Unit 7.2: Idempotent push + grace-period sizing + integration test**
+
+**Goal:** The finalizer's push is idempotent (re-running on a session with no new edits succeeds without error; first run on edited tree creates `feat/<sessionId>`; subsequent run with new edits force-pushes or merges cleanly). `terminationGracePeriodSeconds` is sized generously for slow networks. An integration test against kind exercises the full SIGTERM cascade and verifies the branch lands on GitHub.
+
+**Requirements:** R1; rev-4 reliability gotcha "Sidecar exit code 0 is not guaranteed at Pod end."
+
+**Dependencies:** Unit 7.1.
+
+**Files:**
+- Modify: `infra/images/git-finalizer/entrypoint.sh` — handle the empty-commit case (`|| true`), log meaningfully so failures are debuggable in `kubectl logs`, retry the push once on transient failure (network blips), use `git push --force-with-lease` so retry of a partial earlier push converges rather than failing.
+- Modify: `services/session-api/src/k8s/client.ts` — set `terminationGracePeriodSeconds: 180` on the Pod (configurable via chart).
+- Modify: `infra/helm/openvoid/values.yaml` — add `session.terminationGracePeriodSeconds: 180`.
+- Create: `services/session-api/test/integration/finalizer.test.ts` — integration test (skipped in CI per the plan's CI scope decision; runs locally on kind via a `pnpm test:integration` script).
+
+**Approach:**
+- Idempotency strategy:
+  - `git commit --allow-empty || true` so a no-edit shutdown doesn't fail.
+  - `git push --force-with-lease "feat/$sid"` so retries converge — `--force-with-lease` (vs `--force`) is a safety net against losing concurrent updates.
+  - Single retry with exponential backoff on transient HTTP errors (1s, 4s).
+- Grace period: 180 s default. Rationale: the compass research suggests 120–300 s for a slow git push over a flaky network; 180 is a comfortable middle.
+- Integration test (manual / `pnpm test:integration`):
+  - Create a session via `POST /sessions` against a small writable repo (the implementer's test repo with the PAT).
+  - `kubectl exec` into the main container; create a file in `/workspace/repo`; commit it via `git -C /workspace/repo add . && git commit -m "test edit"` (or rely on the agent making real edits if Phase 6's `opencode` is wired up).
+  - `DELETE /sessions/<sid>`.
+  - Wait up to grace period; verify pod is gone from the cluster.
+  - `gh api repos/<org>/<repo>/branches/feat/<sid>` returns 200 with the test commit.
+
+**Execution note:** characterization-first for the integration test — capture the working SIGTERM-cascade behavior in a passing test before adding any conditional handling, so future regressions are caught.
+
+**Patterns to follow:**
+- Compass research §4 (idempotency), §5 (commit-and-push mechanics).
+
+**Test scenarios:**
+- Happy path (unit): manifest carries `terminationGracePeriodSeconds: 180` (or chart-overridden value).
+- Happy path (integration, kind): edited session → DELETE → branch lands on GitHub with the edit.
+- Edge case (integration): no-edit session → DELETE → no branch is created on GitHub (or the existing branch is unchanged); finalizer logs `nothing to commit`.
+- Edge case (integration): GitHub network blip during push (simulated by temporarily breaking egress) → finalizer retries once → push succeeds on retry.
+- Error path (integration): force-delete the pod (`kubectl delete pod --grace-period=0 --force`) → finalizer is SIGKILL'd before push completes → branch is *not* created. Documented as the "do not force-delete sessions" rule.
+- Error path (integration): grace period exhausted (set `terminationGracePeriodSeconds=2` in a test pod) → SIGKILL mid-push → finalizer exits non-zero. Documented as expected; v1.5 may add periodic snapshots to recover from this.
+
+**Verification:**
+- Demo: edit a file in the cloned repo from inside the main container; `DELETE /sessions/<sid>`; visit the GitHub UI; the `feat/<sid>` branch is there with the edit.
+- `kubectl get pods -n openvoid-sessions` shows the pod gone within ~5–10 s of the DELETE.
+
+---
+
+### Phase 8: Safety rails — NetworkPolicy + opencode.json hardening + activeDeadlineSeconds (Slice 8 — rev 4)
+
+**Demo checkpoint at end of phase:** The session pod's egress is locked down to GitHub HTTPS, the configured LLM provider, and DNS. `opencode.json` denies the agent's read of `/etc/git-creds`, denies webfetch to `*.github.com`, and restricts bash. A session that exceeds 4 hours of wall-clock is killed by the kubelet with a clean `Reason: DeadlineExceeded` event. The pod's threat-model surface from the v1 posture section is fully implemented.
+
+> Rev 4: this phase replaces the original "Commit-on-Shutdown belt-and-braces" phase. The belt-and-braces (periodic auto-commit) is dropped — native sidecar SIGTERM trap is reliable enough for v1 (deferred to v1.5 if real users need it). Phase 8 is now reframed around defense in depth: NetworkPolicy (was Unit 5.7), opencode.json hardening (was scattered), `activeDeadlineSeconds` failsafe (was Phase 5).
+
+- [ ] **Unit 8.1: Default-deny NetworkPolicy on `openvoid-sessions`**
+
+**Goal:** Session pods can egress only to: the configured Git host (GitHub HTTPS:443), the configured LLM provider domain(s), and DNS. They cannot reach the K8s API server, the cloud metadata service (169.254.169.254), or other namespaces.
+
+**Requirements:** Threat Model — network isolation in v1.
+
+**Dependencies:** Phase 5 complete (so the chart can template the policy).
+
+**Files:**
+- Create: `infra/helm/openvoid/templates/sessions/networkpolicy.yaml` — default-deny + explicit egress allowlist; gated on `.Values.networkPolicies.enabled`.
+- Modify: `infra/helm/values/local.yaml` — `networkPolicies.enabled: false` (kind doesn't enforce by default; documenting only).
+- Modify: `infra/helm/values/dev.yaml` — `networkPolicies.enabled: true`.
+
+**Approach:**
+- Three rules: (1) DNS to kube-system, (2) GitHub HTTPS:443 (allowlist by IP block from `whois`/Cloudflare's published ranges, or by FQDN if the cluster's CNI supports it), (3) LLM provider HTTPS:443 (Anthropic + OpenAI).
+- The K8s API server block is implicit: default-deny ingress + only-allowlisted egress means no `kubernetes.default.svc:443` reachability from session pods.
+- Metadata service block: explicit deny rule for `169.254.169.254/32` for clouds that surface it (DOKS does).
+- On kind, the policy renders but doesn't enforce; the implementer can verify the policy compiles and is well-formed but should not rely on kind to validate enforcement.
+
+**Patterns to follow:**
+- Calico/Cilium NetworkPolicy examples for FQDN-based allowlists.
+- The compass research §4 reliability gotcha — NetworkPolicy must allow GitHub HTTPS:443 or the finalizer push will be silently blocked.
+
+**Test scenarios:**
+- Happy path: `helm template ... -f infra/helm/values/dev.yaml` produces a NetworkPolicy resource.
+- Happy path: `helm template ... -f infra/helm/values/local.yaml` does **not** produce a NetworkPolicy resource (toggled off).
+- Edge case: `kubectl apply` of the rendered NetworkPolicy on DOKS does not error (well-formed manifest).
+- Integration (manual demo, DOKS): from inside a session pod, `curl https://kubernetes.default.svc` fails (blocked); `curl https://github.com` succeeds; `curl http://169.254.169.254/latest/meta-data/` fails.
+
+**Verification:**
+- Demo: on DOKS, exec into a session pod and prove (1) GitHub egress works (clone + push still succeed), (2) K8s API egress fails, (3) metadata service egress fails.
+
+---
+
+- [ ] **Unit 8.2: Tightened `opencode.json`**
+
+**Goal:** The OpenCode permissions config in `infra/images/opencode/opencode.json` denies the agent reading `/etc/git*`, denies webfetch to `*.github.com`, and restricts bash to a curated allowlist. This is defense in depth alongside Unit 8.1 (NetworkPolicy) — even if NetworkPolicy is bypassed, the agent's tool surface is constrained.
+
+**Requirements:** Threat Model — agent permissions; rev-2 PAT hardening decision.
+
+**Dependencies:** Unit 6.1 (image with the placeholder permissive `opencode.json`).
+
+**Files:**
+- Modify: `infra/images/opencode/opencode.json` — full denylist per threat model.
+
+**Approach:**
+- Replace the Phase 6 placeholder permissive config with:
   ```json
   {
     "$schema": "https://opencode.ai/config.json",
@@ -1097,298 +1216,55 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
     }
   }
   ```
-  Rationale per rule: `read` denylist prevents the agent from reading `/etc/git-credentials`. `webfetch` denylist prevents exfiltration via GitHub API (push still works because git uses HTTPS protocol, not webfetch) and prevents metadata service access. `bash` denylist closes the `cat` exfil path. The tightening is meaningful even with NetworkPolicy in place (defense in depth — NetworkPolicy is enforced at the cluster but not on kind by default).
-- Image tag pattern: `localhost:5001/openvoid/opencode:dev` for kind, `ghcr.io/openvoid/opencode:<sha>` for DOKS.
+- Rationale per rule: `read` denylist prevents the agent from reading `/etc/git-credentials`. `webfetch` denylist prevents exfiltration via GitHub API (push still works because git uses HTTPS protocol, not webfetch) and prevents metadata service access. `bash` denylist closes the `cat` exfil path. The tightening is meaningful even with NetworkPolicy in place (defense in depth — NetworkPolicy is enforced at the cluster but not on kind by default).
+
+**Patterns to follow:**
+- The original Phase 6 config decomposition from rev 2 — same content, just packaged as a "Phase 8 hardening" task instead of being co-located with the image build.
 
 **Test scenarios:**
-- Happy path: `docker build -t openvoid/opencode:dev infra/images/opencode/`; `docker run --rm -p 8080:8080 -e OPENCODE_SERVER_PASSWORD=dev openvoid/opencode:dev`; `curl localhost:8080/healthz` returns 200.
-- Error path: missing `OPENCODE_SERVER_PASSWORD` causes the entrypoint to fail loudly.
-- Edge case: image runs as UID 1000 (`docker exec ... id` confirms).
+- Happy path (manual demo): start a session; from the agent (via `POST /session/<sid>/message`), ask it to `cat /etc/git-credentials` — request is denied.
+- Happy path (manual demo): from the agent, ask it to fetch `https://api.github.com/users/octocat` — request is denied (webfetch to `*github.com*`).
+- Edge case (manual demo): from the agent, ask it to run `git push` — succeeds (allowed in `bash` allowlist).
+- Edge case (manual demo): from the agent, ask it to `rm -rf /workspace` — denied.
 
 **Verification:**
-- The OpenCode HTTP API responds to a basic prompt request locally before deploying to kind.
+- The Phase 7 demo flow still works (clone, edit, push) — none of the denylists block the legitimate clone/push path.
 
 ---
 
-- [ ] **Unit 6.2: Operator builds the OpenCode Pod spec**
+- [ ] **Unit 8.3: `activeDeadlineSeconds` documentation + chart parameterization**
 
-**Goal:** `buildPod()` (Unit 5.1) now produces a real OpenCode Pod with the right env vars, ports, and probes.
+**Goal:** The `activeDeadlineSeconds = 14400` (4 h) value introduced in Phase 4 is documented as the kubelet-level failsafe in the chart README, and the value is exposed as a Helm value (`session.activeDeadlineSeconds`). Behavior on deadline trip is documented: kubelet kills the pod with `DeadlineExceeded`; the SIGTERM cascade still runs within the deadline window so the finalizer gets its push attempt.
 
-**Requirements:** R6, brainstorm Slice 6.
+**Requirements:** Pod-level failsafe decision in Key Technical Decisions.
 
-**Dependencies:** Unit 6.1.
+**Dependencies:** Unit 4.3 (where the value first lands), Unit 5.2 (where the chart values graduated from constants).
 
 **Files:**
-- Modify: `services/session-operator/internal/controller/pod_builder.go`.
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go` — read agent ready state via Pod's readiness probe.
+- Modify: `infra/helm/openvoid/values.yaml` — `session.activeDeadlineSeconds: 14400` documented with comments.
+- Modify: `infra/helm/openvoid/README.md` — explain the failsafe semantics and the SIGTERM cascade interaction.
 
 **Approach:**
-- Pod spec:
-  - `image: spec.image` (default `localhost:5001/openvoid/opencode:dev`).
-  - Container port 8080 named `agent-http`.
-  - `OPENCODE_SERVER_PASSWORD` via `valueFrom.secretKeyRef` (NOT a literal env var — kubectl describe pod must not surface the password). Per-session Secret holds the value.
-  - **`automountServiceAccountToken: false`** at Pod spec level — agent container has no business reading the in-cluster K8s API. Without this, a prompt-injection compromise hands the attacker a SA token they can use to enumerate cluster Secrets.
-  - Resources: `requests: { cpu: 500m, memory: 1Gi }`, `limits: { memory: 3Gi }` (no CPU limit, per best-practice research).
-  - `readinessProbe: httpGet /healthz on 8080`.
-  - **No livenessProbe** (per best-practice research — a thinking LLM looks dead but isn't). See "Defense-in-depth on operator failure" in Risks for what catches stuck-but-Ready pods.
-  - `terminationGracePeriodSeconds: 120` (Phase 8 confirms; safe to set now).
-- **Single cluster-wide Secret** `openvoid-opencode-password` in `openvoid-system`, mounted into every session pod via `valueFrom.secretKeyRef`. Created at chart install time (Helm template with random value generated via `randAlphaNum`). Per-session generation is deferred to v1.5 along with multi-tenancy.
-- **`activeDeadlineSeconds = idleTimeoutSeconds * 4`** on the Pod spec (defense-in-depth per Key Technical Decisions). E.g., for the default 1800s idle, the pod's hard ceiling is 7200s (2 hours). When the deadline trips, K8s force-stops the pod regardless of operator state.
-- One Service per session: `Service` selecting on `openvoid.io/session-id`, **two named ports** (`agent-http: 8080`, `preview-http: 3000`). One Service with two ports is cleaner than two Services. Phase 9.3 fills in the preview port logic; the Service exposing both ports lands here so cloudflared (Phase 9.4) can route them on a single backend.
-- The CR's `status.endpointUrl` is set to the in-cluster DNS `<sessionId>.openvoid-sessions.svc.cluster.local:8080` (Phase 9.4 swaps to the cloudflared subdomain via Helm value).
+- Documentation-only unit. The wiring already exists from Phase 4/5. This unit makes the failsafe legible to future implementers who didn't read the rev 4 decision log.
 
 **Test scenarios:**
-- Happy path (envtest): CR with `image: <opencode-image>`; reconcile creates a Pod with the right env vars, ports, probes, and limits.
-- Edge case (envtest): Pod's readiness probe fails (simulated); CR's `status.phase` stays `Pending` until probe succeeds.
-- Edge case (envtest): per-session Secret is owner-ref'd to the CR; deleting the CR GCs the Secret.
-- Integration (kind): real OpenCode pod boots; `kubectl port-forward svc/<sessionId> 8080:8080 -n openvoid-sessions`; `curl -u :<password> localhost:8080/healthz` returns 200.
+- Test expectation: none — documentation only. Verified by demo.
+- Edge case (manual demo, takes 4+ hours): create a session and don't stop it. After 4 hours the pod transitions to `Terminating` with `Reason: DeadlineExceeded`; the SIGTERM cascade fires; the finalizer pushes whatever is in the workspace; the branch lands on GitHub.
 
 **Verification:**
-- The Tilt-up demo checkpoint passes: real OpenCode pod responds to a curl'd prompt.
+- `helm show values infra/helm/openvoid` lists `session.activeDeadlineSeconds` with a clear comment.
+- Pod inspection: `kubectl get pod -n openvoid-sessions <pod> -o jsonpath='{.spec.activeDeadlineSeconds}'` returns the chart-configured value.
 
 ---
 
-- [ ] **Unit 6.3: Activity polling in operator**
 
-**Goal:** The operator keeps `status.lastActivityTime` updated by polling the agent's `/last-activity` endpoint, so idle-stop (Unit 5.3) becomes activity-aware instead of creation-time-based.
+### Phase 9: Web UI + presence-driven lifecycle + cloudflared + ArgoCD (Slice 9 — rev 4)
 
-**Requirements:** Brainstorm Slice 6 + Slice 5 connection.
+**Demo checkpoint at end of phase:** A user signs in with GitHub, opens `apps/web`, clicks Start session, picks a repo, watches the pod provision (with visible state progression), types a prompt, sees the agent edit code, sees a live preview of the running app. **They click "Save & Stop" and the session terminates cleanly — `feat/<sessionId>` appears on GitHub, the post-stop view shows the branch URL.** Closing the browser tab without clicking Save and waiting 60 seconds also produces the branch (presence-driven cleanup). DOKS demo additionally exercises cloudflared and ArgoCD-managed deployment.
 
-**Dependencies:** Unit 6.2.
-
-**Files:**
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go`.
-
-**Approach:**
-- The reconciler sets `RequeueAfter: 30s` while CR is in Running phase.
-- Each reconcile makes an in-cluster HTTP GET to `<sessionId>-svc.openvoid-sessions.svc.cluster.local:8080/last-activity`. (If OpenCode doesn't expose this endpoint upstream, document and either add it via a small wrapper or fall back to inferring from connection presence — defer the precise mechanism to implementation; tracked under "Deferred to implementation".)
-- Update `status.lastActivityTime`. Idle-stop (Unit 5.3) reads this.
-
-**Test scenarios:**
-- Happy path (envtest, mocked HTTP): poll returns recent activity; `status.lastActivityTime` updates; idle-stop deadline pushes forward.
-- Edge case (envtest, mocked HTTP): poll fails (timeout); `status.lastActivityTime` is not updated; idle proceeds based on stale value.
-
-**Verification:**
-- Demo: create a session with `idleTimeoutSeconds: 60`; send a prompt every 20s for 3 minutes; the session does not idle-stop. Stop sending prompts; the session idle-stops within 60–90s.
-
----
-
-### Phase 7: Workspace + Git (Slice 7)
-
-**Demo checkpoint at end of phase:** A `CodingSession` mounts a 10Gi PVC; an initContainer clones the user's repo into it; the agent reads, writes, and executes code in the workspace. Restarting the Pod reuses the PVC content; deleting the CR reclaims the PVC via owner-ref GC.
-
-- [ ] **Unit 7.1: Add PVC to operator's Pod spec**
-
-**Goal:** Each session has a per-session PVC mounted at `/workspace` in the agent container.
-
-**Requirements:** Brainstorm Slice 7; Phase 4 R6 status fields.
-
-**Dependencies:** Phase 6 complete.
-
-**Files:**
-- Modify: `services/session-operator/internal/controller/pod_builder.go` — emit a PVC + Pod volumeMount.
-- Modify: `services/session-operator/internal/controller/codingsession_controller.go` — `CreateOrUpdate` PVC alongside Pod.
-- Modify: `infra/helm/openvoid/values.yaml` — already has `storageClass`; add `workspaceSize` (default `10Gi`).
-
-**Approach:**
-- PVC spec: `accessModes: [ReadWriteOnce]`, `storageClassName: <from operator env, set via Helm value `storageClass`>`, `resources.requests.storage: <from operator env, set via Helm value `workspaceSize`>`.
-- StorageClass + workspaceSize are **operator-level config (env vars from Helm values)**, not CRD spec fields — see "CRD spec is intentionally lean" in Key Technical Decisions. Local: `standard`. DOKS: `do-block-storage`.
-- Mount path inside the agent container: `/workspace`.
-- Owner-ref the PVC to the CR for GC.
-- Update CR status with `status.workspaceClaimRef`.
-
-**Test scenarios:**
-- Happy path (envtest): create CR; reconcile creates both the PVC (Bound on a fake provisioner) and the Pod with the volume mount.
-- Edge case (envtest): existing PVC for the same session (e.g., from a previous Pod restart); reconcile reuses it.
-- Edge case (envtest, real DOKS): PVC takes 30s+ to provision; CR status remains Pending; once Bound, Pod schedules.
-- Integration (kind): `kubectl exec` into the agent container; `ls -la /workspace`; PVC is mounted and writable.
-
-**Verification:**
-- `kubectl get pvc -n openvoid-sessions` shows a Bound PVC per session.
-- Deleting the CR cleans up both Pod and PVC.
-
----
-
-- [ ] **Unit 7.2: initContainer clones the user's Git repo**
-
-**Goal:** On Pod start, an initContainer clones `spec.repo` (branch `spec.branch`) into `/workspace` if not already there. On subsequent restarts, it fast-fetches.
-
-**Requirements:** Brainstorm Slice 7; "no Git in the spin-up path" — clarification: the user's repo IS the spin-up source for the workspace; the brainstorm constraint is about NOT round-tripping through Git for the platform's own state. User-repo cloning is fine.
-
-**Dependencies:** Unit 7.1.
-
-**Files:**
-- Modify: `services/session-operator/internal/controller/pod_builder.go` — initContainer.
-- Create: `infra/images/git-init/Dockerfile` (alpine + git) or use a public image like `alpine/git:latest` directly.
-
-**Approach:**
-- initContainer command (preserves any local `wip/` commits the Phase 8.2 background loop may have made):
-  ```
-  if [ -d /workspace/.git ]; then
-    cd /workspace
-    git fetch origin
-    # Detect local-only commits on any branch (typically wip/<sessionId>) and refuse to clobber them.
-    LOCAL_ONLY=$(git for-each-ref --format='%(refname:short)' refs/heads/ \
-      | xargs -I {} sh -c 'git rev-list --count {} ^origin/${BRANCH} 2>/dev/null || echo 0' | awk '{s+=$1} END {print s}')
-    if [ "${LOCAL_ONLY}" -gt 0 ]; then
-      echo "Local-only commits detected (likely wip/* from previous session); not resetting workspace."
-      git checkout ${BRANCH} || git checkout -b ${BRANCH} origin/${BRANCH}
-    else
-      git reset --hard origin/${BRANCH}
-    fi
-  else
-    git clone --branch=${BRANCH} ${REPO_URL} /workspace
-  fi
-  ```
-  Rationale: a Pod restart during an active session preserves the PVC; the previous Pod's wip-commit loop (Unit 8.2) may have committed unpushed work locally. A naive `git reset --hard origin/${BRANCH}` deletes those commits before preStop has a chance to push them. The detection above is conservative — if any local-only commits exist on any branch, skip the reset.
-- Mount the same `/workspace` PVC.
-- Credentials in v1: implementer's GitHub PAT in a cluster Secret (`openvoid-git-credentials`), mounted at `/etc/git-credentials`. The init script configures `git config --global credential.helper "store --file=/etc/git-credentials"`.
-- Document the `openvoid-git-credentials` Secret format; create it manually for the demo (`kubectl create secret generic openvoid-git-credentials --from-literal=...`); Phase 9 may add a UI for it.
-
-**Test scenarios:**
-- Happy path (kind, demo): `POST /sessions { repo: "<your-test-repo-url>" }`; agent container starts with the repo populated under `/workspace`.
-- Edge case (kind): re-create the same session (same `userId`+`appId` if Phase 7 supports persistent PVCs); `git fetch` brings it up to date.
-- Edge case (kind): clone fails (bad URL, missing creds); initContainer enters CrashLoopBackOff; CR status reaches Failed with a clear condition message.
-
-**Verification:**
-- Agent reads files from `/workspace` and edits succeed.
-
----
-
-- [ ] **Unit 7.3: Demo — agent reads, writes, executes code**
-
-**Goal:** End-to-end demonstration of the v1 promise: a user prompts the agent, it reads/writes code in the workspace, runs `npm test`, sees output.
-
-**Requirements:** R1 (milestone outcome — this is the qualitative demo).
-
-**Dependencies:** Units 7.1, 7.2.
-
-**Files:**
-- Create: `docs/demos/2026-05-01-phase-7.md` — recorded transcript or screencast outline of the demo.
-
-**Approach:**
-- Use a simple test repo (e.g., a public Vite + React starter) as `spec.repo`.
-- Demo script:
-  1. `POST /sessions` with that repo.
-  2. Wait for `Phase: Running`.
-  3. `kubectl port-forward svc/<sessionId> 8080:8080 -n openvoid-sessions`.
-  4. `curl -u :<password> localhost:8080/...` to send a prompt: "Add a button that says 'Hello openvoid' to the home page."
-  5. Observe the agent edit `src/App.tsx` (or equivalent).
-  6. Prompt: "Run the tests."
-  7. Observe `npm test` output.
-
-**Test scenarios:**
-- Test expectation: none — narrative demo.
-
-**Verification:**
-- The demo transcript is captured. (No automated CI yet; Phase 9 introduces automated e2e.)
-
----
-
-### Phase 8: Commit-on-Shutdown (Slice 8)
-
-**Demo checkpoint at end of phase:** A session that idle-stops (or is deleted via the API) pushes a `feat/<sessionId>` branch to the user's remote before the Pod terminates. Force-deletion (`?force=true`) skips the push.
-
-- [ ] **Unit 8.1: `preStop` lifecycle hook + git-push script**
-
-**Goal:** The agent container has a `preStop` hook that commits and pushes any uncommitted work as `feat/<sessionId>` before SIGTERM.
-
-**Requirements:** Brainstorm Slice 8.
-
-**Dependencies:** Phase 7 complete.
-
-**Files:**
-- Create: `infra/images/opencode/preStop.sh` — script executed by `lifecycle.preStop`.
-- Modify: `infra/images/opencode/Dockerfile` — bake the script into the image at `/usr/local/bin/openvoid-preStop.sh`.
-- Modify: `services/session-operator/internal/controller/pod_builder.go` — add the `lifecycle.preStop` block + ensure `terminationGracePeriodSeconds: 120`.
-
-**Approach:**
-- Script (sketch):
-  ```sh
-  set -e
-  cd /workspace
-  if [ -n "$(git status --porcelain)" ]; then
-    git config user.email "agent@openvoid.io"
-    git config user.name  "openvoid agent"
-    git checkout -b "feat/${OPENVOID_SESSION_ID}"
-    git add -A
-    git commit -m "openvoid: session ${OPENVOID_SESSION_ID} auto-save"
-    git push origin "feat/${OPENVOID_SESSION_ID}"
-  fi
-  ```
-- `OPENVOID_SESSION_ID` env var is set by the operator from `spec.sessionId` / CR name. `OPENVOID_POD_INCARNATION` is also set (a UUID generated per Pod creation by the operator); the branch name is `feat/${OPENVOID_SESSION_ID}-${OPENVOID_POD_INCARNATION}` to avoid concurrent pushes on the same branch when a Pod is replaced (OOMKill, eviction, restart) and both the old and new pods race to push.
-- Credentials reuse the `openvoid-git-credentials` Secret from Phase 7.
-- After push, the agent container can't update the CR directly (it has no RBAC — see `automountServiceAccountToken: false` in Unit 6.2). Hand-off pattern: the script writes a sentinel file `/workspace/.openvoid/last-commit.txt` with three possible states — `<sha> <branch>` on success, `error: <reason>` on failure (push rejected, no creds, etc.), absent if preStop never ran. The operator reads it during Pod-deleted reconcile and updates status accordingly. Status conditions: `GitPush=True` (success), `GitPush=False` (failure), `GitPush=Unknown` (sentinel absent — likely SIGKILL).
-
-**Test scenarios:**
-- Happy path (kind, manual): create a session, exec into the agent, edit a file, then `DELETE /sessions/{id}`; observe `feat/<sessionId>` appearing on the remote.
-- Edge case: no uncommitted changes; preStop is a no-op (no empty commit).
-- Edge case: push fails (auth issue); preStop logs the error and exits non-zero; the Pod still terminates after grace period; operator records the failure in CR status.
-- Edge case: `terminationGracePeriodSeconds` exceeded; SIGKILL hits before push completes; the next slice's belt-and-braces (Unit 8.2) catches this.
-
-**Verification:**
-- A live session, after edits, produces a real branch on the remote when stopped.
-
----
-
-- [ ] **Unit 8.2: Periodic background commit (belt-and-braces)**
-
-**Goal:** Every 60s while the session is running, the agent commits any work-in-progress to a local `wip/<sessionId>` branch. preStop becomes the "final flush," not the only safety mechanism.
-
-**Requirements:** Brainstorm Slice 8 — protects against SIGKILL escape hatches noted in best-practice research.
-
-**Dependencies:** Unit 8.1.
-
-**Files:**
-- Modify: `infra/images/opencode/entrypoint.sh` — start a background loop alongside `opencode serve`.
-- Create: `infra/images/opencode/bg-commit.sh` — local-commit loop (no push).
-
-**Approach:**
-- The loop only commits locally; pushing every 60s is too noisy and costly. preStop pushes everything (including local commits accumulated in the loop) at the end.
-- `tini` (default in node:20-alpine) reaps the background loop cleanly when SIGTERM hits.
-
-**Test scenarios:**
-- Happy path (kind): create session; edit `/workspace/foo.txt` via exec; wait 90s; `git log` inside the workspace shows a `wip/<sessionId>` commit.
-- Edge case: the loop fails to commit (e.g., locked index); errors are logged; main process unaffected.
-
-**Verification:**
-- After a `kill -9` to the agent process (simulating SIGKILL), the workspace PVC retains intermediate commits when reattached on next session start.
-
----
-
-- [ ] **Unit 8.3: API exposes `force` and `branch` semantics**
-
-**Goal:** The Session API surfaces the post-shutdown state in `GET /sessions/{id}` and supports a `force` query param on DELETE.
-
-**Requirements:** R5 (TypeSpec contract evolution).
-
-**Dependencies:** Units 8.1, 8.2.
-
-**Files:**
-- Modify: `packages/protocol/main.tsp` — `GET /sessions/{id}` response includes `lastCommitSha`, `branchName`. `DELETE /sessions/{id}?force=boolean`.
-- Modify: `packages/protocol/generated/...` (regenerated).
-- Modify: `services/session-api/src/routes/sessions.ts`.
-- Modify: `services/session-api/test/routes.sessions.test.ts`.
-
-**Approach:**
-- `force=false` (default): patch `spec.stop=true`, let preStop run, then delete the CR.
-- `force=true`: delete the CR with `--grace-period=0`. preStop does not run; document this loudly in the OpenAPI description.
-
-**Test scenarios:**
-- Happy path: graceful delete returns 202 + `{ branchName, lastCommitSha }` once the session has fully stopped.
-- Happy path: force delete returns 204 immediately; no branchName.
-- Edge case: graceful delete on a session with no edits returns 200 + `{ branchName: null }`.
-
-**Verification:**
-- Demo: `DELETE /sessions/{id}` returns the new branch name; visit the GitHub UI; the branch is there.
-
----
-
-### Phase 9: Web UI + Live Preview (Slice 9)
-
-**Demo checkpoint at end of phase:** A user signs in with GitHub, opens `apps/web`, clicks Start session, picks a repo, watches the agent provision (with visible state progression), types a prompt, sees the agent edit code, sees a live preview of the running app on a second port. The session idle-stops with a visible warning, a `feat/<sessionId>-<incarnation>` branch appears on the remote, and the post-stop view shows the branch URL.
-
-> Note: Helm chart authoring (Unit 5.6), ArgoCD wiring (Unit 5.9), NetworkPolicy (Unit 5.7) are already done by this point. Phase 9 is now scoped to UX + cloudflared. The full kind-based e2e CI gate is **deferred to v1.5** (see Key Technical Decisions).
+> Rev 4: Phase 9 grows in scope versus the original plan. **New work folded in:** the SSE chat path through the Session API (resolves a previously deferred-to-implementation question), presence-based cleanup with 60 s grace timer, the "Save & Stop" button as the primary lifecycle UX, and the ArgoCD wiring that originally lived in Unit 5.9. **Removed work:** the agent's WS path (the spike resolved that the agent emits SSE, not WS), the operator's idle-warning UI integration (no operator), and any CR-based status reflection (replaced with pod-annotation reads).
+>
+> The full kind-based e2e CI gate is **deferred to v1.5** (see Key Technical Decisions). Phase 9 ships manual demo verification.
 
 - [ ] **Unit 9.1: Next.js app scaffold + NextAuth (GitHub OAuth)**
 
@@ -1448,30 +1324,76 @@ The session detail page shows different content per `status.phase` and `status.c
 
 ---
 
-- [ ] **Unit 9.2: Chat box (WebSocket to OpenCode)**
+- [ ] **Unit 9.2: Chat box (SSE through Session API) + presence-driven cleanup (rev 4)**
 
-**Goal:** A user types in the chat; messages stream to the agent's `opencode serve` over WebSocket; agent output streams back.
+**Goal:** A user types in the chat; the Web UI sends `POST /sessions/:id/message` (proxied by the Session API to the agent) and consumes the SSE response stream. A long-lived `GET /sessions/:id/events` SSE connection from the Web UI to the Session API serves two purposes: (a) the chat-event stream from the agent (proxied), and (b) the **presence channel** — when the connection closes (tab close, network drop), the Session API starts a 60 s grace timer and deletes the pod if the connection isn't re-established. Reconnect within the grace window cancels the timer.
 
-**Requirements:** R1.
+**Requirements:** R1; rev 4 lifecycle decision; Phase 0.3 spike (SSE, not WS).
 
 **Dependencies:** Units 9.1, 6.2.
 
 **Files:**
-- Create: `apps/web/app/sessions/[id]/Chat.client.tsx` — client component.
-- Create: `apps/web/lib/agent-ws.ts` — WS client wrapper.
-- Modify: `services/session-api/src/routes/sessions.ts` — add `GET /sessions/{id}/agent-info` returning `{ wsUrl, password }` for the client to connect.
+- Create: `apps/web/app/sessions/[id]/Chat.client.tsx` — client component opening `EventSource('/api/sessions/:id/events')` on mount; closing it on unmount or via the Save & Stop button (Unit 9.2.5 below).
+- Create: `apps/web/lib/agent-sse.ts` — SSE client wrapper with auto-reconnect (exponential backoff up to the grace-window ceiling).
+- Modify: `services/session-api/src/routes/sessions.ts` — add `GET /sessions/:id/events` (SSE proxy to agent's `/global/event` and chat-message responses) and `POST /sessions/:id/message` (proxied to agent's `POST /session/:id/message`).
+- Create: `services/session-api/src/presence/index.ts` — per-session disconnect-timer registry (~30 lines of TS). Functions: `onClientConnect(sid)`, `onClientDisconnect(sid)`, `clearAll()` (for graceful API shutdown). Map<sessionId, NodeJS.Timeout> as the data structure; `disconnectGracePeriodSeconds` from chart values.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — add tests for the presence registry: connect cancels pending timers, disconnect schedules a delete, reconnect within the grace window cancels.
+- Modify: `infra/helm/openvoid/values.yaml` — add `sessionApi.presence.disconnectGracePeriodSeconds: 60`.
 
 **Approach:**
-- For kind: `wsUrl = ws://localhost:<localPort>` after a Tilt-managed port-forward.
-- For DOKS: `wsUrl = wss://<sessionId>-agent.openvoid.app` once cloudflared is wired up (Unit 9.4).
-- Send the password in a header on initial connection.
+- The SSE stream is the **only** wire between Web UI and the agent. The agent's `:8080` HTTP port stays cluster-internal; the Web UI talks only to the Session API.
+- The presence registry is in-memory (per-process). v1 runs the Session API at `replicas: 1` so this is fine; multi-replica is a v1.5 concern (sticky sessions or shared state). Documented in Risks.
+- The 60 s grace window is generous enough to cover page reloads and brief network blips. Tunable via Helm.
+- Disconnect-triggered delete uses the existing `PodOps.deleteSessionPod` from Phase 3.
+- The Save & Stop button (Unit 9.2.5) explicitly closes the SSE connection *and* sends `DELETE /sessions/:id` — the explicit DELETE is the primary signal; the connection close is secondary belt-and-braces.
+
+**Execution note:** test-first for the presence registry. The state machine is small enough to TDD entirely with mocked PodOps and `vi.useFakeTimers()`.
+
+**Patterns to follow:**
+- Hono's SSE patterns (`hono/streaming` helpers) for the proxy implementation.
+- Standard EventSource API for the client.
 
 **Test scenarios:**
-- Happy path: connect, send a prompt, receive streamed tokens.
-- Edge case: connection drops mid-stream; UI shows a reconnect state.
+- Happy path (unit, presence registry): `onClientConnect` followed by `onClientDisconnect` schedules a timer; advancing fake timers by `gracePeriod + 1` triggers `deleteSessionPod`.
+- Happy path (unit, presence registry): `onClientConnect` after `onClientDisconnect` within the grace window cancels the pending delete.
+- Edge case (unit): two connect events back-to-back are idempotent — only one timer scheduled.
+- Edge case (unit): disconnect for a session that doesn't exist (already deleted) is a no-op, no error.
+- Error path (unit): if `deleteSessionPod` throws, the timer's expiration logs the error and clears the timer entry (no infinite retry).
+- Integration (manual demo): open Web UI on a session; close the browser tab; wait 60 s; verify `kubectl get pods -n openvoid-sessions -l openvoid.io/session-id=<sid>` returns nothing.
+- Integration (manual demo): open Web UI; close tab; immediately reopen the same session; SSE reconnects; pod is **not** deleted.
 
 **Verification:**
-- A live demo shows agent output streaming in real time.
+- Demo: prompt the agent, see streamed token output; close tab, wait, see the branch on GitHub.
+
+---
+
+- [ ] **Unit 9.2.5: "Save & Stop" button — explicit lifecycle UX**
+
+**Goal:** A prominent "Save & Stop" button on the session detail page sends `DELETE /sessions/:id`, navigates the user to a post-stop confirmation page, and shows the resulting `feat/<sessionId>` branch URL once the finalizer push is complete. This is the primary lifecycle UX in v1.
+
+**Requirements:** R1; rev 4 lifecycle decision (user-driven primary signal).
+
+**Dependencies:** Unit 9.2 (SSE channel and presence registry); Phase 7 (finalizer pushes the branch).
+
+**Files:**
+- Modify: `apps/web/app/sessions/[id]/page.tsx` — Save & Stop button + post-stop confirmation flow.
+- Create: `apps/web/app/sessions/[id]/stopped/page.tsx` — confirmation page polling for branch existence and rendering its GitHub URL.
+- Modify: `services/session-api/src/routes/sessions.ts` — `DELETE /sessions/:id` returns `{ branchName: "feat/<sid>" }` so the Web UI can build the GitHub URL without further API calls. (TypeSpec contract update — regenerate `packages/protocol`.)
+
+**Approach:**
+- Click flow: Save & Stop → confirmation modal → DELETE → close SSE → navigate to `/sessions/[id]/stopped` → poll GitHub for the branch (every 2 s, max 30 s; the SIGTERM cascade should complete well under that budget).
+- If the poll times out, show "Push didn't complete in time. Check `kubectl logs -n openvoid-sessions <pod> -c git-finalizer` for diagnostics." (For a kind demo. DOKS gets the same message but with a Cloudflare-routed log link if one is wired up later.)
+
+**Patterns to follow:**
+- Phase 3's HTTP error-shape conventions (`code` + `message`).
+
+**Test scenarios:**
+- Happy path (unit, mocked DELETE): button click triggers DELETE; the SSE is closed; navigation happens.
+- Edge case (unit): SSE close fails (already disconnected); DELETE still proceeds.
+- Integration (manual demo): edit a file in the session; click Save & Stop; the post-stop page shows the GitHub branch URL within ~10 s.
+
+**Verification:**
+- Demo: click Save & Stop, see the branch on GitHub linked from the post-stop page.
 
 ---
 
@@ -1484,7 +1406,7 @@ The session detail page shows different content per `status.phase` and `status.c
 **Dependencies:** Units 9.1, 9.2, 7.3.
 
 **Files:**
-- Modify: `services/session-operator/internal/controller/pod_builder.go` — add a second container port `preview-http:3000` and a second Service.
+- Modify: `services/session-api/src/k8s/client.ts` — add a second container port `preview-http: 3000` to the per-session pod's main container; ensure the per-session Service exposes both `agent-http` and `preview-http` *(rev 4: was `services/session-operator/internal/controller/pod_builder.go` — moved to the Session API since there's no operator)*.
 - Modify: `services/session-api/src/routes/sessions.ts` — `GET /sessions/{id}` returns `previewUrl`.
 - Modify: `apps/web/app/sessions/[id]/page.tsx` — render an iframe of `previewUrl`.
 
@@ -1557,16 +1479,16 @@ The session detail page shows different content per `status.phase` and `status.c
 - Image tags are SHA-driven; v1 has no CI auto-update for `values/dev.yaml` (deferred with the e2e CI to v1.5). For v1, the implementer manually edits `values/dev.yaml` to bump the SHA after each push to GHCR.
 
 **Test scenarios:**
-- Happy path: `helm upgrade openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` adds the Web UI and Session API templates without affecting the operator.
+- Happy path: `helm upgrade openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` adds the Web UI and routing templates without disrupting the existing Session API Deployment.
 - Happy path: ArgoCD detects the change in `values/dev.yaml` and rolls the new components on DOKS.
-- Edge case: `cloudflared.enabled=false` (kind path) renders no cloudflared resources.
+- Edge case: `routing.mode=cloudflared` with `routing.cloudflared.tunnelId` empty fails the chart render with a clear error (template-level guard).
 
 **Verification:**
-- DOKS deployment via ArgoCD shows operator + Session API + Web UI + cloudflared all Synced + Healthy.
+- DOKS deployment via ArgoCD shows Session API + Web UI + cloudflared all Synced + Healthy.
 
 ---
 
-- [ ] **Unit 9.6: Minimum-viable CI**
+- [ ] **Unit 9.6: Minimum-viable CI (rev 4 — drop Go envtest job)**
 
 **Goal:** Every PR runs the cheap, high-value checks. No kind cluster spinning, no e2e gate (deferred to v1.5).
 
@@ -1581,82 +1503,150 @@ The session detail page shows different content per `status.phase` and `status.c
 - Single workflow with path-filtered jobs:
   - `ts-lint-typecheck`: triggered by changes under `apps/`, `services/session-api/`, `packages/`. Runs `pnpm turbo run lint typecheck` against affected workspaces.
   - `ts-test`: same trigger; runs `pnpm turbo run test`.
-  - `go-test`: triggered by changes under `services/session-operator/`. Runs `make test` (envtest in the runner — no kind).
   - `freshness`: triggered by changes under `packages/protocol/`. Regenerates artifacts and `git diff --exit-code`.
   - `helm-lint`: triggered by changes under `infra/helm/`. Runs `helm lint` and `kubeconform` against rendered manifests.
-- No kind cluster, no real-image e2e. The brainstorm's R13 (kind e2e on every PR) is **deferred to v1.5** along with the OpenCode-shaped test stub.
+- *(Rev 4: removed the `go-test` job — there's no Go module in v1. The brainstorm's R13 (kind e2e on every PR) is **deferred to v1.5** along with any operator-shaped test stubs.)*
 - Manual demo verification at the end of each phase substitutes for the gate during v1.
 
 **Test scenarios:**
 - Happy path: PR that doesn't break anything passes CI within ~3 min.
 - Edge case: PR that edits TypeSpec without regenerating fails `freshness`.
-- Edge case: PR that breaks operator reconciler fails `go-test` (envtest catches it).
+- Edge case: PR that breaks Helm chart rendering fails `helm-lint`.
 
 **Verification:**
 - A trial PR exercises every job; failures produce useful error messages.
 
 ---
 
+- [ ] **Unit 9.7: ArgoCD wiring for DOKS (moved from old Unit 5.9 — rev 4)**
+
+**Goal:** A single ArgoCD `Application` reconciles `infra/helm/openvoid` against the DOKS cluster from a tracked branch. Pushing a values change to that branch triggers a re-sync; pushing a chart-template change does the same. Local kind dev continues to use Tilt; ArgoCD is DOKS-only.
+
+**Requirements:** R15 (Helm-driven trunk-based deploy via ArgoCD).
+
+**Dependencies:** Unit 9.5 (chart includes Web UI + Session API + cloudflared); the implementer has ArgoCD installed on DOKS (one-time bootstrap, documented).
+
+**Files:**
+- Create: `infra/argocd/openvoid-application.yaml` — `Application` CR in `argocd` namespace pointing at the chart in this repo on the `main` branch (or a `dev` branch if preferred).
+- Create: `infra/argocd/README.md` — bootstrap recipe (install ArgoCD, register the Application, verify sync).
+- Modify: `README.md` — add the DOKS deploy flow.
+
+**Approach:**
+- One Application, sync-policy automated, prune+self-heal enabled. Targets `infra/helm/openvoid` directory; values from `infra/helm/values/dev.yaml`.
+- Bootstrap sequence: implementer installs ArgoCD on DOKS (one-time `helm install argocd argo/argo-cd ...`), applies the openvoid Application CR, and watches the sync status.
+
+**Patterns to follow:**
+- ArgoCD declarative-setup docs.
+
+**Test scenarios:**
+- Happy path: bumping `web.image.tag` in `infra/helm/values/dev.yaml` and pushing to `main` causes ArgoCD to roll the Web UI Deployment within ~3 min.
+- Edge case: a deliberate values typo (e.g., bad `routing.mode` value) fails the sync with a useful error in the ArgoCD UI; the previous good revision keeps running.
+
+**Verification:**
+- Demo on DOKS: an end-to-end deploy from a values-only PR merge to `main`.
+
+---
+
 ## System-Wide Impact
 
-- **Interaction graph:** The full chain is Web UI → Session API → K8s API server → Operator → Pod → PVC → Git remote → cloudflared (DOKS only). Phase 5+ guarantees that each link is owned by exactly one component (the operator owns all cluster-state mutations after CR creation; the Session API owns the user-facing translation only).
-- **Error propagation:** Operator failures surface as CR `status.phase = Failed` with a `Condition`; Session API maps these to HTTP 500 with the condition message. Pod-internal failures (preStop fails to push) are logged in the Pod, recorded by the operator into `status.conditions`, and surfaced in the Web UI via `GET /sessions/{id}` after the session ends.
-- **State lifecycle risks:** PVC orphaning if owner-ref GC fails (rare but possible); document `kubectl get pvc -n openvoid-sessions --field-selector=status.phase=Released` as a manual cleanup check. Stuck finalizers handled by Unit 5.5's force-remove timeout.
-- **API surface parity:** The TypeSpec contract is the single source for API DTOs. The CRD schema is the single source for cluster state. The Session API is the only place these vocabularies meet (per brainstorm R7).
-- **Integration coverage:** Unit 9.6's e2e covers the full chain. envtest in Phase 5 covers operator-internal logic. Phase 9.6 catches drift between TypeSpec and CRD that would otherwise only surface at runtime.
-- **Unchanged invariants:** No existing systems to invariant — greenfield. The only assertion is that Phase N never breaks the demo from Phase N-1.
+*(Rev 4 — restated for the sidecar architecture.)*
+
+- **Interaction graph:** The full chain is Web UI → Session API → K8s API server → per-session Pod (init-clone → main-agent + finalizer-sidecar) → Git remote → cloudflared (DOKS only). The Session API is the only openvoid-side controller — it owns all cluster-state mutations (Pod create/delete) and all user-facing translation. There is no operator layer; the chain is shorter than rev 3 by one hop.
+- **Error propagation:**
+  - **Pod creation failures** (image-pull, schedule failure) surface to the Session API via the `kubectl create` response or first `kubectl get pod` poll; mapped to HTTP 5xx with a meaningful `code` field.
+  - **`git-clone` init-container failures** leave the pod in `Init:Error`. The Session API's `GET /sessions/:id` reads this and returns `status: Failed` with the init-container's exit message.
+  - **Main-container (agent) failures** kill the pod; the finalizer sidecar still gets SIGTERM but the working tree may be in an inconsistent state. The push attempts whatever's there. v1 accepts this as "you might lose the last few seconds of edits."
+  - **Finalizer push failures** (network blip, GitHub down) are caught by Unit 7.2's single retry; persistent failure exits the sidecar non-zero. The branch on GitHub is the source of truth: if `gh api repos/.../branches/feat/<sid>` returns 200, the push succeeded.
+  - **Web UI presence-channel failures** (SSE unexpectedly closed) trigger the 60 s grace timer; recoverable via reconnect within the window.
+- **State lifecycle risks:**
+  - No PVCs in v1 → no PVC orphaning. Workspace is `emptyDir`; ephemeral, dies with the pod.
+  - **Per-process presence registry** in the Session API. If the Session API process is restarted (Helm upgrade, OOM, crash), all in-flight presence timers are lost; sessions whose Web UI is connected at restart will reconnect normally; sessions whose Web UI is disconnected at restart will leak until `activeDeadlineSeconds`. Acceptable in v1; v1.5 introduces shared presence state if multi-replica is needed.
+  - **Pod leakage** if the Session API crashes between `createNamespacedPod` and the `Pod` becoming visible to subsequent GETs. Defense: the `activeDeadlineSeconds = 14400` failsafe caps any leaked pod's lifetime at 4 h.
+- **API surface parity:** The TypeSpec contract is the single source for API DTOs. The Pod-spec (assembled by the Session API in `services/session-api/src/k8s/client.ts`) is the only place that knows the K8s shape. The Helm chart values are the parameterization layer between them. *(Rev 4: simpler than rev 3 — no CRD vocabulary in the middle.)*
+- **Integration coverage:** Phase 7's integration test (`services/session-api/test/integration/finalizer.test.ts`) covers the full SIGTERM cascade against a real kind cluster + real GitHub repo. Phase 9.6's CI does not run integration tests (per the CI scope decision); they're locally runnable via `pnpm test:integration`. Drift between the Session API's Pod-creation logic and the OpenAPI contract is bounded by Phase 9.6's `freshness` job (regenerate `packages/protocol`, `git diff --exit-code`).
+- **Unchanged invariants:** Phases 0–3 are completed and shipped. The Session API's HTTP surface (Phase 3) does not break — the rev 4 work strictly extends the response shapes (adds `repo`, `branch`, `createdAt`, eventually `branchName` from the DELETE response) and adds new endpoints (`GET /sessions/:id/events`, `POST /sessions/:id/message`). Phase 3 tests remain green.
 
 ## Risks & Dependencies
 
+*(Rev 4 — operator-related risks removed; sidecar-pattern-specific risks added.)*
+
 | Risk | Mitigation |
 |------|------------|
-| OpenCode upstream breaks the `serve` mode CLI before Phase 6 | Phase 0.3 spike verifies endpoint surface; pin `opencode-ai` version in the Dockerfile; document upgrade procedure |
-| DOKS PVC provisioning latency (15–45s) makes UX feel broken | Phase 9.1 Session States table specifies the "Provisioning workspace…" state with ETA |
-| `preStop` doesn't always run (node failure, force-delete) | `activeDeadlineSeconds` failsafe + periodic background commits (Unit 8.2) + per-incarnation branch names prevent push races |
-| Operator crash / panic / API throttle stalls idle-stop | `activeDeadlineSeconds = idleTimeoutSeconds * 4` on session pods catches the pod even when the operator is unhealthy |
+| OpenCode upstream breaks the `serve` mode CLI before Phase 6 | Phase 0.3 spike verified endpoint surface at v1.14.31; pin `opencode-ai` version in the Phase 6 Dockerfile; document upgrade procedure |
+| **PID 1 swallows SIGTERM** in the agent or finalizer sidecar | Phase 6's entrypoint script `exec`s into the binary; Phase 7's finalizer entrypoint uses the canonical `trap 'finalize; exit 0' TERM INT` + `while true; do sleep 3600 & wait $!; done` shape. Both verified by integration test in Unit 7.2. *(Rev 4 risk — load-bearing for the sidecar pattern.)* |
+| **`terminationGracePeriodSeconds` exhausted mid-push** on slow networks | Default 180 s in Unit 7.2 (compass research §4 recommendation); configurable via Helm. Push is idempotent (Unit 7.2) so the next session converges. v1 accepts the trade-off; v1.5 may add periodic snapshots |
+| **Hard node failure** (kubelet dies before SIGTERM cascade runs) | Accepted in v1 — sidecar pattern fundamentally cannot recover from this. Mitigated by encouraging users to click Save & Stop periodically; v1.5 may add periodic snapshots or graduate to a controller for cluster-wide pod-loss recovery. *(Rev 4 — explicitly documented as out-of-scope.)* |
+| **Web UI presence registry is per-process** in the Session API | v1 runs Session API at `replicas: 1` so this is fine. The Helm chart enforces `replicas: 1` via `sessionApi.replicas: 1` (and rejects values > 1 with a values validation comment). v1.5 introduces shared presence state if multi-replica is wanted |
+| **Force-delete bypasses SIGTERM cascade** entirely | Documented in Phase 7's "do not force-delete sessions" rule. The Web UI's Save & Stop button uses graceful DELETE only. `kubectl delete pod --force --grace-period=0` is a developer-side footgun — documented in `docs/solutions/` post-Phase-7 if it bites someone |
+| **Session pod leak on Session API crash** between create and reconcile | `activeDeadlineSeconds = 14400` (4 h) caps the lifetime of any leaked pod. v1 accepts the cost (~one DOKS-hour per leak). v1.5 may add a startup-time leak-cleanup pass |
 | Cloudflare account + domain requirement adds setup steps | Document Cloudflare Quick Tunnel (`cloudflared tunnel --url ...`, ephemeral) as a no-domain fallback. Plan-level: a vendor-neutral path (ingress-nginx + cert-manager) is named for v1.5+ |
-| Implementer hits an unfamiliar K8s primitive mid-phase and stalls | Each phase's verification section is a clean fallback — always reset to the previous demoable checkpoint |
-| TypeSpec OpenAPI 3.1 emitter regression | Pin `@typespec/openapi3` version in `package.json`; freshness-check in CI catches output changes |
-| GHCR anonymous-pull requires manual visibility flip after first push | Phase 5.9 prerequisite: `Settings → Packages → Package settings → Public` for each pushed package, OR use authenticated pulls with image-pull-secret |
+| Implementer hits an unfamiliar K8s primitive mid-phase and stalls | Each phase's verification section is a clean fallback — always reset to the previous demoable checkpoint. *(Rev 4: phase 7 specifically warrants extra time — signal handling is the steepest learning curve.)* |
+| TypeSpec OpenAPI 3.1 emitter regression | Pin `@typespec/openapi3` version in `package.json` (already done in Phase 3); freshness-check in CI catches output changes |
+| GHCR anonymous-pull requires manual visibility flip after first push | Phase 9.7 prerequisite: `Settings → Packages → Package settings → Public` for each pushed package, OR use authenticated pulls with image-pull-secret |
 | Long-running `tilt up` accumulates state across phases | Tiltfile is built incrementally; `tilt down` resets cleanly |
 | Single-node DOKS (`s-2vcpu-4gb`) hosts only one concurrent session | Document scale-up to `s-2vcpu-8gb` (~$48/mo) before any multi-stakeholder demo. Capacity table in `infra/remote/README.md` |
-| ArgoCD auto-prune misconfiguration deletes resources | Auto-prune **disabled** in v1 (Unit 5.9); enable manually after first release survives a manual prune review |
-| Stub-OpenCode-vs-real-OpenCode regression slips through | Manual demo verification at each phase's checkpoint. v1 has no automated e2e against real image; v1.5 reintroduces with team-scale CI |
+| ArgoCD auto-prune misconfiguration deletes resources | Auto-prune **disabled** in v1 (Unit 9.7); enable manually after first release survives a manual prune review |
 | GitHub username allowlist drift | `auth.allowedUsers` is a Helm value; treat changes like code changes. Reviewed via PR |
-| Prompt-injection driven credential exfil | Threat-modeled: tightened opencode.json (deny `/etc/git*` reads, deny webfetch to `*.github.com`), NetworkPolicy egress allowlist, fine-grained PAT scoped to one repo, `automountServiceAccountToken: false`. v1.5 graduates to per-session GitHub App tokens |
+| Prompt-injection driven credential exfil | Threat-modeled: tightened opencode.json (Phase 8 — deny `/etc/git*` reads, deny webfetch to `*.github.com`), NetworkPolicy egress allowlist (Phase 8), fine-grained PAT scoped to one repo, `automountServiceAccountToken: false`, **credential mounted on the finalizer sidecar only — not on the main container** (rev 4). v1.5 graduates to per-session GitHub App tokens |
+| **Native sidecar GA gate** (K8s ≥1.29; on by default ≥1.29; GA 1.33+) | kind-confirmed at 1.35.0; DOKS at 1.32+. Both well past the gate. Mitigation: the README's Bootstrap section will document the floor in Phase 4 |
+
+## Alternative Approaches Considered
+
+*(Rev 4 — formerly implicit; now explicit since the sidecar pivot is the headline architectural choice.)*
+
+| Approach | Why considered | Why rejected |
+|---|---|---|
+| **Custom CRD + Operator (rev 1–3 baseline)** | Cluster-level observability (`kubectl get codingsessions`), reconciliation-loop guarantees, finalizer-driven cleanup, validation webhooks, easier multi-controller deploys later | The compass research (`docs/research/...`) maps the operator pattern to its real value — cluster-wide stateful concerns (Vault, etcd, Kafka, Tekton) — and concludes that "clone a repo, run an agent, push on exit" doesn't qualify. Cost: 2–4 weeks learning curve for a K8s novice, ~500–1500 lines of Go, a controller Deployment, RBAC, CRD schema versioning. None of it earns its keep at openvoid v1's scope. v1.5 may revisit if real users want cluster-wide observability or activity-aware idle |
+| **Pull-only `git-sync` sidecar** (CNCF sigs.k8s.io project) | Production-tested, robust, atomic symlink swaps, supports SSH and HTTPS auth | Pull-only — does not push. Useful for the `git-clone` init-container leg (we follow its volume-permission patterns), but the push leg requires our own `git-finalizer` |
+| **`preStop` hook only (no native sidecar)** | Simpler — `lifecycle.preStop.exec` directly on the agent container | `preStop` fires at the *start* of termination (before the main container exits); pushing from there might capture a half-finished working tree. Native sidecars receive SIGTERM *after* main containers have exited, giving "the work is done, push now" as a clean signal. Rev 4 picks the cleaner signal |
+| **Activity-aware idle (operator polls `/session/:id`)** | Honors the original R1 "idle-stop" requirement; recovers from "user closes tab and walks away" without needing presence detection | LLM `time.updated` is a noisy signal (advances while the LLM is thinking even when the user is gone). User-presence (SSE keep-alive) is a stronger signal and is free in v1 because the chat stream is already SSE. The polling reconciler also requires the operator we're dropping. Deferred to v1.5 |
+| **Beforeunload-only Web UI lifecycle** | No backend state needed; instant lifecycle on tab close | Browsers throttle / skip `beforeunload` aggressively, especially mobile and during browser shutdown. Useful as a hint, never as the primary signal |
+| **Heartbeat-poll Web UI presence ("poor-man's cron")** | Universal browser support, simplest mental model, no SSE-lifecycle complexity | Wasteful HTTP traffic, two timers to reason about (frontend `setInterval` + backend reconciler), 30–60 s detection lag. The SSE keep-alive already exists for chat — using it as the presence channel costs zero extra wire |
+| **Persistent workspace (PVC instead of `emptyDir`)** | "Resume my session tomorrow" workflow, survives Pod restart | Real value only if pod restart is common — it isn't in v1 (a pod that fails its main container is a Failed pod, restarted as a *new* session, not a resumed one). PVC adds 15–45 s of provisioning latency on DOKS and an orphan-PVC cleanup story we don't otherwise need. Reserved for v1.5 if "resume" becomes a real ask |
 
 ## Documentation / Operational Notes
 
 - After each phase, write a short `docs/demos/2026-MM-DD-phase-N.md` capturing the demo (transcript, screenshot, or short screencast). Light institutional knowledge for the OSS audience.
-- After Phase 5 and Phase 8, add a `docs/solutions/` entry for any non-obvious gotcha discovered (use `/ce:compound`).
+- After **Phase 7** (the SIGTERM-cascade phase) and **Phase 8** (safety rails), add a `docs/solutions/` entry for any non-obvious gotcha discovered (use `/ce:compound`). *(Rev 4: shifted from "Phase 5 and 8" since Phase 5 is now smaller and the gnarliest learning lives in Phase 7.)* `docs/solutions/best-practices/helm-routing-abstraction-2026-05-03.md` is the seeded first entry.
 - DOKS cost: monitor in DigitalOcean console between phases; document `bash infra/remote/doks-destroy.sh` between work sessions to avoid leaving the cluster running.
 - Tilt UI port `10350` by default — document so the implementer can find the Tilt status page.
 - Conventional Commits enforcement: defer until Phase 5 (when there's enough history to justify commitlint setup); install via `.husky/commit-msg`.
 
 ## Phased Delivery
 
+*(Rev 4 — re-sequenced for the sidecar architecture.)*
+
 The phases above are exactly the phased delivery. Recommended execution order:
 
-1. **Week 1:** Phase 0 (toolchain + OpenCode endpoint spike) + Phases 1–2 (clusters, hello-world). Pure K8s onboarding.
-2. **Week 2:** Phases 3–4 (Session API + CRD). Bridges TS and Go work.
-3. **Week 3:** Phase 5 (operator + Helm chart skeleton + NetworkPolicy + ArgoCD wiring). The biggest single phase; reserve focus time. Helm/ArgoCD lands here so the chart grows incrementally rather than appearing all at once at the end.
-4. **Week 4:** Phase 6 (OpenCode image, with tightened permissions). Real agent in the loop.
-5. **Week 5:** Phases 7–8 (workspace + commit-on-shutdown). Phase 7.2's wip-protection guard added.
-6. **Week 6:** Phase 9 (Web UI + NextAuth + live preview + cloudflared + minimum-viable CI). Helm chart already exists (Phase 5) — just adds web/session-api/cloudflared templates.
+1. **Week 1 (DONE):** Phase 0 (toolchain + OpenCode endpoint spike) + Phases 1–2 (clusters, hello-world).
+2. **Week 2 (DONE):** Phase 3 (Session API + TypeSpec).
+3. **Week 3 — current:** Phase 4 (workspace volume + git-clone init container). Pod-spec evolution; introduces init containers, shared volumes, and `fsGroup`. Smaller phase than rev 3's "CRD" — should land in 1–3 days.
+4. **Week 4:** Phase 5 (Helm chart + Session API in chart). Replaces the old "operator" week; substantially smaller in scope. Tilt becomes Helm-aware.
+5. **Week 5:** Phase 6 (OpenCode image as main container). Real agent in the loop. Includes the SCC-friendly Dockerfile pattern (rev 3) and the PID-1-clean entrypoint (rev 4 prerequisite for Phase 7).
+6. **Week 6:** Phase 7 (`git-finalizer` native sidecar). **The hardest single phase in v1** — signal handling, PID 1, grace-period sizing, idempotency, integration testing against real GitHub. Reserve focus time. Phase 7's commit-on-shutdown demo is also the v1.0 "magic moment" — the first time the lifecycle works end-to-end.
+7. **Week 7:** Phase 8 (safety rails — NetworkPolicy + opencode.json + activeDeadlineSeconds documentation). Smaller phase; mostly chart values + permissions config.
+8. **Week 8:** Phase 9 (Web UI + presence + Save & Stop + cloudflared + ArgoCD + CI). The chart already exists from Phase 5 — Phase 9 adds `web/`, `routing/cloudflared.yaml`, and the SSE presence path. Includes the previously-Phase-5.9 ArgoCD wiring.
 
-Total wall time: ~6 calendar weeks at part-time learning pace; ~2–3 weeks at full-time. Phases 1, 2, 5.9 (ArgoCD), 9 can be done against DOKS; Phases 3–8 stay on kind to control cost.
+Total wall time post-pivot: **~6 calendar weeks of remaining work** at part-time learning pace; ~2 weeks at full-time. The pivot saves an estimated 2–4 weeks (formerly Phase 4 CRD + Phase 5 Operator; now collapsed into "workspace + chart"). Phases 1, 2, and 9 (ArgoCD path, cloudflared) can be done against DOKS; Phases 4–8 stay on kind to control cost.
 
 ## Sources & References
 
-- **Origin document:** `docs/brainstorms/2026-05-01-monorepo-layout-requirements.md`
-- **Ideation:** `docs/ideation/2026-05-01-monorepo-and-session-controller-ideation.md`
-- kubebuilder v4: https://book.kubebuilder.io/
+- **Origin document:** [`docs/brainstorms/2026-05-01-monorepo-layout-requirements.md`](../brainstorms/2026-05-01-monorepo-layout-requirements.md)
+- **Ideation:** [`docs/ideation/2026-05-01-monorepo-and-session-controller-ideation.md`](../ideation/2026-05-01-monorepo-and-session-controller-ideation.md)
+- **Sidecar-vs-operator research (rev 4 driver):** [`docs/research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md`](../research/compass_artifact_wf-1d15406b-b208-438f-b5fc-2eca8ce7267e_text_markdown.md). Source for §10 concrete YAML, §4 termination handling, §11 recommendation.
+- **OpenCode endpoint spike (Phase 0.3):** [`docs/spikes/2026-05-02-opencode-endpoints.md`](../spikes/2026-05-02-opencode-endpoints.md)
+- **Helm-routing-abstraction learning:** [`docs/solutions/best-practices/helm-routing-abstraction-2026-05-03.md`](../solutions/best-practices/helm-routing-abstraction-2026-05-03.md)
+- **Native sidecar containers (K8s):** https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/
+- **KEP-753 Sidecar Containers:** https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/753-sidecar-containers
+- **kubernetes/git-sync** (sidecar reference): https://github.com/kubernetes/git-sync
+- **Tekton `git-clone` task:** https://github.com/tektoncd/catalog/blob/main/task/git-clone/
 - kind local registry: https://kind.sigs.k8s.io/docs/user/local-registry/
-- Tilt API + Cluster API Tiltfile reference: https://docs.tilt.dev/, https://cluster-api.sigs.k8s.io/developer/core/tilt
+- Tilt API: https://docs.tilt.dev/
 - DOKS pricing + cluster create: https://docs.digitalocean.com/products/kubernetes/details/pricing/, https://docs.digitalocean.com/reference/doctl/reference/kubernetes/cluster/create/
 - OpenCode docs: https://opencode.ai/docs/
 - TypeSpec OpenAPI 3.1 emitter: https://typespec.io/docs/emitters/openapi3/openapi/
 - openapi-typescript: https://github.com/openapi-ts/openapi-typescript
 - K8s container lifecycle hooks: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks
-- ingress-nginx WebSocket support (deferred to v1.5+): https://kubernetes.github.io/ingress-nginx/user-guide/miscellaneous/#websockets
 - Cloudflare Tunnel: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+
+*(Rev 4 — removed: kubebuilder v4 docs, Cluster API Tiltfile reference, ingress-nginx WebSocket docs. They were operator-/WS-specific and are no longer load-bearing for v1.)*
