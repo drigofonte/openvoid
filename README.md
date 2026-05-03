@@ -9,8 +9,11 @@ An open-source platform for AI-assisted full-stack development. Coding sessions 
 This repository is currently being built phase by phase per the v1 plan. As of today, expect:
 
 - ✅ Planning artifacts (ideation, brainstorm, plan) committed
-- 🚧 Phase 0: toolchain + repo skeleton (in progress)
-- ⏳ Phases 1–9: cluster bring-up through Web UI + live preview
+- ✅ Phase 0: toolchain + repo skeleton + OpenCode endpoint spike
+- ✅ Phase 1: kind + DOKS cluster bring-up
+- ✅ Phase 2: hello-world Pod + Service
+- 🚧 Phase 3: Session API skeleton (TypeSpec contract + Hono service + Tilt)
+- ⏳ Phases 4–9: CodingSession CRD through Web UI + live preview
 
 See the active [plan](docs/plans/2026-05-01-001-feat-v1-staged-walkthrough-plan.md) for the full sequence.
 
@@ -78,6 +81,47 @@ bash scripts/kind-down.sh
 ```
 
 The cluster context is `kind-openvoid-local`. Re-running `kind-up.sh` is a no-op if both pieces already exist. The registry is wired into the kind network so any image pushed to `localhost:5001/...` is pullable from inside the cluster.
+
+## Local dev with Tilt
+
+The root `Tiltfile` orchestrates everything that runs inside `kind-openvoid-local`. It rebuilds images on file change, hot-syncs sources where possible, and exposes services through `kubectl port-forward`.
+
+```bash
+# Bring kind up first (one-time per machine session)
+bash scripts/kind-up.sh
+
+# Then start Tilt
+tilt up                # opens the UI at http://localhost:10350/
+tilt down              # tears down everything Tilt manages
+```
+
+What's wired up so far:
+
+| Phase | Resource | What you get |
+|---|---|---|
+| 3 | `session-api` | Hono-based Session API on `localhost:4000`. Scalar UI at `http://localhost:4000/`. Editing `services/session-api/src/**` triggers a `tsx watch` restart inside the pod. |
+
+`tilt up` is gated to the `kind-openvoid-local` context via `allow_k8s_contexts`, so it won't touch DOKS in normal use. Don't override the gate with Tilt's `--allow` flag — it exists to stop accidents, not to be argued with.
+
+## API for agents
+
+The Session API is fully agent-callable over HTTP. The OpenAPI 3.1 spec lives at `/openapi.yaml`; the [Scalar](https://scalar.com/) UI at `/` is for humans:
+
+```bash
+# Inspect the contract
+curl http://localhost:4000/openapi.yaml
+
+# Create a session (returns 201 + { sessionId, status: "Pending" })
+curl -X POST http://localhost:4000/sessions \
+  -H 'content-type: application/json' \
+  -d '{"repo":"https://github.com/example/repo"}'
+
+# Read / delete a session
+curl http://localhost:4000/sessions/<sessionId>
+curl -X DELETE http://localhost:4000/sessions/<sessionId>
+```
+
+Errors return `{ code, message }` with stable codes (`invalid_body`, `invalid_request`, `not_found`, `k8s_unavailable`) so an agent can branch on `code` without parsing prose. Phase 3 is unauthenticated; Phase 9 will add a signed JWT requirement.
 
 ## Remote cluster (DigitalOcean)
 

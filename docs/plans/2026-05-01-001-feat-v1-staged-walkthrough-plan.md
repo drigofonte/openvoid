@@ -3,7 +3,7 @@ title: "feat: v1 staged walkthrough — coding-session lifecycle proof"
 type: feat
 status: active
 date: 2026-05-01
-revision: 2
+revision: 3
 origin: docs/brainstorms/2026-05-01-monorepo-layout-requirements.md
 ---
 
@@ -46,6 +46,7 @@ Carried from the brainstorm; reaffirmed here so the plan stays disciplined:
 - **No Changesets / NPM publishing in v1.**
 - **No livenessProbe on the OpenCode pod** (per best-practice research — a thinking LLM looks dead but isn't). Readiness only. `activeDeadlineSeconds` is the failsafe.
 - **No semver tags on services in v1.** SHA-tagged images, ArgoCD reconciles values updates in `infra/helm/`.
+- **No OpenShift implementation in v1.** v1 ships and is exercised on kind + DOKS only. The Helm chart's routing layer is structured (rev 3) so an OpenShift `Route`-based mode can be added in v1.5 without rearchitecting; v1 leaves the seam in place but does not author the alternate impl.
 
 ## Threat Model (v1 Posture)
 
@@ -102,6 +103,23 @@ The plan's R1 success criterion requires the milestone to work on both kind and 
 
 **Implementer rule:** Every Helm value with cluster-specific behavior MUST appear in both `infra/helm/values/local.yaml` and `infra/helm/values/dev.yaml` so a value-set diff between them tells you exactly what changes per cluster.
 
+### v1.5 OpenShift readiness matrix (informational — not implemented in v1)
+
+Recorded so v1 design choices don't paint v1.5 into a corner. v1 keeps the seams; v1.5 fills them in.
+
+| Concern | v1 (kind/DOKS) | v1.5 OpenShift delta | Where the seam lives |
+|---|---|---|---|
+| Public per-session URL | cloudflared tunnel + wildcard CNAME | Native `Route` per session under `*.apps.<cluster>.example.com`; HAProxy router serves it. No tunnel. | Helm value `routing.mode: cloudflared\|openshift-route\|ingress` (default `cloudflared` in v1) |
+| TLS for session URLs | Cloudflare Universal SSL | Cluster default cert (or per-namespace edge termination) | Routing-mode template — no operator-side change |
+| Cloudflared Deployment | Present on DOKS | Removed; not authored | Conditional `if .Values.routing.mode == "cloudflared"` in Helm |
+| GitOps | ArgoCD installed manually | OpenShift GitOps (Red-Hat-shipped ArgoCD) | Same `Application` CRDs; `infra/argocd/` works as-is |
+| Container registry | GHCR | OpenShift internal registry (`image-registry.openshift-image-registry.svc:5000`) or GHCR | Helm value `images.<svc>.repository` |
+| Pod identity | runs as `node`/UID 1000 | SCC `restricted-v2` overrides UID with a per-namespace random one; image must be writable by **any** UID | Phase 6.1 image hardening (`chgrp 0 + chmod g=u`) is SCC-friendly by construction |
+| `automountServiceAccountToken: false` | applied | applied (no change) | Phase 6.2 |
+| NetworkPolicy | enforced on DOKS, optional on kind | **mandatory** — OpenShift CNI (OVN-Kubernetes) enforces by default | Unit 5.7 default-deny works as-is |
+| Local dev cluster | kind | CRC (CodeReady Containers) — heavier; recommend keeping kind as the daily loop and only sanity-checking SCCs against a real OpenShift cluster pre-merge | Phase 0 tooling stays kind-only in v1 |
+| `ingress-nginx` / `cert-manager` | absent | absent (Routes replace both) | n/a |
+
 ## Context & Research
 
 ### Repository state
@@ -154,6 +172,8 @@ Greenfield. Only `LICENSE`. Existing planning artifacts at `docs/ideation/`, `do
 - **OpenCode has no official container image.** We build a thin Dockerfile in Phase 6.
 - **`preStop` does not run on `--grace-period=0 --force`.** Document as "do not force-delete sessions."
 - **Don't use livenessProbe on the agent pod.** A thinking LLM looks dead but isn't.
+- **OpenShift SCC `restricted-v2` assigns a random per-namespace UID** that overrides the image's `USER` directive. Images that work on stock K8s (`USER 1000`) fail on OpenShift unless `/app` (or wherever the process writes) is owned by GID 0 and group-writable. Canonical Dockerfile pattern: `RUN chgrp -R 0 /app && chmod -R g=u /app`. Cheap to apply, and aligns with K8s security best-practice anyway.
+- **OpenShift NetworkPolicy is enforced by default** (OVN-Kubernetes). Unit 5.7's default-deny will *immediately* block traffic on OpenShift; the same policy on kind is silently inert. Don't rely on kind to validate the policy.
 
 ## Key Technical Decisions
 
@@ -169,6 +189,7 @@ Greenfield. Only `LICENSE`. Existing planning artifacts at `docs/ideation/`, `do
 - **Single cluster-wide `OPENCODE_SERVER_PASSWORD` Secret for v1.** Per-session generation is unjustified for single-user hosted-first; one Secret in `openvoid-system` is referenced by every session pod via `valueFrom.secretKeyRef`. Rotates manually; per-session generation graduates with multi-tenancy.
 - **CRD spec is intentionally lean.** v1 spec fields: `repo`, `branch`, `idleTimeoutSeconds`. Dropped from v1: `image` (operator env-var driven), `userId` (no consumer), `workspaceSize` (operator default 10Gi), `spec.stop` (use CR DELETE — finalizer handles graceful shutdown). Easy to add back when there's a real consumer.
 - **Use `kubectl port-forward` end-to-end for kind, `cloudflared` for DOKS.** No conditional Ingress logic in the operator; the cloudflared Deployment is environment-specific (only present in DOKS).
+- **Routing is a Helm-level abstraction, not an operator-level one.** The operator always creates a `Service` per session with named ports `agent-http` and `preview-http`. *How* that Service is exposed publicly is decided by Helm values: `routing.mode: cloudflared` ships in v1; `openshift-route` and `ingress` are reserved values that v1.5 fills in. The operator never branches on cluster type. Cost: ~one extra Helm template directory (`templates/routing/`) authored in Phase 9.4. Benefit: porting to OpenShift in v1.5 is a net-new template, not a refactor.
 - **No kind-based e2e CI in v1.** Per-PR CI runs lint + typecheck + unit tests + envtest + generated-artifact freshness. The full kind-spinning e2e (brainstorm R13 with team-scale assumptions) defers to v1.5 when there's a team to benefit from a PR-level safety net. Manual demo verification at each phase's checkpoint replaces the gate for solo v1.
 
 ## Open Questions
@@ -194,6 +215,15 @@ Greenfield. Only `LICENSE`. Existing planning artifacts at `docs/ideation/`, `do
 - **Service per session:** one Service with two named ports (`agent-http`, `preview-http`); not two Services.
 - **CI scope:** lint + typecheck + unit/envtest + freshness on every PR. Kind-based e2e gate deferred to v1.5.
 - **Web UI scope:** desktop ≥1024 px; mobile out of scope. UI states enumerated in Phase 9.1's Session States table.
+
+### Resolved during Phase 3 demo (rev 3 — OpenShift readiness pass)
+
+Triggered by a real-world question during the Phase 3 demo: "we'd like to replicate this inside our company on OpenShift; what changes?" The answer should not be "rearchitect Phase 5–9," so v1 absorbs a small structural commitment now.
+
+- **Routing layer is a Helm-level abstraction** (see Key Technical Decisions). v1 ships only the `cloudflared` mode; the seam is `routing.mode` plus a `templates/routing/` directory in the chart. Operator never branches on cluster type.
+- **OpenCode image is SCC-friendly by construction** (Unit 6.1 — `chgrp 0 + chmod g=u`). Cheap; the same pattern is best-practice on stock K8s. v1 still runs as UID 1000 on kind/DOKS; the file ownership change just means OpenShift won't reject the image at admission.
+- **Per-session port-forward orchestration on kind** is the Web UI's responsibility (Phase 9), not the operator's. `kubectl port-forward` against the per-session `Service` produces `localhost:<port>`; the iframe embeds that. No operator code changes versus the v1 plan.
+- **OpenShift implementation itself stays out of v1 scope.** No `oc` in Phase 0; no CRC; no second remote cluster. v1's two-target story (kind + DOKS) is unchanged.
 
 ### Deferred to implementation
 
@@ -917,14 +947,14 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Files:**
 - Create: `infra/helm/openvoid/Chart.yaml` (apiVersion v2).
-- Create: `infra/helm/openvoid/values.yaml` — operator-only at this stage. Values: `namespace.system`, `namespace.sessions`, `operator.image.{repository,tag}`, `operator.replicas`, `operator.defaultAgentImage` (becomes `OPENVOID_DEFAULT_AGENT_IMAGE` env), `operator.idleTimeoutSecondsDefault`, `networkPolicies.enabled`, `storageClass`.
+- Create: `infra/helm/openvoid/values.yaml` — operator-only at this stage. Values: `namespace.system`, `namespace.sessions`, `operator.image.{repository,tag}`, `operator.replicas`, `operator.defaultAgentImage` (becomes `OPENVOID_DEFAULT_AGENT_IMAGE` env), `operator.idleTimeoutSecondsDefault`, `networkPolicies.enabled`, `storageClass`, `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` for v1.5; see "Routing is a Helm-level abstraction" decision), `routing.cloudflared.{tunnelId,domain}` (only consumed when `routing.mode == "cloudflared"`).
 - Create: `infra/helm/openvoid/templates/operator/{crd.yaml,rbac.yaml,deployment.yaml}` and `templates/namespaces.yaml` — port the kubebuilder-generated kustomize manifests into Helm templates.
 - Create: `infra/helm/values/local.yaml` (kind defaults: image=`localhost:5001/openvoid/session-operator:dev`, networkPolicies disabled, storageClass=`standard`).
 - Create: `infra/helm/values/dev.yaml` (DOKS defaults: image=`ghcr.io/openvoid/session-operator:<sha>`, networkPolicies enabled, storageClass=`do-block-storage`).
 
 **Approach:**
 - Author the chart by porting the kubebuilder kustomize output. Verification: `helm template ... | diff - <(kustomize build services/session-operator/config/default)` should be a small, explicable diff (mostly label conventions and namespace handling).
-- Subsequent phases add: `templates/session-api/` (Phase 3 backfill into chart), `templates/cloudflared/` (Phase 9.4), `templates/web/` (Phase 9), `templates/sessions/networkpolicy.yaml` (Unit 5.8 below).
+- Subsequent phases add: `templates/session-api/` (Phase 3 backfill into chart), `templates/routing/cloudflared.yaml` (Phase 9.4 — gated on `routing.mode == "cloudflared"`), `templates/web/` (Phase 9), `templates/sessions/networkpolicy.yaml` (Unit 5.8 below). The `templates/routing/` directory is the v1.5 OpenShift seam — adding `templates/routing/openshift-route.yaml` later requires no operator change.
 - Document in the chart README which values are kind-specific vs DOKS-specific. The Cross-Platform Parity Matrix at the top of the plan is the canonical reference.
 
 **Patterns to follow:**
@@ -1047,6 +1077,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Base image: `node:20-alpine` (small, has tini available, OpenCode is npm-installable as `opencode-ai`).
 - Multi-stage to keep the runtime image lean; install only the binary.
 - Run as non-root (UID 1000); `opencode` doesn't need root.
+- **OpenShift-compatible by construction:** before declaring `USER 1000`, run `RUN chgrp -R 0 /opt/opencode /workspace && chmod -R g=u /opt/opencode /workspace` so the image is writable by *any* UID with GID 0. v1 still runs as UID 1000 on kind/DOKS — this just means the image won't be rejected when v1.5 introduces the OpenShift `restricted-v2` SCC (which assigns a random per-namespace UID and overrides `USER`). The pattern is also best-practice on stock K8s.
 - Permissions config (tightened per Threat Model — agent must not be able to read PAT or exfiltrate via webfetch):
   ```json
   {
