@@ -55,6 +55,11 @@ export interface components {
             /** @description Git URL of the workspace to clone. */
             repo: string;
             /**
+             * @description Branch to check out at clone time. Defaults to `main`.
+             * @default main
+             */
+            branch: string;
+            /**
              * Format: int32
              * @description Operator stops the session after this much inactivity. Defaults to 1800 (30 min).
              * @default 1800

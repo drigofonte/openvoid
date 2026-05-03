@@ -92,6 +92,10 @@ components:
         repo:
           type: string
           description: Git URL of the workspace to clone.
+        branch:
+          type: string
+          description: Branch to check out at clone time. Defaults to `main`.
+          default: main
         idleTimeoutSeconds:
           type: integer
           format: int32

@@ -28,6 +28,8 @@ coverage/
 !.env.example
 *.pem
 *.key
+infra/local/git-creds-secret.yaml
+!infra/local/git-creds-secret.yaml.example
 
 # Go
 bin/

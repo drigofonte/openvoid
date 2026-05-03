@@ -11,6 +11,11 @@ import {
   WORKSPACE_VOLUME_NAME,
   WORKSPACE_MOUNT_PATH,
   WORKSPACE_FS_GROUP,
+  GIT_CLONE_CONTAINER_NAME,
+  GIT_CLONE_IMAGE,
+  GIT_CREDS_SECRET_NAME,
+  GIT_CREDS_SECRET_KEY,
+  DEFAULT_BRANCH,
 } from "../src/k8s/client.js";
 
 function makeMockOps(): PodOps & {
@@ -35,7 +40,11 @@ function podWith(phase: string, podIP?: string): V1Pod {
 }
 
 describe("buildSessionPodManifest (Phase 4.1: workspace volume + fsGroup)", () => {
-  const spec: SessionPodSpec = { sessionId: "01HABCDEF", image: "nginx:alpine" };
+  const spec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: "nginx:alpine",
+    repo: "https://github.com/example/x",
+  };
 
   it("declares an emptyDir `workspace` volume on the Pod", () => {
     const manifest = buildSessionPodManifest(spec);
@@ -68,6 +77,65 @@ describe("buildSessionPodManifest (Phase 4.1: workspace volume + fsGroup)", () =
   });
 });
 
+describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: "nginx:alpine",
+    repo: "https://github.com/example/x",
+  };
+
+  it("declares a git-clone initContainer with the pinned alpine/git image", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const init = manifest.spec?.initContainers?.[0];
+    expect(init?.name).toBe(GIT_CLONE_CONTAINER_NAME);
+    expect(init?.image).toBe(GIT_CLONE_IMAGE);
+  });
+
+  it("passes REPO_URL and BRANCH as plain env values, GIT_TOKEN via Secret ref", () => {
+    const manifest = buildSessionPodManifest({ ...baseSpec, branch: "develop" });
+    const env = manifest.spec?.initContainers?.[0]?.env ?? [];
+    const repoEnv = env.find((e) => e.name === "REPO_URL");
+    const branchEnv = env.find((e) => e.name === "BRANCH");
+    const tokenEnv = env.find((e) => e.name === "GIT_TOKEN");
+
+    expect(repoEnv?.value).toBe("https://github.com/example/x");
+    expect(branchEnv?.value).toBe("develop");
+    expect(tokenEnv?.value).toBeUndefined();
+    expect(tokenEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: GIT_CREDS_SECRET_NAME,
+      key: GIT_CREDS_SECRET_KEY,
+    });
+  });
+
+  it("defaults BRANCH to `main` when the spec omits branch", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const env = manifest.spec?.initContainers?.[0]?.env ?? [];
+    expect(env.find((e) => e.name === "BRANCH")?.value).toBe(DEFAULT_BRANCH);
+  });
+
+  it("mounts the workspace volume into the init container at /workspace", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const mounts = manifest.spec?.initContainers?.[0]?.volumeMounts ?? [];
+    expect(mounts).toContainEqual({ name: WORKSPACE_VOLUME_NAME, mountPath: "/workspace" });
+  });
+
+  it("injects the token only at clone time and strips it from the persisted remote", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const cmd = manifest.spec?.initContainers?.[0]?.command ?? [];
+    const script = cmd[cmd.length - 1] ?? "";
+    expect(script).toContain("x-access-token:${GIT_TOKEN}");
+    expect(script).toContain("git -C /workspace/repo remote set-url origin");
+    // The clone URL is built per-invocation, never persisted to .git/config
+    expect(script).not.toMatch(/\.git\/config.*GIT_TOKEN/);
+  });
+
+  it("does not expose GIT_TOKEN to the main container", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const mainEnv = manifest.spec?.containers?.[0]?.env ?? [];
+    expect(mainEnv.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+  });
+});
+
 describe("sessionsRouter", () => {
   let ops: ReturnType<typeof makeMockOps>;
   let app: ReturnType<typeof sessionsRouter>;
@@ -94,12 +162,48 @@ describe("sessionsRouter", () => {
       expect(ops.createSessionPod).toHaveBeenCalledOnce();
       const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
       expect(arg.image).toBe("nginx:alpine");
+      expect(arg.repo).toBe("https://github.com/example/x");
+      expect(arg.branch).toBeUndefined();
       const manifest = buildSessionPodManifest(arg);
       expect(manifest.metadata?.labels).toEqual({
         [SESSION_LABEL]: arg.sessionId,
         [MANAGED_BY_LABEL]: MANAGED_BY_VALUE,
       });
       expect(manifest.spec?.containers?.[0]?.image).toBe("nginx:alpine");
+    });
+
+    it("threads `branch` from the request body into the pod spec", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          repo: "https://github.com/example/x",
+          branch: "develop",
+        }),
+      });
+      expect(res.status).toBe(201);
+      const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
+      expect(arg.branch).toBe("develop");
+    });
+
+    it("rejects empty `branch` string with 400", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: "x", branch: "" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+    });
+
+    it("rejects non-string `branch` with 400", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: "x", branch: 42 }),
+      });
+      expect(res.status).toBe(400);
     });
 
     it("rejects malformed JSON with 400", async () => {

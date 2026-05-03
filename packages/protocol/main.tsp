@@ -24,6 +24,9 @@ model CreateSessionRequest {
   @doc("Git URL of the workspace to clone.")
   repo: string;
 
+  @doc("Branch to check out at clone time. Defaults to `main`.")
+  branch?: string = "main";
+
   @doc("Operator stops the session after this much inactivity. Defaults to 1800 (30 min).")
   @minValue(0)
   idleTimeoutSeconds?: int32 = 1800;

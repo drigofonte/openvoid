@@ -28,6 +28,9 @@ function isCreateRequest(body: unknown): body is CreateSessionRequest {
   if (!body || typeof body !== "object") return false;
   const r = body as Record<string, unknown>;
   if (typeof r.repo !== "string" || r.repo.length === 0) return false;
+  if (r.branch !== undefined) {
+    if (typeof r.branch !== "string" || r.branch.length === 0) return false;
+  }
   if (r.idleTimeoutSeconds !== undefined) {
     if (typeof r.idleTimeoutSeconds !== "number") return false;
     if (!Number.isFinite(r.idleTimeoutSeconds) || r.idleTimeoutSeconds < 0) return false;
@@ -68,7 +71,12 @@ export function sessionsRouter(podOps: PodOps): Hono {
 
     const sessionId = Ulid.generate().toCanonical();
     try {
-      await podOps.createSessionPod({ sessionId, image: STUB_IMAGE });
+      await podOps.createSessionPod({
+        sessionId,
+        image: STUB_IMAGE,
+        repo: body.repo,
+        branch: body.branch,
+      });
     } catch (err) {
       return c.json(
         jsonError("k8s_unavailable", `Failed to create pod: ${errorMessage(err)}`),
