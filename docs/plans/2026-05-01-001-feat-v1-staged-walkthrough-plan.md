@@ -59,12 +59,12 @@ Carried from the brainstorm; reaffirmed here so the plan stays disciplined:
 
 Recorded so reviewers and future contributors know what is in/out of v1's security scope.
 
-**Assets:** the implementer's GitHub PAT (scoped to one test repo), session workspace contents (user-authored code), the OpenCode HTTP password, cluster Secrets in `openvoid-system`, DigitalOcean billing.
+**Assets:** the implementer's GitHub PAT (scoped to one test repo), the implementer's LLM provider API key (Anthropic / OpenAI / OpenRouter — whichever the platform operator configured; openvoid pays the LLM bill), session workspace contents (user-authored code), the OpenCode HTTP password, cluster Secrets in `openvoid-system`, DigitalOcean billing.
 
 **Trust boundaries:**
 - Web UI is publicly reachable through cloudflared but requires a valid GitHub OAuth session.
 - Session API requires a valid signed JWT on every request, including the SSE keep-alive that doubles as the presence channel (rev 4).
-- Session pod (init-clone container, OpenCode main container, finalizer sidecar) is treated as **untrusted** even for v1's single user — an LLM agent following user prompts can be steered by prompt injection in cloned-repo content or webfetch responses. The finalizer sidecar runs `git push` with a PAT it reads from a mounted Secret, so the sidecar's threat model matters too: the sidecar must run from a known-good image, must inject the token only at push time (never on disk in `.git/config`), and must not expose the token to the main container's filesystem (separate `volumeMounts` for the credential).
+- Session pod (init-clone container, OpenCode main container, finalizer sidecar) is treated as **untrusted** even for v1's single user — an LLM agent following user prompts can be steered by prompt injection in cloned-repo content or webfetch responses. The finalizer sidecar runs `git push` with a PAT it reads from a mounted Secret, so the sidecar's threat model matters too: the sidecar must run from a known-good image, must inject the token only at push time (never on disk in `.git/config`), and must not expose the token to the main container's filesystem (separate `volumeMounts` for the credential). The agent main container has its own credential — the LLM provider API key — mounted from a separate Secret; this is **never** mounted on the init or sidecar containers (they don't need it). Each container sees only the credentials its job requires.
 - The Session API is trusted (it manages cluster state and credentials). *(Rev 4: the operator is no longer in the trust set; there is no operator. This is a contraction of the trusted control plane, not an expansion.)*
 - Web UI ↔ Session API ↔ Session pod is the only call chain that leaves cluster boundaries. The agent's HTTP endpoint is **never** exposed to the public internet directly — chat SSE is proxied through the Session API (Phase 9 decision in rev 4). Live-preview ports are routed via cloudflared but only the agent's `:8080` (chat) and the user's web preview port; nothing else.
 
@@ -74,7 +74,8 @@ Recorded so reviewers and future contributors know what is in/out of v1's securi
 - Network isolation: default-deny NetworkPolicy in `openvoid-sessions` with explicit egress allowlist.
 - `automountServiceAccountToken: false` on session pods.
 - Fine-grained GitHub PAT scoped to one repo.
-- Tightened `opencode.json` (deny reading `/etc/git*`, deny webfetch to GitHub, restricted bash).
+- LLM provider API key in a dedicated `opencode-auth` Secret, mounted on the agent main container only (per-credential mount discipline — see Phase 6.2).
+- Tightened `opencode.json` (deny reading `/etc/git*` and the OpenCode auth-file path, deny webfetch to GitHub, restricted bash).
 - `activeDeadlineSeconds` failsafe.
 
 **Known v1 limitations (accepted, deferred to v1.5):**
@@ -84,7 +85,7 @@ Recorded so reviewers and future contributors know what is in/out of v1's securi
 - Single-user assumption — multi-tenant isolation (per-tenant namespaces, NetworkPolicies, RBAC) is v1.5+.
 
 **Top-three exploits if v1 ships as written:**
-1. **Compromised LLM provider response or malicious cloned repo steers the agent.** Mitigation: tightened opencode.json + NetworkPolicy egress allowlist limit blast radius even if the agent is steered.
+1. **Compromised LLM provider response or malicious cloned repo steers the agent.** Mitigation: tightened opencode.json + NetworkPolicy egress allowlist limit blast radius even if the agent is steered. Specific concern for the LLM API key: the agent reads its own auth file by design — but the file is mounted only on the agent (not on the sidecar/init containers), and `opencode.json` denies bash patterns that exfiltrate file contents (e.g., `cat /etc/* | curl *`).
 2. **GitHub OAuth username allowlist drift.** Mitigation: allowlist is in env-var/values; treat changes like code changes.
 3. **Cloudflare account compromise.** Out of openvoid's control; document as upstream dependency in Risks.
 
@@ -225,6 +226,7 @@ No `services/session-operator/` (and per rev 4, never will be in v1). No `go.mod
 - **Fine-grained GitHub PAT scoped to one test repo + tightened agent permissions.** The PAT belongs to the **platform's** source-control account (per the tenancy decision above), not to any end user. In v1 it is fine-grained and scoped to the implementer's single test repo, which stands in for "the one repo per user app under the platform org" until repo provisioning lands. PAT is mounted at `/etc/git-credentials` for the `git-clone` initContainer and the `git-finalizer` sidecar (rev 4: separate volume mounts so the main container's filesystem never sees the credential). `opencode.json` denies `read` on `/etc/git*`, denies `bash` for `cat /etc/* | curl *` patterns, and denies `webfetch` to `*.github.com` (push goes through git over HTTPS, not webfetch). v1.5 graduates to a GitHub App **installed on the platform org** to remove the long-lived secret entirely; the App is still platform-owned, never per-user.
 - **Default-deny NetworkPolicy on `openvoid-sessions` namespace.** *(Rev 4: moved from Unit 5.7 to Phase 8 — same intent, different home.)* Session pods can egress only to: the configured Git host (e.g., GitHub HTTPS:443), the configured LLM provider domain(s) (Anthropic/OpenAI APIs as required by OpenCode), and DNS. Cannot reach the K8s API server (also enforced by `automountServiceAccountToken: false`), the metadata service (169.254.169.254), or other namespaces.
 - **Single cluster-wide `OPENCODE_SERVER_PASSWORD` Secret for v1.** Per-session generation is unjustified for single-user hosted-first; one Secret in `openvoid-system` is referenced by every session pod via `valueFrom.secretKeyRef`. Rotates manually; per-session generation graduates with multi-tenancy.
+- **LLM provider auth: platform-owned, multi-provider, out-of-band Secret in v1.** Following the same pattern as the source-control tenancy decision, openvoid (the platform) owns the LLM provider account(s) and pays the LLM bill — users do not bring their own API keys. v1 supports three provider configurations interchangeably: native Anthropic (`api.anthropic.com`), native OpenAI (`api.openai.com`), and OpenRouter (`openrouter.ai`, OpenAI-compatible aggregator that fronts dozens of upstream models, including Anthropic, behind a single key). The platform operator picks one (or more) at install time. The keys live in a single `opencode-auth` Secret in `openvoid-system`, applied out-of-band by the implementer (mirroring the `git-creds` pattern — real third-party keys can't be platform-auto-generated). The Secret is mounted on the **agent main container only** — not on `git-clone`, not on `git-finalizer`. The Secret format is OpenCode's `auth.json` shape; the exact path or env-var-fallback contract is verified by the Phase 6.0 spike before Unit 6.2 wires it. **Bring-your-own-key (BYOK)** is explicitly not a v1 mode — it would be a separate post-v1.5 product direction with a different threat model (per-user secrets, per-session credential injection, billing reconciliation).
 - ~~**CRD spec is intentionally lean.**~~ **(superseded — rev 4)** With no CRD, the equivalent is **Pod-spec is intentionally lean**: the Session API parameterizes per-session Pods with only `repo` and `branch` (consumed by the `git-clone` init container as env vars). Workspace size, agent image, idle behavior, and stop semantics are all chart-value-driven (`session.workspace.sizeLimit`, `session.image`, `session.activeDeadlineSeconds`) — same lean philosophy, expressed at the Helm-values layer instead of a CR.
 - **Use `kubectl port-forward` end-to-end for kind, `cloudflared` for DOKS.** No conditional routing logic in the Session API; the cloudflared Deployment is environment-specific (only present in DOKS via `routing.mode: cloudflared` Helm value).
 - **Routing is a Helm-level abstraction, not an application-level one.** *(Rev 4: reframed — was "Helm-level, not operator-level"; now "Helm-level, not application-level" since there's no operator.)* The Session API always creates a `Service` per session with named ports `agent-http` and `preview-http`. *How* that Service is exposed publicly is decided by Helm values: `routing.mode: cloudflared` ships in v1; `openshift-route` and `ingress` are reserved values that v1.5 fills in. The Session API never branches on cluster type. Cost: ~one extra Helm template directory (`templates/routing/`) authored in Phase 9. Benefit: porting to OpenShift in v1.5 is a net-new template, not a refactor.
@@ -291,6 +293,7 @@ That sequence prompted a re-read of Phases 5–7. The original ordering — Phas
 - **What's gained.** If the SIGTERM cascade misbehaves, the user finds out against nginx (trivial PID 1) before introducing OpenCode. If OpenCode misbehaves, the lifecycle is already proven and the suspect is narrowed to the agent. End of Phase 5 becomes the **first** "magic moment" — a complete clone+modify+push lifecycle, no agent required — and end of Phase 6 becomes the second (real agent edits). Phase 7 absorbs all packaging concerns in one coherent unit.
 - **What's lost.** Phase 6 runs against `infra/local/session-api.yaml` (Phase 3's raw manifest) one phase longer before the chart retires it. Negligible. The `infra/local/opencode-password-secret.yaml` example file is created in Phase 6 then deleted in Phase 7 — it serves as a temporary scaffold, exactly as `git-creds-secret.yaml.example` does on a longer timeline.
 - **What does *not* change.** Brainstorm requirements (R1 etc.) are unchanged. The threat model is unchanged (credential mounted on init + sidecar only, never on main). The pod-lifecycle state diagram is unchanged in shape — only the *order in which Phases introduce each role* shifts. `git-creds` stays out-of-band even after Phase 7 — it's a real third-party PAT that openvoid can't auto-generate, unlike `OPENCODE_SERVER_PASSWORD`.
+- **LLM provider auth gap closed (rev 5).** The original Phase 6 (rev 1–4) treated `opencode.json` as the only OpenCode config to ship, which left a hole: without LLM provider keys, the agent boots fine but cannot actually call any model. Rev 5 adds an explicit **`opencode-auth` Secret** to Phase 6, mounted on the agent main container only. The Secret holds OpenCode's `auth.json` shape. v1 supports three providers interchangeably (Anthropic native, OpenAI native, OpenRouter); the platform operator picks one or more at install time. A small Phase 6.0 spike verifies the exact OpenCode auth mechanism (file path vs. env-var fallback, OpenRouter format) before the implementation units run. See "LLM provider auth" Key Technical Decision above for the full rationale.
 
 ### Deferred to implementation
 
@@ -970,6 +973,45 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 > Rev 4: largely the same image work as the rev-1–3 Phase 6, but the operator dependencies are gone. The Session API's `buildSessionPodManifest` swaps `nginx:alpine` → OpenCode and adds the OpenCode-specific env-var wiring; no `Operator builds the OpenCode Pod spec` unit is needed because there's no operator.
 
+> **v1 precondition (rev 5).** Phase 6's demo requires **two** out-of-band Secrets in `openvoid-system` (in addition to Phase 4's `git-creds`):
+>
+> 1. `opencode-server-password` — the cluster-wide OpenCode HTTP-API password. Apply via `infra/local/opencode-password-secret.yaml.example`.
+> 2. `opencode-auth` — the LLM provider auth, holding OpenCode's `auth.json` content. Format depends on which provider(s) the platform operator chose at install time (Anthropic native, OpenAI native, OpenRouter, or any combination). Apply via `infra/local/opencode-auth-secret.yaml.example`.
+>
+> Both Secrets graduate to chart-managed in Phase 7 — `opencode-server-password` becomes auto-generated; `opencode-auth` stays referenced (real third-party keys can't be auto-generated, same posture as `git-creds`).
+
+- [ ] **Unit 6.0: Spike — verify OpenCode auth mechanism (path, env-var fallback, OpenRouter format)**
+
+**Goal:** Determine, before writing any pod-manifest code, exactly *how* OpenCode reads LLM-provider credentials at runtime, so Unit 6.2 can pick between (a) mounting a `auth.json` file at OpenCode's expected path and (b) injecting per-provider env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`). The OpenRouter format and base-URL handling specifically need verification — OpenRouter is OpenAI-compatible, but OpenCode may treat it as a distinct provider type.
+
+**Requirements:** Threat model — LLM API key as asset; supports the rev-5 LLM-provider-auth Key Technical Decision.
+
+**Dependencies:** Phase 5 complete.
+
+**Files:**
+- Create: `docs/spikes/2026-05-NN-opencode-auth.md` — short spike doc following the same shape as `docs/spikes/2026-05-02-opencode-endpoints.md`. Records: OpenCode's auth-file path inside the container, whether env-var fallback works for each of `anthropic` / `openai` / `openrouter`, the exact JSON shape OpenCode expects in `auth.json`, and (for OpenRouter) whether OpenCode accepts the OpenRouter API key as-is or needs explicit `baseURL` + `compatible: openai` config.
+
+**Approach:**
+- Reproduce locally: `docker run --rm -it openvoid/opencode:dev sh` (or use a fresh `node:20-alpine` + `npm i -g opencode-ai`); call OpenCode's auth subcommands; inspect filesystem for the resulting auth file path; try each provider with a dummy key.
+- Test env-var fallback by booting OpenCode with `ANTHROPIC_API_KEY=dummy` (no `auth.json` on disk) and observing whether the agent claims to be authed against Anthropic.
+- For OpenRouter specifically: verify whether the model-id format is `<provider>/<model>` (e.g., `anthropic/claude-sonnet-4-6`) or whether OpenCode wants an explicit OpenRouter provider declaration plus an OpenAI-compatible base URL.
+- Document any gotchas (rate-limit quirks, expected response shapes, model-name mapping differences).
+
+**Patterns to follow:**
+- `docs/spikes/2026-05-02-opencode-endpoints.md`'s shape — short, factual, decision-output-style.
+
+**Test scenarios:**
+- N/A (this is a research spike, not an implementation unit).
+
+**Decision output:** One of three paths chosen for Unit 6.2's auth wiring:
+1. **File mount only** — Secret holds `auth.json`, mount at OpenCode's expected path. (Most likely outcome.)
+2. **Env vars only** — Secret holds individual provider keys, project to env vars in the main container. (Simpler manifest, but weaker if OpenCode's env-var support is partial.)
+3. **Hybrid** — File mount as primary, env vars as override. (Most flexible, slightly more complex.)
+
+The spike's output also pins the chart-value shape for `session.opencode.{provider, model}` in Phase 7.
+
+---
+
 - [ ] **Unit 6.1: OpenCode container image (rev 4 — SCC-friendly)**
 
 **Goal:** A minimal Dockerfile installs OpenCode and runs `opencode serve --host 0.0.0.0 --port 8080`. The image is built into both the kind local registry (`localhost:5001/openvoid/opencode:dev`) and GHCR (`ghcr.io/openvoid/opencode:<sha>` for DOKS).
@@ -980,9 +1022,9 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Files:**
 - Create: `infra/images/opencode/Dockerfile`.
-- Create: `infra/images/opencode/opencode.json` — permissions config (allow `read`, `edit`, `bash` with denylist, `webfetch`); detailed Phase 8 hardening pass.
-- Create: `infra/images/opencode/entrypoint.sh` — sources auth env vars; `exec`s into `opencode serve --host 0.0.0.0 --port 8080`. The `exec` is load-bearing (PID 1 receives SIGTERM cleanly per the rev 4 sidecar-pattern gotchas).
-- Create: `infra/images/opencode/README.md` — explains the image's interface (port 8080, `OPENCODE_SERVER_PASSWORD` env var, `/global/health` endpoint per the Phase 0.3 spike).
+- Create: `infra/images/opencode/opencode.json` — permissions config (allow `read`, `edit`, `bash` with denylist, `webfetch`) **plus** model/provider declaration (defaults configured for the platform-chosen provider — likely `openrouter` with a sonnet-class model in v1; overridable by env var if Unit 6.0's spike confirms support). Detailed Phase 8 hardening pass adds the denylists. **`auth.json` is *not* in the image** — it's a runtime-mounted Secret (Unit 6.2).
+- Create: `infra/images/opencode/entrypoint.sh` — sources auth env vars **and / or** loads `auth.json` from the mount path determined by Unit 6.0's spike; `exec`s into `opencode serve --host 0.0.0.0 --port 8080`. The `exec` is load-bearing (PID 1 receives SIGTERM cleanly per the rev 4 sidecar-pattern gotchas).
+- Create: `infra/images/opencode/README.md` — explains the image's interface (port 8080, `OPENCODE_SERVER_PASSWORD` env var, the `auth.json` mount path or env-var fallback chosen by Unit 6.0, `/global/health` endpoint per the Phase 0.3 spike).
 
 **Approach:**
 - Base image: `node:20-alpine` (small, OpenCode is npm-installable as `opencode-ai`).
@@ -1021,22 +1063,25 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 6.2: Session API uses OpenCode as the per-session main container (out-of-band Secret)**
+- [ ] **Unit 6.2: Session API uses OpenCode as the per-session main container (out-of-band Secrets — server password + LLM auth)**
 
-**Goal:** `services/session-api/src/k8s/client.ts`'s `buildSessionPodManifest` swaps the placeholder `nginx:alpine` for OpenCode. Env-var wiring threads `OPENCODE_SERVER_PASSWORD` (from a cluster-scoped Secret applied out-of-band, mirroring Phase 4's `git-creds` pattern), `OPENVOID_REPO_PATH=/workspace/repo`, etc. `automountServiceAccountToken: false` is set on the per-session pod (untrusted). The Phase 5 sidecar and Phase 4 init container are untouched — this is a pure main-container swap.
+**Goal:** `services/session-api/src/k8s/client.ts`'s `buildSessionPodManifest` swaps the placeholder `nginx:alpine` for OpenCode. Env-var wiring threads `OPENCODE_SERVER_PASSWORD` (from a cluster-scoped Secret applied out-of-band, mirroring Phase 4's `git-creds` pattern), `OPENVOID_REPO_PATH=/workspace/repo`, etc. The LLM provider auth (`auth.json` content for one or more of Anthropic / OpenAI / OpenRouter) is mounted from a separate `opencode-auth` Secret on the **agent main container only**, using whichever delivery mechanism Unit 6.0's spike confirmed (file mount or env-var projection). `automountServiceAccountToken: false` is set on the per-session pod (untrusted). The Phase 5 sidecar and Phase 4 init container are untouched — this is a pure main-container swap.
 
-**Requirements:** R1; Threat Model — `automountServiceAccountToken: false` on session pods.
+**Requirements:** R1; Threat Model — `automountServiceAccountToken: false` on session pods; LLM provider API key as asset, mount discipline.
 
-**Dependencies:** Unit 6.1.
+**Dependencies:** Unit 6.0 (auth-mechanism spike), Unit 6.1.
 
 **Files:**
-- Modify: `services/session-api/src/k8s/client.ts` — main container becomes OpenCode by default; `OPENVOID_STUB_IMAGE` env var continues to override (so the Phase 5 nginx demo flow stays reproducible). Port `agent-http` (8080) named for Phase 9 routing. `automountServiceAccountToken: false` on the Pod. The main container's env wires `OPENCODE_SERVER_PASSWORD` via `valueFrom.secretKeyRef` referencing the out-of-band Secret.
-- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the OpenCode image default, port name, `automountServiceAccountToken`, and Secret reference for `OPENCODE_SERVER_PASSWORD`.
+- Modify: `services/session-api/src/k8s/client.ts` — main container becomes OpenCode by default; `OPENVOID_STUB_IMAGE` env var continues to override (so the Phase 5 nginx demo flow stays reproducible). Port `agent-http` (8080) named for Phase 9 routing. `automountServiceAccountToken: false` on the Pod. The main container's env wires `OPENCODE_SERVER_PASSWORD` via `valueFrom.secretKeyRef` referencing the out-of-band password Secret. The main container also gets the LLM auth — either as a `volumeMount` (file at the path Unit 6.0 confirmed; Secret projected as `subPath: auth.json`) or as projected env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`) sourced from the same Secret. Neither delivery mechanism is wired on `git-clone` or `git-finalizer`.
+- Modify: `services/session-api/test/routes.sessions.test.ts` — assert the OpenCode image default, port name, `automountServiceAccountToken`, the `OPENCODE_SERVER_PASSWORD` Secret reference, the `opencode-auth` Secret reference (whichever mechanism — file mount or env), and that **neither** `git-clone` nor `git-finalizer` mounts the LLM auth.
 - Create: `infra/local/opencode-password-secret.yaml.example` — example Secret manifest documenting the `password` key shape; not committed with a real value. README pointer for "create your own" mirroring `git-creds-secret.yaml.example`.
-- Modify: `.gitignore` — exclude `infra/local/opencode-password-secret.yaml` (without the `.example` suffix), same pattern as `git-creds-secret.yaml`.
+- Create: `infra/local/opencode-auth-secret.yaml.example` — example Secret manifest with the `auth.json` shape Unit 6.0 verified. The example shows the JSON keyed by provider (anthropic / openai / openrouter), with placeholder values for each; the implementer fills in only the provider(s) they intend to use. Not committed with real values.
+- Modify: `.gitignore` — exclude `infra/local/opencode-password-secret.yaml` and `infra/local/opencode-auth-secret.yaml` (without the `.example` suffix), same pattern as `git-creds-secret.yaml`.
 
 **Approach:**
-- The cluster-wide `OPENCODE_SERVER_PASSWORD` Secret is applied out-of-band by the implementer in v1 (one Secret per kind cluster, lives in `openvoid-system`). This mirrors Phase 4's `git-creds` pattern — same example-file convention, same `kubectl apply` step, same `.gitignore` rule. Phase 7 graduates this to a chart-templated Secret with auto-generated default value.
+- Both Secrets are applied out-of-band by the implementer in v1 (one of each per kind cluster, both live in `openvoid-system`). This mirrors Phase 4's `git-creds` pattern — same example-file convention, same `kubectl apply` step, same `.gitignore` rule. Phase 7 graduates `opencode-server-password` to a chart-templated Secret with auto-generated default value; `opencode-auth` stays referenced (real third-party keys can't be auto-generated, same posture as `git-creds`).
+- **Mount discipline (load-bearing for the threat model).** The LLM auth Secret is mounted on the agent main container only — never on `git-clone` (it doesn't need it; would expand the credential's blast radius for no benefit) and never on `git-finalizer` (same). Symmetrically, `git-creds` is mounted on `git-clone` and `git-finalizer` only — never on the agent main container. Each container sees only the credentials its job requires. The unit tests assert this.
+- **Provider choice is platform-side, set at install time.** v1 supports any one (or any combination) of Anthropic native, OpenAI native, OpenRouter. The implementer picks at install time by populating only the provider keys they want in `opencode-auth-secret.yaml`. The default model/provider declaration in `opencode.json` (Unit 6.1) determines which one is used. **OpenRouter is the recommended v1 default** because (a) one key unlocks dozens of upstream models for cost/availability flexibility, (b) it short-circuits the "do I need an Anthropic *and* an OpenAI account" question, (c) failover between models is an OpenRouter routing concern, not openvoid's. Native APIs remain supported for users who want a direct billing relationship.
 - Port naming matters: Phase 9 routes `agent-http` (the OpenCode SSE) and `preview-http` (user's web preview) to different cloudflared subdomains; naming them now keeps Phase 9's templates simple.
 - `automountServiceAccountToken: false` ensures the agent can't reach the K8s API (defense in depth alongside Phase 8's NetworkPolicy).
 - The `OPENVOID_STUB_IMAGE=nginx:alpine` override remains supported. This keeps the Phase 5 lifecycle demo (sidecar against nginx) reproducible after Phase 6 lands — useful for debugging if OpenCode-specific issues surface later.
@@ -1047,12 +1092,17 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - The compass research's §10 sidecar YAML — the per-pod credentials-injection shape.
 
 **Test scenarios:**
-- Happy path (unit): manifest's main container is OpenCode by default, port `agent-http` declared at 8080, `OPENCODE_SERVER_PASSWORD` references the out-of-band Secret via `valueFrom.secretKeyRef`.
+- Happy path (unit): manifest's main container is OpenCode by default, port `agent-http` declared at 8080, `OPENCODE_SERVER_PASSWORD` references the out-of-band password Secret via `valueFrom.secretKeyRef`.
 - Happy path (unit): manifest carries `automountServiceAccountToken: false`.
+- Happy path (unit): the main container references the `opencode-auth` Secret via the mechanism Unit 6.0 confirmed (volumeMount with `subPath: auth.json`, or env-var projection of provider-specific keys).
+- Edge case (unit): the `git-clone` initContainer's `volumeMounts` does **not** reference the `opencode-auth` Secret (LLM-auth isolation regression guard).
+- Edge case (unit): the `git-finalizer` sidecar's `volumeMounts` does **not** reference the `opencode-auth` Secret (LLM-auth isolation regression guard).
+- Edge case (unit): symmetrically, the agent main container does **not** mount `git-creds` (Phase 5's regression guard, re-asserted here so the swap doesn't silently break the discipline).
 - Edge case (unit): with `OPENVOID_STUB_IMAGE=nginx:alpine` set, the manifest carries the nginx image (Phase 5 demo path stays reproducible).
-- Integration (manual demo, kind): apply the password Secret (`kubectl apply -f infra/local/opencode-password-secret.yaml`); create a session against a small repo; `kubectl logs -n openvoid-sessions <pod> -c session` shows OpenCode booting; `curl localhost:<forwarded>/global/health` returns 200.
+- Integration (manual demo, kind): apply both Secrets (`kubectl apply -f infra/local/opencode-password-secret.yaml`, `kubectl apply -f infra/local/opencode-auth-secret.yaml`); create a session against a small repo; `kubectl logs -n openvoid-sessions <pod> -c session` shows OpenCode booting; `curl localhost:<forwarded>/global/health` returns 200; sending a prompt produces a real LLM response (proves auth is wired).
 - Integration (manual demo, kind, end-to-end): create a session, prompt the agent to edit a file, `DELETE /sessions/<sid>`; the Phase 5 sidecar pushes a `feat/<sid>` branch with the agent's edit. *(This is the second "magic moment" — first was Phase 5 with kubectl exec; this is the real agent.)*
 - Error path: with the password Secret absent, the pod fails with `CreateContainerConfigError` (same failure shape as Phase 4's `git-creds`-missing case — expected, documented).
+- Error path: with the auth Secret absent, the pod boots (placeholder Secret-volume) but `/global/health` returns OK while prompting fails with an upstream-auth error — documented as the expected failure mode for "agent up but cannot reach LLM."
 
 **Verification:**
 - Demo: POST → wait → `curl http://localhost:<forwarded>/global/health` returns 200; `curl http://localhost:<forwarded>/session` (with HTTP Basic auth using the password) returns the session list.
@@ -1062,9 +1112,9 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ### Phase 7: Helm chart + Session API in chart (Slice 7 — rev 5)
 
-**Demo checkpoint at end of phase:** `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against kind installs the Session API (replacing Phase 3's raw `infra/local/session-api.yaml`) **and** the cluster-wide `OPENCODE_SERVER_PASSWORD` Secret. Tilt drives the chart via `helm_resource` (or equivalent). The implementer can `helm template` to inspect what's rendered, `helm upgrade` to roll changes, and the Tilt UI shows the same `session-api` resource as before — but now Helm-managed. The chart consolidates everything that was hard-coded or applied out-of-band in earlier phases: Session API templates, `session.image` (OpenCode by default), `session.activeDeadlineSeconds`, `session.workspace.sizeLimit`, `session.terminationGracePeriodSeconds`, `session.gitFinalizer.image`, the `OPENCODE_SERVER_PASSWORD` Secret template (auto-generated default), and references to the still-out-of-band `git-creds` Secret.
+**Demo checkpoint at end of phase:** `helm install openvoid infra/helm/openvoid -f infra/helm/values/local.yaml` against kind installs the Session API (replacing Phase 3's raw `infra/local/session-api.yaml`) **and** the cluster-wide `OPENCODE_SERVER_PASSWORD` Secret (auto-generated). Tilt drives the chart via `helm_resource` (or equivalent). The implementer can `helm template` to inspect what's rendered, `helm upgrade` to roll changes, and the Tilt UI shows the same `session-api` resource as before — but now Helm-managed. The chart consolidates everything that was hard-coded or applied out-of-band in earlier phases: Session API templates, `session.image` (OpenCode by default), `session.activeDeadlineSeconds`, `session.workspace.sizeLimit`, `session.terminationGracePeriodSeconds`, `session.gitFinalizer.image`, `session.opencode.{provider, model}` (LLM provider/model selection), `session.allowedLLMHosts` (Phase 8 NetworkPolicy egress allowlist), the `OPENCODE_SERVER_PASSWORD` Secret template (auto-generated default), and references to the still-out-of-band `git-creds` and `opencode-auth` Secrets.
 
-> Rev 5: phase position is Helm-after-OpenCode. Helm is now the **consolidation phase** — every constant in `client.ts` and every out-of-band Secret applied in Phases 4–6 graduates to chart values or chart templates here. This is a single conceptual chunk ("packaging"), unlike the rev 4 Phase 5 ordering which mixed the chart skeleton with the lifecycle work and left OpenCode integration to land afterward. The Session API's `infra/local/session-api.yaml` (Phase 3) is replaced by the chart at the end of this phase. `git-creds` stays out-of-band even after this phase — it holds a real third-party PAT that must come from outside the platform; only `OPENCODE_SERVER_PASSWORD` (auto-generatable) graduates into the chart.
+> Rev 5: phase position is Helm-after-OpenCode. Helm is now the **consolidation phase** — every constant in `client.ts` and every out-of-band Secret applied in Phases 4–6 graduates to chart values or chart templates here. This is a single conceptual chunk ("packaging"), unlike the rev 4 Phase 5 ordering which mixed the chart skeleton with the lifecycle work and left OpenCode integration to land afterward. The Session API's `infra/local/session-api.yaml` (Phase 3) is replaced by the chart at the end of this phase. **Two Secrets stay out-of-band even after this phase:** `git-creds` (real third-party PAT, can't be auto-generated) and `opencode-auth` (real third-party LLM API key, can't be auto-generated). Only `OPENCODE_SERVER_PASSWORD` (a string the platform itself defines) graduates into the chart.
 
 > Rev 4: this phase replaces the original "Session Operator skeleton" phase. There is **no operator** to author. The chart's first consumer is the Session API; Phase 9 will add `templates/web/`, `templates/cloudflared/`, and `templates/routing/` to the same chart. ArgoCD wiring (was Unit 5.9) moves to Phase 9. NetworkPolicy (was Unit 5.7) moves to Phase 8.
 
@@ -1078,7 +1128,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 **Files:**
 - Create: `infra/helm/openvoid/Chart.yaml` (apiVersion v2, version 0.1.0).
-- Create: `infra/helm/openvoid/values.yaml` — defaults (Session API + chart-wide). Values: `namespace.{system,sessions}`, `sessionApi.{image.repository,image.tag,replicas,jwt.secretName}`, `session.{image,activeDeadlineSeconds,workspace.type,workspace.sizeLimit,terminationGracePeriodSeconds,gitFinalizer.image}`, `gitCreds.secretName` (referenced; the Secret itself stays out-of-band), `opencodePassword.{secretName,autoGenerate,value}` (defaults: auto-generate), `networkPolicies.enabled` (Phase 8 toggles), `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` per rev 3).
+- Create: `infra/helm/openvoid/values.yaml` — defaults (Session API + chart-wide). Values: `namespace.{system,sessions}`, `sessionApi.{image.repository,image.tag,replicas,jwt.secretName}`, `session.{image,activeDeadlineSeconds,workspace.type,workspace.sizeLimit,terminationGracePeriodSeconds,gitFinalizer.image}`, `session.opencode.{provider,model}` (LLM provider/model selection — default likely `openrouter` + a sonnet-class model, per Unit 6.0's spike), `session.allowedLLMHosts` (list of hostnames the agent's NetworkPolicy egress will allow; default to the configured provider's host, e.g., `["openrouter.ai"]` or `["api.anthropic.com"]`; consumed by Phase 8's NetworkPolicy template), `gitCreds.secretName` (referenced; Secret stays out-of-band), `opencodeAuth.secretName` (referenced; Secret stays out-of-band — same posture as `gitCreds`), `opencodePassword.{secretName,autoGenerate,value}` (defaults: auto-generate), `networkPolicies.enabled` (Phase 8 toggles), `routing.mode` (default `cloudflared`; reserved values `openshift-route`, `ingress` per rev 3).
 - Create: `infra/helm/openvoid/templates/namespaces.yaml`.
 - Create: `infra/helm/openvoid/templates/session-api/{serviceaccount,role,rolebinding,deployment,service}.yaml` — port `infra/local/session-api.yaml` into Helm templates.
 - Create: `infra/helm/openvoid/templates/secrets/opencode-server-password.yaml` — chart-managed Secret in `openvoid-system`, auto-generated password by default (`{{ randAlphaNum 32 }}` with a `lookup` guard so re-installs don't rotate). Replaces the out-of-band Secret from Phase 6 — at install time, the implementer's hand-applied `infra/local/opencode-password-secret.yaml` is deleted and the chart-managed one takes over.
@@ -1091,7 +1141,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 **Approach:**
 - Author by porting `infra/local/session-api.yaml` (Phase 3) into templates one resource at a time. The chart's first install on kind should produce a diff-clean equivalent of Phase 3's manifest plus the new Secret template.
 - Per-session Pod manifests are *not* in the chart — pods are created at runtime by the Session API. The chart provides the **values** the Session API reads to configure those pods (image, activeDeadlineSeconds, workspace size, finalizer grace period, etc.).
-- Phase 3's `infra/local/session-api.yaml` is **deleted** at the end of this phase (replaced by the chart). The implementer's hand-applied `infra/local/opencode-password-secret.yaml` is also deleted (replaced by the chart's templated Secret). `infra/local/git-creds-secret.yaml` stays — `git-creds` is a real third-party PAT that openvoid can't auto-generate.
+- Phase 3's `infra/local/session-api.yaml` is **deleted** at the end of this phase (replaced by the chart). The implementer's hand-applied `infra/local/opencode-password-secret.yaml` is also deleted (replaced by the chart's templated Secret). `infra/local/git-creds-secret.yaml` and `infra/local/opencode-auth-secret.yaml` stay — both hold real third-party credentials that openvoid can't auto-generate (a GitHub PAT and an LLM provider API key respectively).
 - Tilt switches from `k8s_yaml('infra/local/session-api.yaml')` to a `helm_resource` or `helm_remote`-style equivalent.
 
 **Patterns to follow:**
@@ -1122,8 +1172,8 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 **Dependencies:** Unit 7.1.
 
 **Files:**
-- Modify: `services/session-api/src/k8s/client.ts` — read `process.env.OPENVOID_STUB_IMAGE` (already exists from Phase 3; default switches to OpenCode in Phase 6), `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS`, `OPENVOID_SESSION_WORKSPACE_SIZE_LIMIT`, `OPENVOID_GIT_IMAGE`, `OPENVOID_GIT_FINALIZER_IMAGE`, `OPENVOID_SESSION_TERMINATION_GRACE_PERIOD_SECONDS`, `OPENVOID_OPENCODE_PASSWORD_SECRET_NAME` (rev 5 swap — was hard-coded in Phase 6). Defaults preserved as fallbacks.
-- Modify: `infra/helm/openvoid/templates/session-api/deployment.yaml` — `env:` block populates the variables from `.Values.session.*` and `.Values.opencodePassword.secretName`.
+- Modify: `services/session-api/src/k8s/client.ts` — read `process.env.OPENVOID_STUB_IMAGE` (already exists from Phase 3; default switches to OpenCode in Phase 6), `OPENVOID_SESSION_ACTIVE_DEADLINE_SECONDS`, `OPENVOID_SESSION_WORKSPACE_SIZE_LIMIT`, `OPENVOID_GIT_IMAGE`, `OPENVOID_GIT_FINALIZER_IMAGE`, `OPENVOID_SESSION_TERMINATION_GRACE_PERIOD_SECONDS`, `OPENVOID_OPENCODE_PASSWORD_SECRET_NAME` (rev 5 swap — was hard-coded in Phase 6), `OPENVOID_OPENCODE_AUTH_SECRET_NAME` (rev 5 — names the LLM auth Secret), `OPENVOID_OPENCODE_PROVIDER` (rev 5 — `anthropic` / `openai` / `openrouter`), `OPENVOID_OPENCODE_MODEL` (rev 5 — model id, format determined by Unit 6.0's spike). Defaults preserved as fallbacks.
+- Modify: `infra/helm/openvoid/templates/session-api/deployment.yaml` — `env:` block populates the variables from `.Values.session.*`, `.Values.session.opencode.{provider,model}`, `.Values.opencodePassword.secretName`, and `.Values.opencodeAuth.secretName`.
 - Modify: `infra/helm/openvoid/values.yaml` — defaults for the values listed above.
 - Modify: `services/session-api/test/routes.sessions.test.ts` — env-var-driven defaults are exercised in tests.
 
@@ -1187,7 +1237,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 - [ ] **Unit 8.1: Default-deny NetworkPolicy on `openvoid-sessions`**
 
-**Goal:** Session pods can egress only to: the configured Git host (GitHub HTTPS:443), the configured LLM provider domain(s), and DNS. They cannot reach the K8s API server, the cloud metadata service (169.254.169.254), or other namespaces.
+**Goal:** Session pods can egress only to: the configured Git host (GitHub HTTPS:443), the configured LLM provider host(s) (driven by `session.allowedLLMHosts` from Phase 7's chart values — typically `openrouter.ai`, `api.anthropic.com`, or `api.openai.com` depending on which provider the platform operator chose), and DNS. They cannot reach the K8s API server, the cloud metadata service (169.254.169.254), or other namespaces.
 
 **Requirements:** Threat Model — network isolation in v1.
 
@@ -1199,7 +1249,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Modify: `infra/helm/values/dev.yaml` — `networkPolicies.enabled: true`.
 
 **Approach:**
-- Three rules: (1) DNS to kube-system, (2) GitHub HTTPS:443 (allowlist by IP block from `whois`/Cloudflare's published ranges, or by FQDN if the cluster's CNI supports it), (3) LLM provider HTTPS:443 (Anthropic + OpenAI).
+- Three rules: (1) DNS to kube-system, (2) GitHub HTTPS:443 (allowlist by IP block from `whois`/Cloudflare's published ranges, or by FQDN if the cluster's CNI supports it), (3) configured LLM provider HTTPS:443 (one or more of `openrouter.ai`, `api.anthropic.com`, `api.openai.com` — chart value `session.allowedLLMHosts` is the source of truth; the template iterates over it so adding/removing providers is a one-line values change without touching the policy template).
 - The K8s API server block is implicit: default-deny ingress + only-allowlisted egress means no `kubernetes.default.svc:443` reachability from session pods.
 - Metadata service block: explicit deny rule for `169.254.169.254/32` for clouds that surface it (DOKS does).
 - On kind, the policy renders but doesn't enforce; the implementer can verify the policy compiles and is well-formed but should not rely on kind to validate enforcement.
@@ -1231,7 +1281,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 - Modify: `infra/images/opencode/opencode.json` — full denylist per threat model.
 
 **Approach:**
-- Replace the Phase 6 placeholder permissive config with:
+- Replace the Phase 6 placeholder permissive config with (the exact `auth.json` path on the deny list comes from Unit 6.0's spike — substitute the verified path):
   ```json
   {
     "$schema": "https://opencode.ai/config.json",
@@ -1241,22 +1291,34 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
         "git *": "allow",
         "npm *": "allow", "pnpm *": "allow", "node *": "allow",
         "cat /etc/*": "deny", "cat /var/run/secrets/*": "deny",
+        "cat /home/*/.local/share/opencode/auth.json": "deny",
         "rm -rf /*": "deny", "rm -rf /workspace/.git": "deny"
       },
       "edit": "allow",
-      "read": { "*": "allow", "/etc/*": "deny", "/var/run/secrets/*": "deny" },
+      "read": {
+        "*": "allow",
+        "/etc/*": "deny",
+        "/var/run/secrets/*": "deny",
+        "/home/*/.local/share/opencode/auth.json": "deny"
+      },
       "webfetch": { "*": "allow", "*github.com*": "deny", "169.254.169.254*": "deny" },
       "external_directory": "deny"
     }
   }
   ```
-- Rationale per rule: `read` denylist prevents the agent from reading `/etc/git-credentials`. `webfetch` denylist prevents exfiltration via GitHub API (push still works because git uses HTTPS protocol, not webfetch) and prevents metadata service access. `bash` denylist closes the `cat` exfil path. The tightening is meaningful even with NetworkPolicy in place (defense in depth — NetworkPolicy is enforced at the cluster but not on kind by default).
+- Rationale per rule:
+  - `read` denylist prevents the agent from reading `/etc/git-credentials` and its own LLM `auth.json` (so prompt-injection can't trick the agent into echoing its provider key into chat or a webfetch).
+  - `webfetch` denylist prevents exfiltration via GitHub API (push still works because git uses HTTPS protocol, not webfetch) and prevents metadata service access.
+  - `bash` denylist closes the `cat` exfil path for both credential locations.
+  - The tightening is meaningful even with NetworkPolicy in place (defense in depth — NetworkPolicy is enforced at the cluster but not on kind by default).
+- The exact `auth.json` path varies by base image and OpenCode version; the path Unit 6.0's spike confirms goes here verbatim. If the path is dynamic (e.g., `${HOME}`), use the literal expansion that matches the running container's home directory.
 
 **Patterns to follow:**
 - The original Phase 6 (rev 2) / Phase 7 (rev 5) config decomposition — same content, just packaged as a "Phase 8 hardening" task instead of being co-located with the image build.
 
 **Test scenarios:**
 - Happy path (manual demo): start a session; from the agent (via `POST /session/<sid>/message`), ask it to `cat /etc/git-credentials` — request is denied.
+- Happy path (manual demo): from the agent, ask it to read its own `auth.json` (the path Unit 6.0's spike confirmed) — request is denied.
 - Happy path (manual demo): from the agent, ask it to fetch `https://api.github.com/users/octocat` — request is denied (webfetch to `*github.com*`).
 - Edge case (manual demo): from the agent, ask it to run `git push` — succeeds (allowed in `bash` allowlist).
 - Edge case (manual demo): from the agent, ask it to `rm -rf /workspace` — denied.
