@@ -29,10 +29,19 @@ function podPhaseToSessionStatus(phase: string | undefined): Session["status"] {
   }
 }
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function isCreateRequest(body: unknown): body is CreateSessionRequest {
   if (!body || typeof body !== "object") return false;
   const r = body as Record<string, unknown>;
   if (typeof r.repo !== "string" || r.repo.length === 0) return false;
+  if (!isHttpsUrl(r.repo)) return false;
   if (r.branch !== undefined) {
     if (typeof r.branch !== "string" || r.branch.length === 0) return false;
   }
@@ -68,7 +77,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
       return c.json(
         jsonError(
           "invalid_request",
-          "Body must include `repo` (non-empty string) and optional non-negative finite `idleTimeoutSeconds`",
+          "Body must include `repo` as an HTTPS Git URL (e.g. `https://github.com/<org>/<repo>`; SSH URLs are not supported), an optional non-empty `branch` string, and an optional non-negative finite `idleTimeoutSeconds`.",
         ),
         400,
       );

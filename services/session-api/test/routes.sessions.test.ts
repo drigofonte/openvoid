@@ -235,7 +235,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "x", branch: "" }),
+        body: JSON.stringify({ repo: "https://github.com/example/x", branch: "" }),
       });
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -246,7 +246,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "x", branch: 42 }),
+        body: JSON.stringify({ repo: "https://github.com/example/x", branch: 42 }),
       });
       expect(res.status).toBe(400);
     });
@@ -284,11 +284,34 @@ describe("sessionsRouter", () => {
       expect(body.code).toBe("invalid_request");
     });
 
+    it("rejects non-HTTPS `repo` URLs (SSH, http, plain string) with 400", async () => {
+      const cases = [
+        "git@github.com:example/x.git",
+        "http://github.com/example/x",
+        "ssh://git@github.com/example/x",
+        "git://github.com/example/x",
+        "github.com/example/x",
+        "/local/path",
+      ];
+      for (const repo of cases) {
+        const res = await app.request("/sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ repo }),
+        });
+        expect(res.status, `repo=${repo}`).toBe(400);
+        const body = await res.json();
+        expect(body.code).toBe("invalid_request");
+        expect(body.message).toContain("HTTPS");
+      }
+      expect(ops.createSessionPod).not.toHaveBeenCalled();
+    });
+
     it("rejects negative idleTimeoutSeconds with 400", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "x", idleTimeoutSeconds: -1 }),
+        body: JSON.stringify({ repo: "https://github.com/example/x", idleTimeoutSeconds: -1 }),
       });
       expect(res.status).toBe(400);
     });
@@ -299,7 +322,7 @@ describe("sessionsRouter", () => {
           method: "POST",
           headers: { "content-type": "application/json" },
           // JSON cannot encode NaN/Infinity; serialize the literal text instead.
-          body: `{"repo":"x","idleTimeoutSeconds":${v}}`,
+          body: `{"repo":"https://github.com/example/x","idleTimeoutSeconds":${v}}`,
         });
         expect(res.status, `value=${v}`).toBe(400);
       }
@@ -309,7 +332,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "x", idleTimeoutSeconds: 600 }),
+        body: JSON.stringify({ repo: "https://github.com/example/x", idleTimeoutSeconds: 600 }),
       });
       expect(res.status).toBe(201);
     });
@@ -319,7 +342,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "x" }),
+        body: JSON.stringify({ repo: "https://github.com/example/x" }),
       });
       expect(res.status).toBe(503);
       const body = await res.json();
@@ -332,7 +355,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "x" }),
+        body: JSON.stringify({ repo: "https://github.com/example/x" }),
       });
       expect(res.status).toBe(503);
       const body = await res.json();

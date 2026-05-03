@@ -21,7 +21,7 @@ enum SessionPhase {
 
 @doc("Request body for creating a new coding session.")
 model CreateSessionRequest {
-  @doc("Git URL of the workspace to clone.")
+  @doc("HTTPS Git URL of the workspace to clone (e.g. `https://github.com/<org>/<repo>`). SSH URLs (`git@host:org/repo.git`) are not supported in v1.")
   repo: string;
 
   @doc("Branch to check out at clone time. Defaults to `main`.")

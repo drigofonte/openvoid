@@ -52,7 +52,7 @@ export interface components {
         };
         /** @description Request body for creating a new coding session. */
         CreateSessionRequest: {
-            /** @description Git URL of the workspace to clone. */
+            /** @description HTTPS Git URL of the workspace to clone (e.g. `https://github.com/<org>/<repo>`). SSH URLs (`git@host:org/repo.git`) are not supported in v1. */
             repo: string;
             /**
              * @description Branch to check out at clone time. Defaults to `main`.
