@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import id128 from "id128";
 import type { components } from "@openvoid/protocol";
-import type { PodOps } from "../k8s/client.js";
+import {
+  type PodOps,
+  REPO_ANNOTATION,
+  BRANCH_ANNOTATION,
+  CREATED_AT_ANNOTATION,
+} from "../k8s/client.js";
 
 const { Ulid } = id128;
 
@@ -24,10 +29,22 @@ function podPhaseToSessionStatus(phase: string | undefined): Session["status"] {
   }
 }
 
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function isCreateRequest(body: unknown): body is CreateSessionRequest {
   if (!body || typeof body !== "object") return false;
   const r = body as Record<string, unknown>;
   if (typeof r.repo !== "string" || r.repo.length === 0) return false;
+  if (!isHttpsUrl(r.repo)) return false;
+  if (r.branch !== undefined) {
+    if (typeof r.branch !== "string" || r.branch.length === 0) return false;
+  }
   if (r.idleTimeoutSeconds !== undefined) {
     if (typeof r.idleTimeoutSeconds !== "number") return false;
     if (!Number.isFinite(r.idleTimeoutSeconds) || r.idleTimeoutSeconds < 0) return false;
@@ -60,7 +77,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
       return c.json(
         jsonError(
           "invalid_request",
-          "Body must include `repo` (non-empty string) and optional non-negative finite `idleTimeoutSeconds`",
+          "Body must include `repo` as an HTTPS Git URL (e.g. `https://github.com/<org>/<repo>`; SSH URLs are not supported), an optional non-empty `branch` string, and an optional non-negative finite `idleTimeoutSeconds`.",
         ),
         400,
       );
@@ -68,7 +85,12 @@ export function sessionsRouter(podOps: PodOps): Hono {
 
     const sessionId = Ulid.generate().toCanonical();
     try {
-      await podOps.createSessionPod({ sessionId, image: STUB_IMAGE });
+      await podOps.createSessionPod({
+        sessionId,
+        image: STUB_IMAGE,
+        repo: body.repo,
+        branch: body.branch,
+      });
     } catch (err) {
       return c.json(
         jsonError("k8s_unavailable", `Failed to create pod: ${errorMessage(err)}`),
@@ -101,6 +123,15 @@ export function sessionsRouter(podOps: PodOps): Hono {
     };
     const ip = pod.status?.podIP;
     if (ip) session.endpointUrl = `http://${ip}`;
+
+    const annotations = pod.metadata?.annotations ?? {};
+    const repo = annotations[REPO_ANNOTATION];
+    const branch = annotations[BRANCH_ANNOTATION];
+    const createdAt = annotations[CREATED_AT_ANNOTATION];
+    if (repo) session.repo = repo;
+    if (branch) session.branch = branch;
+    if (createdAt) session.createdAt = createdAt;
+
     return c.json(session, 200);
   });
 

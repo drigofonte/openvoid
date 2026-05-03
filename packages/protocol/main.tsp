@@ -21,8 +21,11 @@ enum SessionPhase {
 
 @doc("Request body for creating a new coding session.")
 model CreateSessionRequest {
-  @doc("Git URL of the workspace to clone.")
+  @doc("HTTPS Git URL of the workspace to clone (e.g. `https://github.com/<org>/<repo>`). SSH URLs (`git@host:org/repo.git`) are not supported in v1.")
   repo: string;
+
+  @doc("Branch to check out at clone time. Defaults to `main`.")
+  branch?: string = "main";
 
   @doc("Operator stops the session after this much inactivity. Defaults to 1800 (30 min).")
   @minValue(0)
@@ -39,6 +42,15 @@ model Session {
 
   @doc("Reachable URL of the agent (when status is Running). Empty until Phase 5/6.")
   endpointUrl?: string;
+
+  @doc("Git URL of the workspace cloned at session start.")
+  repo?: string;
+
+  @doc("Branch checked out at session start.")
+  branch?: string;
+
+  @doc("RFC 3339 timestamp the session was created.")
+  createdAt?: string;
 }
 
 @doc("Standard error response.")
