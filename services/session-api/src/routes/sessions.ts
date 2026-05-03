@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import id128 from "id128";
 import type { components } from "@openvoid/protocol";
-import type { PodOps } from "../k8s/client.js";
+import {
+  type PodOps,
+  REPO_ANNOTATION,
+  BRANCH_ANNOTATION,
+  CREATED_AT_ANNOTATION,
+} from "../k8s/client.js";
 
 const { Ulid } = id128;
 
@@ -109,6 +114,15 @@ export function sessionsRouter(podOps: PodOps): Hono {
     };
     const ip = pod.status?.podIP;
     if (ip) session.endpointUrl = `http://${ip}`;
+
+    const annotations = pod.metadata?.annotations ?? {};
+    const repo = annotations[REPO_ANNOTATION];
+    const branch = annotations[BRANCH_ANNOTATION];
+    const createdAt = annotations[CREATED_AT_ANNOTATION];
+    if (repo) session.repo = repo;
+    if (branch) session.branch = branch;
+    if (createdAt) session.createdAt = createdAt;
+
     return c.json(session, 200);
   });
 

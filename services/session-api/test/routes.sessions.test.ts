@@ -16,6 +16,10 @@ import {
   GIT_CREDS_SECRET_NAME,
   GIT_CREDS_SECRET_KEY,
   DEFAULT_BRANCH,
+  REPO_ANNOTATION,
+  BRANCH_ANNOTATION,
+  CREATED_AT_ANNOTATION,
+  ACTIVE_DEADLINE_SECONDS,
 } from "../src/k8s/client.js";
 
 function makeMockOps(): PodOps & {
@@ -30,11 +34,15 @@ function makeMockOps(): PodOps & {
   };
 }
 
-function podWith(phase: string, podIP?: string): V1Pod {
+function podWith(
+  phase: string,
+  podIP?: string,
+  annotations?: Record<string, string>,
+): V1Pod {
   return {
     apiVersion: "v1",
     kind: "Pod",
-    metadata: { name: "session-x", namespace: "openvoid-sessions" },
+    metadata: { name: "session-x", namespace: "openvoid-sessions", annotations },
     status: { phase, podIP },
   };
 }
@@ -133,6 +141,43 @@ describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => 
     const manifest = buildSessionPodManifest(baseSpec);
     const mainEnv = manifest.spec?.containers?.[0]?.env ?? [];
     expect(mainEnv.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+  });
+});
+
+describe("buildSessionPodManifest (Phase 4.3: annotations + activeDeadlineSeconds)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: "nginx:alpine",
+    repo: "https://github.com/example/x",
+    branch: "develop",
+    createdAt: "2026-05-03T22:00:00.000Z",
+  };
+
+  it("writes openvoid.io/{repo,branch,created-at} annotations", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const annotations = manifest.metadata?.annotations ?? {};
+    expect(annotations[REPO_ANNOTATION]).toBe("https://github.com/example/x");
+    expect(annotations[BRANCH_ANNOTATION]).toBe("develop");
+    expect(annotations[CREATED_AT_ANNOTATION]).toBe("2026-05-03T22:00:00.000Z");
+  });
+
+  it("falls back to `main` for the branch annotation when branch is omitted", () => {
+    const manifest = buildSessionPodManifest({ ...baseSpec, branch: undefined });
+    expect(manifest.metadata?.annotations?.[BRANCH_ANNOTATION]).toBe(DEFAULT_BRANCH);
+  });
+
+  it("generates a current RFC 3339 createdAt when one is not provided", () => {
+    const before = new Date().toISOString();
+    const manifest = buildSessionPodManifest({ ...baseSpec, createdAt: undefined });
+    const after = new Date().toISOString();
+    const value = manifest.metadata?.annotations?.[CREATED_AT_ANNOTATION] ?? "";
+    expect(value >= before && value <= after, `createdAt=${value}`).toBe(true);
+  });
+
+  it("sets the 4-hour activeDeadlineSeconds failsafe", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    expect(manifest.spec?.activeDeadlineSeconds).toBe(ACTIVE_DEADLINE_SECONDS);
+    expect(ACTIVE_DEADLINE_SECONDS).toBe(14400);
   });
 });
 
@@ -340,6 +385,32 @@ describe("sessionsRouter", () => {
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.code).toBe("not_found");
+    });
+
+    it("populates repo, branch, createdAt from pod annotations", async () => {
+      ops.getSessionPod.mockResolvedValueOnce(
+        podWith("Running", "10.244.0.5", {
+          [REPO_ANNOTATION]: "https://github.com/example/x",
+          [BRANCH_ANNOTATION]: "develop",
+          [CREATED_AT_ANNOTATION]: "2026-05-03T22:00:00.000Z",
+        }),
+      );
+      const res = await app.request("/sessions/01HABCDEF");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.repo).toBe("https://github.com/example/x");
+      expect(body.branch).toBe("develop");
+      expect(body.createdAt).toBe("2026-05-03T22:00:00.000Z");
+    });
+
+    it("omits repo/branch/createdAt when annotations are absent (defensive)", async () => {
+      ops.getSessionPod.mockResolvedValueOnce(podWith("Running", "10.244.0.5"));
+      const res = await app.request("/sessions/01HABCDEF");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).not.toHaveProperty("repo");
+      expect(body).not.toHaveProperty("branch");
+      expect(body).not.toHaveProperty("createdAt");
     });
 
     it("returns 503 when the K8s client throws", async () => {

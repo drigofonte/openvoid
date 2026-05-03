@@ -42,6 +42,15 @@ model Session {
 
   @doc("Reachable URL of the agent (when status is Running). Empty until Phase 5/6.")
   endpointUrl?: string;
+
+  @doc("Git URL of the workspace cloned at session start.")
+  repo?: string;
+
+  @doc("Branch checked out at session start.")
+  branch?: string;
+
+  @doc("RFC 3339 timestamp the session was created.")
+  createdAt?: string;
 }
 
 @doc("Standard error response.")

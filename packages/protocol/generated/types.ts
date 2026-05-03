@@ -74,6 +74,12 @@ export interface components {
             status: components["schemas"]["SessionPhase"];
             /** @description Reachable URL of the agent (when status is Running). Empty until Phase 5/6. */
             endpointUrl?: string;
+            /** @description Git URL of the workspace cloned at session start. */
+            repo?: string;
+            /** @description Branch checked out at session start. */
+            branch?: string;
+            /** @description RFC 3339 timestamp the session was created. */
+            createdAt?: string;
         };
         /**
          * @description Lifecycle phase of a coding session.

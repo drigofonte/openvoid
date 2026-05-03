@@ -119,6 +119,15 @@ components:
         endpointUrl:
           type: string
           description: Reachable URL of the agent (when status is Running). Empty until Phase 5/6.
+        repo:
+          type: string
+          description: Git URL of the workspace cloned at session start.
+        branch:
+          type: string
+          description: Branch checked out at session start.
+        createdAt:
+          type: string
+          description: RFC 3339 timestamp the session was created.
       description: A coding session resource as exposed by the API.
     SessionPhase:
       type: string
