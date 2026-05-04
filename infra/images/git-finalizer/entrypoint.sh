@@ -27,6 +27,14 @@ session_id() {
   printf '%s' "${HOSTNAME}" | sed 's/^session-//'
 }
 
+try_push() {
+  # --force-with-lease is the safety net against losing concurrent updates:
+  # if the remote branch advanced unexpectedly, the push fails rather than
+  # overwriting. For first-pushes (the common case) it's equivalent to a
+  # normal push; for retries after a partial earlier push, it converges.
+  git push --force-with-lease "$1" "HEAD:$2"
+}
+
 finalize() {
   echo "[finalizer] SIGTERM received; running finalize()" >&2
   cd "${REPO_DIR}" 2>/dev/null || {
@@ -35,15 +43,36 @@ finalize() {
   }
 
   git add -A
-  # --allow-empty so a no-edit shutdown still produces a deterministic exit.
-  git commit --allow-empty -m "session $(hostname) $(date -Iseconds)" || true
+  if git diff --cached --quiet; then
+    echo "[finalizer] nothing to commit; not pushing (no branch created)" >&2
+    return 0
+  fi
+  git commit -m "session $(hostname) $(date -Iseconds)" || true
 
   origin=$(git remote get-url origin)
   auth_url=$(printf '%s' "${origin}" | sed -e "s#^https://#https://x-access-token:${GIT_TOKEN}@#")
   branch="feat/$(session_id)"
 
   echo "[finalizer] pushing HEAD to ${branch}" >&2
-  git push "${auth_url}" "HEAD:${branch}"
+  if try_push "${auth_url}" "${branch}"; then
+    echo "[finalizer] push succeeded" >&2
+    return 0
+  fi
+
+  # Single retry with exponential backoff (1s, then 4s) handles transient
+  # network blips. Non-transient failures (auth, branch protection) will
+  # fail twice and exit non-zero — that's the right outcome.
+  for delay in 1 4; do
+    echo "[finalizer] push failed; retrying in ${delay}s" >&2
+    sleep "${delay}"
+    if try_push "${auth_url}" "${branch}"; then
+      echo "[finalizer] push succeeded on retry" >&2
+      return 0
+    fi
+  done
+
+  echo "[finalizer] push failed after retries; giving up" >&2
+  return 1
 }
 
 trap 'finalize; exit 0' TERM INT

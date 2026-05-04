@@ -12,6 +12,7 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "INTEGRATION=1 vitest run test/integration",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
