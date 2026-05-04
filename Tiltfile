@@ -75,3 +75,13 @@ local_resource(
     deps=["infra/images/git-finalizer"],
     labels=["images"],
 )
+
+local_resource(
+    "opencode-image",
+    cmd=" && ".join([
+        "docker build -t localhost:5001/openvoid/opencode:dev infra/images/opencode",
+        "docker push localhost:5001/openvoid/opencode:dev",
+    ]),
+    deps=["infra/images/opencode"],
+    labels=["images"],
+)
