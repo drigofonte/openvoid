@@ -28,6 +28,15 @@ import {
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
   ACTIVE_DEADLINE_SECONDS,
+  OPENCODE_IMAGE,
+  OPENCODE_AGENT_PORT,
+  OPENCODE_AGENT_PORT_NAME,
+  OPENCODE_PASSWORD_SECRET_NAME,
+  OPENCODE_PASSWORD_SECRET_KEY,
+  OPENCODE_AUTH_SECRET_NAME,
+  OPENCODE_AUTH_SECRET_KEY,
+  OPENCODE_AUTH_VOLUME_NAME,
+  OPENCODE_AUTH_MOUNT_PATH,
 } from "../src/k8s/client.js";
 
 function makeMockOps(): PodOps & {
@@ -319,6 +328,125 @@ describe("buildSessionPodManifest (Phase 5.2: terminationGracePeriodSeconds)", (
   });
 });
 
+describe("buildSessionPodManifest (Phase 6.2: OpenCode main container + Secrets)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/example/x",
+  };
+
+  it("declares the agent-http port at 8080 on the main container", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const ports = manifest.spec?.containers?.[0]?.ports ?? [];
+    expect(ports).toContainEqual({
+      name: OPENCODE_AGENT_PORT_NAME,
+      containerPort: OPENCODE_AGENT_PORT,
+    });
+    expect(OPENCODE_AGENT_PORT_NAME).toBe("agent-http");
+    expect(OPENCODE_AGENT_PORT).toBe(8080);
+  });
+
+  it("disables ServiceAccount token automounting on the pod", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    expect(manifest.spec?.automountServiceAccountToken).toBe(false);
+  });
+
+  it("wires OPENCODE_SERVER_PASSWORD via secretKeyRef on the main container", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const env = manifest.spec?.containers?.[0]?.env ?? [];
+    const passwordEnv = env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD");
+    expect(passwordEnv?.value).toBeUndefined();
+    expect(passwordEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: OPENCODE_PASSWORD_SECRET_NAME,
+      key: OPENCODE_PASSWORD_SECRET_KEY,
+    });
+  });
+
+  it("declares the opencode-auth Secret as a pod-level volume with subPath projection", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const volumes = manifest.spec?.volumes ?? [];
+    const authVolume = volumes.find((v) => v.name === OPENCODE_AUTH_VOLUME_NAME);
+    expect(authVolume?.secret?.secretName).toBe(OPENCODE_AUTH_SECRET_NAME);
+    expect(authVolume?.secret?.items).toEqual([
+      { key: OPENCODE_AUTH_SECRET_KEY, path: OPENCODE_AUTH_SECRET_KEY },
+    ]);
+    // 0o400 = 256 — owner-read-only at file level (defense in depth on
+    // top of the read-only mount).
+    expect(authVolume?.secret?.defaultMode).toBe(0o400);
+  });
+
+  it("mounts opencode-auth on the main container at the XDG-pinned auth path (subPath, read-only)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const main = manifest.spec?.containers?.[0];
+    expect(main?.volumeMounts).toContainEqual({
+      name: OPENCODE_AUTH_VOLUME_NAME,
+      mountPath: OPENCODE_AUTH_MOUNT_PATH,
+      subPath: OPENCODE_AUTH_SECRET_KEY,
+      readOnly: true,
+    });
+    // Path matches the image's ENV XDG_DATA_HOME (Unit 6.1 Dockerfile).
+    expect(OPENCODE_AUTH_MOUNT_PATH).toBe(
+      "/var/opencode-data/opencode/auth.json",
+    );
+  });
+
+  it("does NOT mount opencode-auth on the git-clone init container (LLM-auth isolation)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const clone = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_CLONE_CONTAINER_NAME,
+    );
+    const mounts = clone?.volumeMounts ?? [];
+    expect(mounts.find((m) => m.name === OPENCODE_AUTH_VOLUME_NAME)).toBeUndefined();
+    const env = clone?.env ?? [];
+    expect(env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD")).toBeUndefined();
+  });
+
+  it("does NOT mount opencode-auth on the git-finalizer sidecar (LLM-auth isolation)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
+    );
+    const mounts = finalizer?.volumeMounts ?? [];
+    expect(mounts.find((m) => m.name === OPENCODE_AUTH_VOLUME_NAME)).toBeUndefined();
+    const env = finalizer?.env ?? [];
+    expect(env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD")).toBeUndefined();
+  });
+
+  it("re-asserts: main container does NOT mount git-creds (Phase 5 invariant carries forward)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const main = manifest.spec?.containers?.[0];
+    const mounts = main?.volumeMounts ?? [];
+    expect(mounts.find((m) => m.name === GIT_CREDS_VOLUME_NAME)).toBeUndefined();
+    const env = main?.env ?? [];
+    expect(env.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+  });
+
+  it("mounts the workspace volume on the main container at /workspace (matches OpenCode WORKDIR /workspace/repo)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const mounts = manifest.spec?.containers?.[0]?.volumeMounts ?? [];
+    expect(mounts).toContainEqual({
+      name: WORKSPACE_VOLUME_NAME,
+      mountPath: WORKSPACE_MOUNT_PATH,
+    });
+    expect(WORKSPACE_MOUNT_PATH).toBe("/workspace");
+  });
+
+  it("preserves the OPENVOID_STUB_IMAGE override path: stub image gets the same OpenCode-shaped manifest", () => {
+    // Phase 5 demo flow with nginx as the main container still receives
+    // the OpenCode env wiring and auth mount — they're inert on nginx
+    // (it ignores the env), and structural invariance keeps the tests
+    // simple. The pod still requires both Secrets to be present even
+    // in stub mode; that's the documented precondition.
+    const stubSpec: SessionPodSpec = { ...baseSpec, image: "nginx:alpine" };
+    const manifest = buildSessionPodManifest(stubSpec);
+    expect(manifest.spec?.containers?.[0]?.image).toBe("nginx:alpine");
+    const env = manifest.spec?.containers?.[0]?.env ?? [];
+    expect(env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD")).toBeDefined();
+    const mounts = manifest.spec?.containers?.[0]?.volumeMounts ?? [];
+    expect(mounts.find((m) => m.name === OPENCODE_AUTH_VOLUME_NAME)).toBeDefined();
+  });
+});
+
 describe("sessionsRouter", () => {
   let ops: ReturnType<typeof makeMockOps>;
   let app: ReturnType<typeof sessionsRouter>;
@@ -329,7 +457,7 @@ describe("sessionsRouter", () => {
   });
 
   describe("POST /sessions", () => {
-    it("creates a pod with the expected labels and image and returns 201", async () => {
+    it("creates a pod with the expected labels and OpenCode image and returns 201", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -344,7 +472,7 @@ describe("sessionsRouter", () => {
 
       expect(ops.createSessionPod).toHaveBeenCalledOnce();
       const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
-      expect(arg.image).toBe("nginx:alpine");
+      expect(arg.image).toBe(OPENCODE_IMAGE);
       expect(arg.repo).toBe("https://github.com/example/x");
       expect(arg.branch).toBeUndefined();
       const manifest = buildSessionPodManifest(arg);
@@ -352,7 +480,23 @@ describe("sessionsRouter", () => {
         [SESSION_LABEL]: arg.sessionId,
         [MANAGED_BY_LABEL]: MANAGED_BY_VALUE,
       });
-      expect(manifest.spec?.containers?.[0]?.image).toBe("nginx:alpine");
+      expect(manifest.spec?.containers?.[0]?.image).toBe(OPENCODE_IMAGE);
+    });
+
+    it("honours OPENVOID_STUB_IMAGE override (Phase 5 demo path stays reproducible)", async () => {
+      vi.stubEnv("OPENVOID_STUB_IMAGE", "nginx:alpine");
+      try {
+        const res = await app.request("/sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        });
+        expect(res.status).toBe(201);
+        const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
+        expect(arg.image).toBe("nginx:alpine");
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it("threads `branch` from the request body into the pod spec", async () => {

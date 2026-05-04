@@ -16,7 +16,11 @@ export const ACTIVE_DEADLINE_SECONDS = 14400;
 export const TERMINATION_GRACE_PERIOD_SECONDS = 180;
 
 export const WORKSPACE_VOLUME_NAME = "workspace";
-export const WORKSPACE_MOUNT_PATH = "/usr/share/nginx/html";
+// Mount path on the agent main container. Matches OpenCode's WORKDIR
+// (/workspace/repo) so the agent's cwd is the cloned repo. The
+// initContainer (git-clone) and sidecar (git-finalizer) mount the same
+// volume at /workspace and see the repo at /workspace/repo.
+export const WORKSPACE_MOUNT_PATH = "/workspace";
 export const WORKSPACE_FS_GROUP = 65533;
 
 export const GIT_CLONE_IMAGE = "localhost:5001/openvoid/git-clone:dev";
@@ -28,6 +32,34 @@ export const GIT_CREDS_MOUNT_PATH = "/etc/git-creds";
 export const GIT_FINALIZER_IMAGE = "localhost:5001/openvoid/git-finalizer:dev";
 export const GIT_FINALIZER_CONTAINER_NAME = "git-finalizer";
 export const DEFAULT_BRANCH = "main";
+
+// OpenCode agent main container (Phase 6.2). The `OPENVOID_STUB_IMAGE`
+// env var on the Session API process overrides the default to keep the
+// Phase 5 nginx-driven lifecycle demo reproducible — see
+// `routes/sessions.ts` for the override read.
+export const OPENCODE_IMAGE = "localhost:5001/openvoid/opencode:dev";
+// Port name `agent-http` is referenced by Phase 9 routing templates.
+export const OPENCODE_AGENT_PORT = 8080;
+export const OPENCODE_AGENT_PORT_NAME = "agent-http";
+
+// `opencode-server-password` Secret — applied out-of-band, mirroring
+// Phase 4's `git-creds`. The HTTP Basic password the OpenCode server
+// requires to start (per Phase 0.3 spike). Phase 7's chart graduates
+// this to an auto-generated chart-managed Secret.
+export const OPENCODE_PASSWORD_SECRET_NAME = "opencode-server-password";
+export const OPENCODE_PASSWORD_SECRET_KEY = "password";
+
+// `opencode-auth` Secret — applied out-of-band, holds OpenCode's
+// `auth.json` content (LLM provider credentials). Mounted only on the
+// agent main container; never on `git-clone` or `git-finalizer`. The
+// mount path is fixed by the image's `ENV XDG_DATA_HOME` (Unit 6.1) so
+// the Secret target is independent of the runtime UID's $HOME — see
+// docs/spikes/2026-05-05-opencode-auth.md for the full rationale.
+export const OPENCODE_AUTH_SECRET_NAME = "opencode-auth";
+export const OPENCODE_AUTH_SECRET_KEY = "auth.json";
+export const OPENCODE_AUTH_VOLUME_NAME = "opencode-auth";
+export const OPENCODE_AUTH_MOUNT_PATH =
+  "/var/opencode-data/opencode/auth.json";
 
 export type SessionPodSpec = {
   sessionId: string;
@@ -66,6 +98,12 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
       restartPolicy: "Never",
       activeDeadlineSeconds: ACTIVE_DEADLINE_SECONDS,
       terminationGracePeriodSeconds: TERMINATION_GRACE_PERIOD_SECONDS,
+      // Defense in depth alongside Phase 8's NetworkPolicy — the agent
+      // pod must not be able to reach the K8s API. The pod has no
+      // legitimate reason to enumerate Secrets or query other resources;
+      // refusing the SA token closes the easiest path for a compromised
+      // agent to escalate.
+      automountServiceAccountToken: false,
       securityContext: {
         fsGroup: WORKSPACE_FS_GROUP,
       },
@@ -77,6 +115,21 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         {
           name: GIT_CREDS_VOLUME_NAME,
           secret: { secretName: GIT_CREDS_SECRET_NAME },
+        },
+        {
+          name: OPENCODE_AUTH_VOLUME_NAME,
+          secret: {
+            secretName: OPENCODE_AUTH_SECRET_NAME,
+            // Project only the auth.json key; defaultMode 0o400 (octal
+            // 256) so the file is readable by the runtime UID only.
+            items: [
+              {
+                key: OPENCODE_AUTH_SECRET_KEY,
+                path: OPENCODE_AUTH_SECRET_KEY,
+              },
+            ],
+            defaultMode: 0o400,
+          },
         },
       ],
       initContainers: [
@@ -137,11 +190,39 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         {
           name: "session",
           image: spec.image,
-          ports: [{ containerPort: 80 }],
+          ports: [
+            {
+              name: OPENCODE_AGENT_PORT_NAME,
+              containerPort: OPENCODE_AGENT_PORT,
+            },
+          ],
+          env: [
+            {
+              name: "OPENCODE_SERVER_PASSWORD",
+              valueFrom: {
+                secretKeyRef: {
+                  name: OPENCODE_PASSWORD_SECRET_NAME,
+                  key: OPENCODE_PASSWORD_SECRET_KEY,
+                },
+              },
+            },
+          ],
           volumeMounts: [
             {
               name: WORKSPACE_VOLUME_NAME,
               mountPath: WORKSPACE_MOUNT_PATH,
+            },
+            {
+              // The opencode-auth Secret is mounted **only** here, not
+              // on git-clone or git-finalizer. Symmetrically, git-creds
+              // is mounted only on the init+sidecar pair, not here.
+              // Each container sees only the credentials its job
+              // requires; the unit tests assert this discipline as a
+              // regression guard.
+              name: OPENCODE_AUTH_VOLUME_NAME,
+              mountPath: OPENCODE_AUTH_MOUNT_PATH,
+              subPath: OPENCODE_AUTH_SECRET_KEY,
+              readOnly: true,
             },
           ],
         },

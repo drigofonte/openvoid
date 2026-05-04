@@ -3,6 +3,7 @@ import id128 from "id128";
 import type { components } from "@openvoid/protocol";
 import {
   type PodOps,
+  OPENCODE_IMAGE,
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
@@ -14,7 +15,13 @@ type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
 type Session = components["schemas"]["Session"];
 type ApiError = components["schemas"]["ApiError"];
 
-const STUB_IMAGE = process.env.OPENVOID_STUB_IMAGE ?? "nginx:alpine";
+// Read OPENVOID_STUB_IMAGE at request time (not module load) so tests
+// can flip it via vi.stubEnv without re-importing. The Phase 5 demo
+// flow continues to set this to nginx:alpine to bypass OpenCode for
+// lifecycle-only debugging.
+function sessionImage(): string {
+  return process.env.OPENVOID_STUB_IMAGE ?? OPENCODE_IMAGE;
+}
 
 function podPhaseToSessionStatus(phase: string | undefined): Session["status"] {
   switch (phase) {
@@ -87,7 +94,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
     try {
       await podOps.createSessionPod({
         sessionId,
-        image: STUB_IMAGE,
+        image: sessionImage(),
         repo: body.repo,
         branch: body.branch,
       });
