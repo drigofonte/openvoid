@@ -2,8 +2,8 @@
 #
 # Phase 3: brings up @openvoid/session-api inside the kind-openvoid-local
 # cluster with hot-reload from services/session-api/src/. Subsequent phases
-# extend this file (operator in Phase 5, OpenCode image in Phase 6, Web UI
-# in Phase 9).
+# extend this file (git-finalizer sidecar in Phase 5, OpenCode image in
+# Phase 6, Helm chart in Phase 7, Web UI in Phase 9).
 #
 # Run: `tilt up`. The Tilt UI lands at http://localhost:10350/.
 
@@ -49,4 +49,18 @@ k8s_resource(
     "session-api",
     port_forwards=[port_forward(4000, 4000, name="http")],
     labels=["api"],
+)
+
+# Phase 5: git-finalizer native-sidecar image. Built into the kind local
+# registry so per-session Pods can pull it. The image is used at runtime
+# by Pods the Session API creates — Tilt never deploys it directly, so
+# we suppress the "unused image" warning that Tilt raises when no tracked
+# manifest references it.
+docker_build(
+    "localhost:5001/openvoid/git-finalizer:dev",
+    context="infra/images/git-finalizer",
+    dockerfile="infra/images/git-finalizer/Dockerfile",
+)
+update_settings(
+    suppress_unused_image_warnings=["localhost:5001/openvoid/git-finalizer:dev"],
 )

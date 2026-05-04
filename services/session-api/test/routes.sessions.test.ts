@@ -15,6 +15,11 @@ import {
   GIT_CLONE_IMAGE,
   GIT_CREDS_SECRET_NAME,
   GIT_CREDS_SECRET_KEY,
+  GIT_CREDS_VOLUME_NAME,
+  GIT_CREDS_MOUNT_PATH,
+  GIT_FINALIZER_CONTAINER_NAME,
+  GIT_FINALIZER_IMAGE,
+  TERMINATION_GRACE_PERIOD_SECONDS,
   DEFAULT_BRANCH,
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
@@ -178,6 +183,114 @@ describe("buildSessionPodManifest (Phase 4.3: annotations + activeDeadlineSecond
     const manifest = buildSessionPodManifest(baseSpec);
     expect(manifest.spec?.activeDeadlineSeconds).toBe(ACTIVE_DEADLINE_SECONDS);
     expect(ACTIVE_DEADLINE_SECONDS).toBe(14400);
+  });
+});
+
+describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: "nginx:alpine",
+    repo: "https://github.com/example/x",
+  };
+
+  it("declares git-finalizer as a native sidecar (initContainer with restartPolicy=Always)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const inits = manifest.spec?.initContainers ?? [];
+    const finalizer = inits.find((c) => c.name === GIT_FINALIZER_CONTAINER_NAME);
+    expect(finalizer, "git-finalizer initContainer should be present").toBeDefined();
+    // Native sidecar pattern: initContainer with restartPolicy=Always runs alongside main.
+    expect((finalizer as { restartPolicy?: string }).restartPolicy).toBe("Always");
+  });
+
+  it("keeps git-clone as a non-restarting initContainer alongside the finalizer", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const inits = manifest.spec?.initContainers ?? [];
+    const clone = inits.find((c) => c.name === GIT_CLONE_CONTAINER_NAME);
+    expect(clone).toBeDefined();
+    expect((clone as { restartPolicy?: string }).restartPolicy).toBeUndefined();
+  });
+
+  it("uses the pinned alpine/git image for the finalizer", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
+    );
+    expect(finalizer?.image).toBe(GIT_FINALIZER_IMAGE);
+  });
+
+  it("mounts the workspace volume into the finalizer at /workspace", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
+    );
+    expect(finalizer?.volumeMounts).toContainEqual({
+      name: WORKSPACE_VOLUME_NAME,
+      mountPath: "/workspace",
+    });
+  });
+
+  it("mounts the git-creds Secret into the finalizer at /etc/git-creds (read-only)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const volumes = manifest.spec?.volumes ?? [];
+    const credsVolume = volumes.find((v) => v.name === GIT_CREDS_VOLUME_NAME);
+    expect(credsVolume?.secret?.secretName).toBe(GIT_CREDS_SECRET_NAME);
+
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
+    );
+    expect(finalizer?.volumeMounts).toContainEqual({
+      name: GIT_CREDS_VOLUME_NAME,
+      mountPath: GIT_CREDS_MOUNT_PATH,
+      readOnly: true,
+    });
+  });
+
+  it("wires BRANCH (plain) and GIT_TOKEN (secretKeyRef) on the finalizer", () => {
+    const manifest = buildSessionPodManifest({ ...baseSpec, branch: "develop" });
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
+    );
+    const env = finalizer?.env ?? [];
+    expect(env.find((e) => e.name === "BRANCH")?.value).toBe("develop");
+
+    const tokenEnv = env.find((e) => e.name === "GIT_TOKEN");
+    expect(tokenEnv?.value).toBeUndefined();
+    expect(tokenEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: GIT_CREDS_SECRET_NAME,
+      key: GIT_CREDS_SECRET_KEY,
+    });
+  });
+
+  it("defaults BRANCH to `main` on the finalizer when the spec omits branch", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
+    );
+    const env = finalizer?.env ?? [];
+    expect(env.find((e) => e.name === "BRANCH")?.value).toBe(DEFAULT_BRANCH);
+  });
+
+  it("does NOT mount git-creds on the main container (credential isolation)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const main = manifest.spec?.containers?.[0];
+    const mounts = main?.volumeMounts ?? [];
+    expect(mounts.find((m) => m.name === GIT_CREDS_VOLUME_NAME)).toBeUndefined();
+    const env = main?.env ?? [];
+    expect(env.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+  });
+});
+
+describe("buildSessionPodManifest (Phase 5.2: terminationGracePeriodSeconds)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: "nginx:alpine",
+    repo: "https://github.com/example/x",
+  };
+
+  it("sets terminationGracePeriodSeconds to 180 by default", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    expect(manifest.spec?.terminationGracePeriodSeconds).toBe(TERMINATION_GRACE_PERIOD_SECONDS);
+    expect(TERMINATION_GRACE_PERIOD_SECONDS).toBe(180);
   });
 });
 

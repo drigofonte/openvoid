@@ -10,6 +10,10 @@ export const BRANCH_ANNOTATION = "openvoid.io/branch";
 export const CREATED_AT_ANNOTATION = "openvoid.io/created-at";
 
 export const ACTIVE_DEADLINE_SECONDS = 14400;
+// Sized for the slowest realistic git push over a flaky network.
+// Compass research suggests 120–300 s; 180 is a comfortable middle.
+// Graduates to a chart value in Phase 7.
+export const TERMINATION_GRACE_PERIOD_SECONDS = 180;
 
 export const WORKSPACE_VOLUME_NAME = "workspace";
 export const WORKSPACE_MOUNT_PATH = "/usr/share/nginx/html";
@@ -19,6 +23,10 @@ export const GIT_CLONE_IMAGE = "alpine/git:2.45.2";
 export const GIT_CLONE_CONTAINER_NAME = "git-clone";
 export const GIT_CREDS_SECRET_NAME = "git-creds";
 export const GIT_CREDS_SECRET_KEY = "token";
+export const GIT_CREDS_VOLUME_NAME = "git-creds";
+export const GIT_CREDS_MOUNT_PATH = "/etc/git-creds";
+export const GIT_FINALIZER_IMAGE = "localhost:5001/openvoid/git-finalizer:dev";
+export const GIT_FINALIZER_CONTAINER_NAME = "git-finalizer";
 export const DEFAULT_BRANCH = "main";
 
 export type SessionPodSpec = {
@@ -67,6 +75,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
     spec: {
       restartPolicy: "Never",
       activeDeadlineSeconds: ACTIVE_DEADLINE_SECONDS,
+      terminationGracePeriodSeconds: TERMINATION_GRACE_PERIOD_SECONDS,
       securityContext: {
         fsGroup: WORKSPACE_FS_GROUP,
       },
@@ -74,6 +83,10 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         {
           name: WORKSPACE_VOLUME_NAME,
           emptyDir: {},
+        },
+        {
+          name: GIT_CREDS_VOLUME_NAME,
+          secret: { secretName: GIT_CREDS_SECRET_NAME },
         },
       ],
       initContainers: [
@@ -98,6 +111,36 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
             {
               name: WORKSPACE_VOLUME_NAME,
               mountPath: "/workspace",
+            },
+          ],
+        },
+        // Native sidecar (Kubernetes 1.28+): an initContainer with
+        // restartPolicy=Always runs alongside the main container for the
+        // life of the Pod. On Pod termination, the kubelet SIGTERMs main
+        // first, waits for it to exit, then SIGTERMs this sidecar — giving
+        // the entrypoint trap a clean window to push pending edits.
+        {
+          name: GIT_FINALIZER_CONTAINER_NAME,
+          image: GIT_FINALIZER_IMAGE,
+          restartPolicy: "Always",
+          env: [
+            { name: "BRANCH", value: branch },
+            {
+              name: "GIT_TOKEN",
+              valueFrom: {
+                secretKeyRef: {
+                  name: GIT_CREDS_SECRET_NAME,
+                  key: GIT_CREDS_SECRET_KEY,
+                },
+              },
+            },
+          ],
+          volumeMounts: [
+            { name: WORKSPACE_VOLUME_NAME, mountPath: "/workspace" },
+            {
+              name: GIT_CREDS_VOLUME_NAME,
+              mountPath: GIT_CREDS_MOUNT_PATH,
+              readOnly: true,
             },
           ],
         },
