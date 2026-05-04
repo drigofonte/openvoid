@@ -12,7 +12,6 @@
 #
 # Requires (env):
 #   HOSTNAME    — the Pod hostname; format `session-<sessionId-lowercased>`
-#   BRANCH      — original repo default branch (used as commit message context)
 #   GIT_TOKEN   — platform PAT, projected from the `git-creds` Secret
 #
 # Mount paths:
@@ -50,7 +49,19 @@ finalize() {
   git commit -m "session $(hostname) $(date -Iseconds)" || true
 
   origin=$(git remote get-url origin)
-  auth_url=$(printf '%s' "${origin}" | sed -e "s#^https://#https://x-access-token:${GIT_TOKEN}@#")
+  # Token-inject via shell parameter expansion rather than sed: avoids any
+  # interaction between sed metacharacters and the Secret value (a future
+  # token format containing `#`, `&`, or `\` would break a sed substitution),
+  # and explicitly fails non-HTTPS remotes instead of silently no-op'ing.
+  case "${origin}" in
+    https://*)
+      auth_url="https://x-access-token:${GIT_TOKEN}@${origin#https://}"
+      ;;
+    *)
+      echo "[finalizer] origin is not HTTPS (${origin}); cannot inject token" >&2
+      return 1
+      ;;
+  esac
   branch="feat/$(session_id)"
 
   echo "[finalizer] pushing HEAD to ${branch}" >&2
@@ -75,6 +86,10 @@ finalize() {
   return 1
 }
 
+# `exit 0` is load-bearing here: a non-zero return from finalize() indicates
+# a logged push failure, but native sidecars are expected to exit cleanly so
+# the kubelet doesn't surface a misleading "container failed" status on the
+# Pod. Failure detail lives in stderr/log aggregation, not the exit code.
 trap 'finalize; exit 0' TERM INT
 
 echo "[finalizer] idle; waiting for SIGTERM" >&2

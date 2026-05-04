@@ -199,7 +199,7 @@ describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", ()
     const finalizer = inits.find((c) => c.name === GIT_FINALIZER_CONTAINER_NAME);
     expect(finalizer, "git-finalizer initContainer should be present").toBeDefined();
     // Native sidecar pattern: initContainer with restartPolicy=Always runs alongside main.
-    expect((finalizer as { restartPolicy?: string }).restartPolicy).toBe("Always");
+    expect(finalizer?.restartPolicy).toBe("Always");
   });
 
   it("keeps git-clone as a non-restarting initContainer alongside the finalizer", () => {
@@ -207,7 +207,7 @@ describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", ()
     const inits = manifest.spec?.initContainers ?? [];
     const clone = inits.find((c) => c.name === GIT_CLONE_CONTAINER_NAME);
     expect(clone).toBeDefined();
-    expect((clone as { restartPolicy?: string }).restartPolicy).toBeUndefined();
+    expect(clone?.restartPolicy).toBeUndefined();
   });
 
   it("uses the pinned alpine/git image for the finalizer", () => {
@@ -245,13 +245,12 @@ describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", ()
     });
   });
 
-  it("wires BRANCH (plain) and GIT_TOKEN (secretKeyRef) on the finalizer", () => {
-    const manifest = buildSessionPodManifest({ ...baseSpec, branch: "develop" });
+  it("wires GIT_TOKEN via secretKeyRef on the finalizer (no plain-value env)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
     const finalizer = manifest.spec?.initContainers?.find(
       (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
     );
     const env = finalizer?.env ?? [];
-    expect(env.find((e) => e.name === "BRANCH")?.value).toBe("develop");
 
     const tokenEnv = env.find((e) => e.name === "GIT_TOKEN");
     expect(tokenEnv?.value).toBeUndefined();
@@ -261,13 +260,13 @@ describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", ()
     });
   });
 
-  it("defaults BRANCH to `main` on the finalizer when the spec omits branch", () => {
-    const manifest = buildSessionPodManifest(baseSpec);
+  it("does not wire BRANCH on the finalizer (entrypoint derives the push branch from HOSTNAME)", () => {
+    const manifest = buildSessionPodManifest({ ...baseSpec, branch: "develop" });
     const finalizer = manifest.spec?.initContainers?.find(
       (c) => c.name === GIT_FINALIZER_CONTAINER_NAME,
     );
     const env = finalizer?.env ?? [];
-    expect(env.find((e) => e.name === "BRANCH")?.value).toBe(DEFAULT_BRANCH);
+    expect(env.find((e) => e.name === "BRANCH")).toBeUndefined();
   });
 
   it("does NOT mount git-creds on the main container (credential isolation)", () => {

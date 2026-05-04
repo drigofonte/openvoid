@@ -124,7 +124,6 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
           image: GIT_FINALIZER_IMAGE,
           restartPolicy: "Always",
           env: [
-            { name: "BRANCH", value: branch },
             {
               name: "GIT_TOKEN",
               valueFrom: {

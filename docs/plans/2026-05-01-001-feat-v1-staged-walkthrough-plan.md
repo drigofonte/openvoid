@@ -869,7 +869,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 > Rev 4: this phase combines what was originally Phase 7 (Workspace + Git) and Phase 8 (Commit-on-Shutdown). The workspace volume + clone init came in Phase 4; the SIGTERM-trap finalizer + idempotent push live here. This is the hardest learning unit in v1 — signal handling, PID 1 semantics, grace-period sizing, idempotency, credential safety. Plan to spend more time here than the surrounding phases.
 
-- [ ] **Unit 5.1: `git-finalizer` native sidecar — image and signal-handling shape**
+- [x] **Unit 5.1: `git-finalizer` native sidecar — image and signal-handling shape**
 
 **Goal:** A minimal `alpine/git`-based image (or just the upstream `alpine/git` directly) runs as a native sidecar (`initContainer` with `restartPolicy: Always`) inside every session pod. Its entrypoint is a shell script that traps `TERM` and runs `git add/commit/push`; until SIGTERM arrives, it idles. PID 1 forwards signals correctly.
 
@@ -920,7 +920,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 
 ---
 
-- [ ] **Unit 5.2: Idempotent push + grace-period sizing + integration test (against placeholder main)**
+- [x] **Unit 5.2: Idempotent push + grace-period sizing + integration test (against placeholder main)**
 
 **Goal:** The finalizer's push is idempotent (re-running on a session with no new edits succeeds without error; first run on edited tree creates `feat/<sessionId>`; subsequent run with new edits force-pushes or merges cleanly). `terminationGracePeriodSeconds` is sized generously for slow networks. An integration test against kind exercises the full SIGTERM cascade and verifies the branch lands on GitHub. The "edits" in this phase come from `kubectl exec` editing files in the placeholder nginx's `/usr/share/nginx/html/repo` (= `/workspace/repo` via the shared volume) — the agent isn't here yet.
 

@@ -83,20 +83,9 @@ async function waitForPodGone(sessionId: string, timeoutMs: number): Promise<voi
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      kubectl([
-        "get",
-        "pod",
-        "-n",
-        NAMESPACE,
-        `session-${sessionId.toLowerCase()}`,
-        "--ignore-not-found",
-        "-o",
-        "name",
-      ]);
-      // If the call returned without throwing AND the pod is gone, kubectl
-      // emits empty stdout; we can't easily distinguish that from a slow
-      // apiserver here without parsing. Re-poll until ignore-not-found
-      // produces empty output.
+      // --ignore-not-found makes kubectl return empty stdout (exit 0) when
+      // the pod is gone, so we poll on the trimmed output rather than
+      // catching exceptions. The catch below handles transient API errors.
       const out = kubectl([
         "get",
         "pod",
