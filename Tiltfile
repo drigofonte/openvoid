@@ -51,11 +51,21 @@ k8s_resource(
     labels=["api"],
 )
 
-# Phase 5: git-finalizer native-sidecar image. Per-session Pods reference
-# this image at runtime; Tilt never sees a tracked manifest pointing at it,
-# so `docker_build` would build but not push to the kind registry. Use a
-# `local_resource` that explicitly builds and pushes, so the image is
-# available regardless of what Tilt tracks.
+# Per-session Pod images. Tilt never sees a tracked manifest pointing at
+# these (the Session API creates per-session Pods dynamically, so the only
+# references are at runtime). `docker_build` would therefore build but not
+# push to the kind registry, leaving Pods in Init:ImagePullBackOff. Use a
+# `local_resource` per image that explicitly builds and pushes.
+local_resource(
+    "git-clone-image",
+    cmd=" && ".join([
+        "docker build -t localhost:5001/openvoid/git-clone:dev infra/images/git-clone",
+        "docker push localhost:5001/openvoid/git-clone:dev",
+    ]),
+    deps=["infra/images/git-clone"],
+    labels=["images"],
+)
+
 local_resource(
     "git-finalizer-image",
     cmd=" && ".join([

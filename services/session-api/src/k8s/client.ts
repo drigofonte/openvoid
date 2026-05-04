@@ -19,7 +19,7 @@ export const WORKSPACE_VOLUME_NAME = "workspace";
 export const WORKSPACE_MOUNT_PATH = "/usr/share/nginx/html";
 export const WORKSPACE_FS_GROUP = 65533;
 
-export const GIT_CLONE_IMAGE = "alpine/git:2.45.2";
+export const GIT_CLONE_IMAGE = "localhost:5001/openvoid/git-clone:dev";
 export const GIT_CLONE_CONTAINER_NAME = "git-clone";
 export const GIT_CREDS_SECRET_NAME = "git-creds";
 export const GIT_CREDS_SECRET_KEY = "token";
@@ -42,16 +42,6 @@ export interface PodOps {
   getSessionPod(sessionId: string): Promise<V1Pod | null>;
   deleteSessionPod(sessionId: string): Promise<boolean>;
 }
-
-const GIT_CLONE_SCRIPT = [
-  "set -eu",
-  "host_and_path=$(printf '%s' \"$REPO_URL\" | sed -E 's#^https?://##')",
-  'auth_url="https://x-access-token:${GIT_TOKEN}@${host_and_path}"',
-  'git clone --branch "$BRANCH" "$auth_url" /workspace/repo',
-  'git -C /workspace/repo remote set-url origin "$REPO_URL"',
-  'git -C /workspace/repo config user.email "agent@openvoid.local"',
-  'git -C /workspace/repo config user.name "openvoid agent"',
-].join("\n");
 
 export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
   const branch = spec.branch ?? DEFAULT_BRANCH;
@@ -93,7 +83,6 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         {
           name: GIT_CLONE_CONTAINER_NAME,
           image: GIT_CLONE_IMAGE,
-          command: ["/bin/sh", "-c", GIT_CLONE_SCRIPT],
           env: [
             { name: "REPO_URL", value: spec.repo },
             { name: "BRANCH", value: branch },

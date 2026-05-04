@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import type { V1Pod } from "@kubernetes/client-node";
 import { sessionsRouter } from "../src/routes/sessions.js";
 import {
@@ -132,20 +135,43 @@ describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => 
     expect(mounts).toContainEqual({ name: WORKSPACE_VOLUME_NAME, mountPath: "/workspace" });
   });
 
-  it("injects the token only at clone time and strips it from the persisted remote", () => {
+  it("does not override the image's ENTRYPOINT — git-clone container ships the script", () => {
     const manifest = buildSessionPodManifest(baseSpec);
-    const cmd = manifest.spec?.initContainers?.[0]?.command ?? [];
-    const script = cmd[cmd.length - 1] ?? "";
-    expect(script).toContain("x-access-token:${GIT_TOKEN}");
-    expect(script).toContain("git -C /workspace/repo remote set-url origin");
-    // The clone URL is built per-invocation, never persisted to .git/config
-    expect(script).not.toMatch(/\.git\/config.*GIT_TOKEN/);
+    const init = manifest.spec?.initContainers?.[0];
+    // The custom image (infra/images/git-clone/) bakes the script in as
+    // ENTRYPOINT. Setting `command` here would shadow it.
+    expect(init?.command).toBeUndefined();
+    expect(init?.args).toBeUndefined();
   });
 
   it("does not expose GIT_TOKEN to the main container", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const mainEnv = manifest.spec?.containers?.[0]?.env ?? [];
     expect(mainEnv.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+  });
+});
+
+describe("git-clone image script (infra/images/git-clone/clone.sh)", () => {
+  // The script lives in the image now (not in the manifest), so these are
+  // file-content regression guards against the same risks the inline
+  // version used to assert: token injection only at clone time, and an
+  // explicit token-stripping `remote set-url` so the PAT never lands in
+  // .git/config.
+  const script = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/git-clone/clone.sh",
+    ),
+    "utf8",
+  );
+
+  it("injects the token into the clone URL via the GIT_TOKEN env var", () => {
+    expect(script).toContain("x-access-token:${GIT_TOKEN}");
+  });
+
+  it("rewrites origin to the clean REPO_URL after cloning (token never lands in .git/config)", () => {
+    expect(script).toMatch(/git -C \/workspace\/repo remote set-url origin "\$REPO_URL"/);
+    expect(script).not.toMatch(/\.git\/config.*GIT_TOKEN/);
   });
 });
 
