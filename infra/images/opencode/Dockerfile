@@ -49,9 +49,16 @@ ENV HOME=/var/opencode-data \
     XDG_DATA_HOME=/var/opencode-data \
     XDG_CONFIG_HOME=/var/opencode-config
 
-# Bring across the installed package tree and surface the wrapper on PATH.
+# Bring across the installed package tree and surface the platform
+# binary on PATH. We deliberately bypass the `opencode-ai` JS wrapper
+# (which would be at node_modules/.bin/opencode) and symlink straight
+# to the bun-compiled musl binary — the wrapper's `spawnSync` keeps
+# `node` as PID 1 and does not forward SIGTERM to the child opencode
+# process, which breaks the Phase 5 SIGTERM cascade (kubelet → main
+# → finalizer). With a direct symlink, the binary itself becomes
+# PID 1 and receives SIGTERM directly.
 COPY --from=builder /opt/opencode/node_modules /opt/opencode/node_modules
-RUN ln -s /opt/opencode/node_modules/.bin/opencode /usr/local/bin/opencode
+RUN ln -sf "$(find /opt/opencode/node_modules -path '*linux-*-musl/bin/opencode' -type f | head -1)" /usr/local/bin/opencode
 
 # Baked-in config and entrypoint.
 COPY opencode.json /var/opencode-config/opencode/opencode.json
@@ -75,9 +82,11 @@ WORKDIR /workspace/repo
 EXPOSE 8080
 USER 1000
 
-# `exec` (in entrypoint.sh) is load-bearing: the binary must be PID 1 to
-# receive SIGTERM directly. Without it, the Phase 5 SIGTERM cascade
-# would not reach OpenCode and the finalizer's grace window would close
-# before the agent finished writing.
+# entrypoint.sh stays PID 1 and traps SIGTERM, forwarding it to the
+# `opencode serve` child. OpenCode's binary does not install a SIGTERM
+# handler, so as PID 1 it ignores SIGTERM (Linux's PID-1 special case)
+# and the kubelet's grace-window expiration is the only thing that
+# stops the container — too late for the Phase 5 finalizer cascade.
+# As a non-PID-1 child it honours the default Terminate disposition.
 ENTRYPOINT ["/usr/local/bin/opencode-entrypoint"]
 CMD []

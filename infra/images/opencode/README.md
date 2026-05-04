@@ -15,7 +15,7 @@ cross-platform parity matrix.
 | **Health** | `GET /global/health` returns `{"healthy": true, "version": "<v>"}`. |
 | **Auth** | HTTP Basic. Username `opencode` (default), password from `OPENCODE_SERVER_PASSWORD`. |
 | **WORKDIR** | `/workspace/repo` — the cloned repository (mounted at runtime by the Phase 4 emptyDir + git-clone init). |
-| **PID 1** | The `opencode` binary itself, via `exec` in the entrypoint script. |
+| **PID 1** | The entrypoint shell (`opencode-entrypoint`). It backgrounds `opencode serve` and traps SIGTERM, forwarding it to the child — naïvely `exec`ing into the binary leaves OpenCode as PID 1 where Linux's PID-1 default-terminate filtering blocks SIGTERM (OpenCode does not install a handler), so the kubelet's Phase 5 SIGTERM cascade would only land on SIGKILL after the grace period. |
 | **User** | UID 1000 by default; the image is also SCC-friendly (any random UID with GID 0 can write the directories the agent needs). |
 
 ## Required environment

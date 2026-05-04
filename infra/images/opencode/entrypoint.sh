@@ -1,11 +1,18 @@
 #!/bin/sh
 # opencode-entrypoint — OpenCode agent main-container entrypoint.
 #
-# Validates required env, then `exec`s `opencode serve` so the binary
-# becomes PID 1 and receives SIGTERM directly. Without `exec`, the
-# Phase 5 SIGTERM cascade (kubelet → main → finalizer) would not reach
-# OpenCode and the finalizer's grace window would close while the agent
-# was still mid-write.
+# Acts as a tiny init: stays PID 1, runs `opencode serve` as a child,
+# and forwards SIGTERM to it on container shutdown. Naive `exec` into
+# `opencode serve` does not work — the OpenCode binary does not
+# install a SIGTERM handler, and Linux ignores default-terminate
+# signals to PID 1, so the kubelet's SIGTERM during the Phase 5
+# cascade (kubelet → main → finalizer) lands on a process that does
+# nothing with it and the container only exits on SIGKILL after the
+# grace period. With this script as PID 1, SIGTERM goes to the shell,
+# the trap forwards it to the child opencode process (which is not
+# PID 1 and so honours the default Terminate disposition), and the
+# container exits cleanly within seconds — long before the
+# finalizer's grace window expires.
 #
 # Requires (env):
 #   OPENCODE_SERVER_PASSWORD — HTTP Basic auth password for the
@@ -37,4 +44,12 @@ if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
   exit 1
 fi
 
-exec opencode serve --hostname 0.0.0.0 --port 8080
+opencode serve --hostname 0.0.0.0 --port 8080 &
+CHILD=$!
+
+# `kill -TERM` is the load-bearing line: opencode does not catch
+# SIGTERM as PID 1 (Linux's PID-1 special case), but as a non-PID-1
+# child it terminates on the default disposition.
+trap 'kill -TERM "$CHILD" 2>/dev/null; wait "$CHILD"' TERM INT
+
+wait "$CHILD"
