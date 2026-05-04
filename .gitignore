@@ -1,3 +1,6 @@
+# Custom
+.ignore
+
 # Node / TypeScript
 node_modules/
 dist/
