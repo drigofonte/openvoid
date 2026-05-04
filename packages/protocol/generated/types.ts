@@ -32,7 +32,7 @@ export interface paths {
         get: operations["Sessions_read"];
         put?: never;
         post?: never;
-        /** @description Delete a session. Operator finalizer handles graceful shutdown. */
+        /** @description Delete a session. Triggers Pod termination; the per-Pod git-finalizer sidecar pushes any edits to feat/<sessionId> during the grace period before exit. */
         delete: operations["Sessions_remove"];
         options?: never;
         head?: never;

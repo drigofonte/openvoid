@@ -53,7 +53,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     delete:
       operationId: Sessions_remove
-      description: Delete a session. Operator finalizer handles graceful shutdown.
+      description: Delete a session. Triggers Pod termination; the per-Pod git-finalizer sidecar pushes any edits to feat/<sessionId> during the grace period before exit.
       parameters:
         - name: id
           in: path

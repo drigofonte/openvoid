@@ -2,8 +2,8 @@
 #
 # Phase 3: brings up @openvoid/session-api inside the kind-openvoid-local
 # cluster with hot-reload from services/session-api/src/. Subsequent phases
-# extend this file (operator in Phase 5, OpenCode image in Phase 6, Web UI
-# in Phase 9).
+# extend this file (git-finalizer sidecar in Phase 5, OpenCode image in
+# Phase 6, Helm chart in Phase 7, Web UI in Phase 9).
 #
 # Run: `tilt up`. The Tilt UI lands at http://localhost:10350/.
 
@@ -49,4 +49,29 @@ k8s_resource(
     "session-api",
     port_forwards=[port_forward(4000, 4000, name="http")],
     labels=["api"],
+)
+
+# Per-session Pod images. Tilt never sees a tracked manifest pointing at
+# these (the Session API creates per-session Pods dynamically, so the only
+# references are at runtime). `docker_build` would therefore build but not
+# push to the kind registry, leaving Pods in Init:ImagePullBackOff. Use a
+# `local_resource` per image that explicitly builds and pushes.
+local_resource(
+    "git-clone-image",
+    cmd=" && ".join([
+        "docker build -t localhost:5001/openvoid/git-clone:dev infra/images/git-clone",
+        "docker push localhost:5001/openvoid/git-clone:dev",
+    ]),
+    deps=["infra/images/git-clone"],
+    labels=["images"],
+)
+
+local_resource(
+    "git-finalizer-image",
+    cmd=" && ".join([
+        "docker build -t localhost:5001/openvoid/git-finalizer:dev infra/images/git-finalizer",
+        "docker push localhost:5001/openvoid/git-finalizer:dev",
+    ]),
+    deps=["infra/images/git-finalizer"],
+    labels=["images"],
 )

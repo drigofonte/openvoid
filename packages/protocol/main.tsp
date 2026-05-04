@@ -77,7 +77,7 @@ namespace Sessions {
   op read(@path id: string): Session | ApiError;
 
   @delete
-  @doc("Delete a session. Operator finalizer handles graceful shutdown.")
+  @doc("Delete a session. Triggers Pod termination; the per-Pod git-finalizer sidecar pushes any edits to feat/<sessionId> during the grace period before exit.")
   op remove(@path id: string): {
     @statusCode statusCode: 204;
   } | ApiError;
