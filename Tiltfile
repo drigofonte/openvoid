@@ -51,16 +51,17 @@ k8s_resource(
     labels=["api"],
 )
 
-# Phase 5: git-finalizer native-sidecar image. Built into the kind local
-# registry so per-session Pods can pull it. The image is used at runtime
-# by Pods the Session API creates — Tilt never deploys it directly, so
-# we suppress the "unused image" warning that Tilt raises when no tracked
-# manifest references it.
-docker_build(
-    "localhost:5001/openvoid/git-finalizer:dev",
-    context="infra/images/git-finalizer",
-    dockerfile="infra/images/git-finalizer/Dockerfile",
-)
-update_settings(
-    suppress_unused_image_warnings=["localhost:5001/openvoid/git-finalizer:dev"],
+# Phase 5: git-finalizer native-sidecar image. Per-session Pods reference
+# this image at runtime; Tilt never sees a tracked manifest pointing at it,
+# so `docker_build` would build but not push to the kind registry. Use a
+# `local_resource` that explicitly builds and pushes, so the image is
+# available regardless of what Tilt tracks.
+local_resource(
+    "git-finalizer-image",
+    cmd=" && ".join([
+        "docker build -t localhost:5001/openvoid/git-finalizer:dev infra/images/git-finalizer",
+        "docker push localhost:5001/openvoid/git-finalizer:dev",
+    ]),
+    deps=["infra/images/git-finalizer"],
+    labels=["images"],
 )
