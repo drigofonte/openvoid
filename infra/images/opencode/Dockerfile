@@ -49,6 +49,17 @@ ENV HOME=/var/opencode-data \
     XDG_DATA_HOME=/var/opencode-data \
     XDG_CONFIG_HOME=/var/opencode-config
 
+# Most Node frameworks read at least one of HOST / HOSTNAME / BIND when
+# choosing their dev-server bind address. Pinning all three to 0.0.0.0
+# means Next.js, Express, and many smaller frameworks default to
+# pod-reachable bindings without per-session intervention from the
+# agent. Vite ignores all three and needs `--host` explicitly — covered
+# in the dev-server-bind.md instructions file referenced from
+# opencode.json.
+ENV HOST=0.0.0.0 \
+    HOSTNAME=0.0.0.0 \
+    BIND=0.0.0.0
+
 # Bring across the installed package tree and surface the platform
 # binary on PATH. We deliberately bypass the `opencode-ai` JS wrapper
 # (which would be at node_modules/.bin/opencode) and symlink straight
@@ -61,10 +72,13 @@ COPY --from=builder /opt/opencode/node_modules /opt/opencode/node_modules
 RUN ln -sf "$(find /opt/opencode/node_modules -path '*linux-*-musl/bin/opencode' -type f | head -1)" /usr/local/bin/opencode \
  && opencode --version
 
-# Baked-in config and entrypoint. The `node -e` validates the JSON
+# Baked-in config + instructions. The `node -e` validates the JSON
 # syntax at build time so a malformed opencode.json fails the build
-# rather than crashing the agent at first boot.
+# rather than crashing the agent at first boot. The instructions/
+# directory holds image-level rules that apply to every session
+# (currently: bind dev servers to 0.0.0.0 so the preview ingress works).
 COPY opencode.json /var/opencode-config/opencode/opencode.json
+COPY instructions /var/opencode-config/opencode/instructions
 RUN node -e 'JSON.parse(require("fs").readFileSync("/var/opencode-config/opencode/opencode.json","utf8"))'
 COPY entrypoint.sh /usr/local/bin/opencode-entrypoint
 RUN chmod +x /usr/local/bin/opencode-entrypoint
