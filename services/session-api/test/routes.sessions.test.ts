@@ -708,8 +708,11 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions/x");
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toEqual({ sessionId: "x", status: "Running" });
+      // endpointUrl depends on podIP and is omitted; agent/preview URLs
+      // depend only on status=Running and are present (Unit 7.3).
       expect(body).not.toHaveProperty("endpointUrl");
+      expect(body.sessionId).toBe("x");
+      expect(body.status).toBe("Running");
     });
 
     it("returns 404 when the pod does not exist", async () => {
@@ -718,6 +721,40 @@ describe("sessionsRouter", () => {
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.code).toBe("not_found");
+    });
+
+    it("populates agentUrl and previewUrl when status is Running (Unit 7.3)", async () => {
+      ops.getSessionPod.mockResolvedValueOnce(podWith("Running", "10.244.0.5"));
+      const res = await app.request("/sessions/01HABCDEF");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.agentUrl).toBe("http://01habcdef.agent.127.0.0.1.nip.io/");
+      expect(body.previewUrl).toBe("http://01habcdef.preview.127.0.0.1.nip.io/");
+    });
+
+    it("omits agentUrl / previewUrl when status is not Running (Unit 7.3)", async () => {
+      // Pending → no URL surfaced (routing isn't ready).
+      for (const phase of ["Pending", "Unknown", "Failed", "Succeeded"]) {
+        ops.getSessionPod.mockResolvedValueOnce(podWith(phase));
+        const res = await app.request("/sessions/x");
+        const body = await res.json();
+        expect(body, `phase=${phase}`).not.toHaveProperty("agentUrl");
+        expect(body, `phase=${phase}`).not.toHaveProperty("previewUrl");
+      }
+    });
+
+    it("respects OPENVOID_DOMAIN_BASE + OPENVOID_URL_SCHEME for URL synthesis (Unit 7.3)", async () => {
+      vi.stubEnv("OPENVOID_DOMAIN_BASE", "foo.example.com");
+      vi.stubEnv("OPENVOID_URL_SCHEME", "https");
+      try {
+        ops.getSessionPod.mockResolvedValueOnce(podWith("Running", "10.244.0.5"));
+        const res = await app.request("/sessions/01HABCDEF");
+        const body = await res.json();
+        expect(body.agentUrl).toBe("https://01habcdef.agent.foo.example.com/");
+        expect(body.previewUrl).toBe("https://01habcdef.preview.foo.example.com/");
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it("populates repo, branch, createdAt from pod annotations", async () => {

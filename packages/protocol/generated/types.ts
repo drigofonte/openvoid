@@ -74,6 +74,16 @@ export interface components {
             status: components["schemas"]["SessionPhase"];
             /** @description Reachable URL of the agent (when status is Running). Empty until Phase 5/6. */
             endpointUrl?: string;
+            /**
+             * Format: uri
+             * @description Public URL of the OpenCode agent UI. Populated when status is Running. Edge auth-injection means the link Just Works in a browser — no password prompt.
+             */
+            agentUrl?: string;
+            /**
+             * Format: uri
+             * @description Public URL of the user's live preview (typically port 3000). Populated when status is Running. Unauthenticated — anyone with the URL can reach the user's app.
+             */
+            previewUrl?: string;
             /** @description Git URL of the workspace cloned at session start. */
             repo?: string;
             /** @description Branch checked out at session start. */

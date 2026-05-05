@@ -7,6 +7,8 @@ import {
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
+  agentUrl,
+  previewUrl,
 } from "../k8s/client.js";
 
 const { Ulid } = id128;
@@ -130,6 +132,16 @@ export function sessionsRouter(sessionOps: SessionOps): Hono {
     };
     const ip = pod.status?.podIP;
     if (ip) session.endpointUrl = `http://${ip}`;
+
+    // Surface the public URLs once the pod is Running. Until then the
+    // routing isn't ready (Service has no endpoints, ingress-nginx may
+    // not have programmed the hosts yet) — better to omit the fields
+    // than to hand the landing page links that 502 for the first few
+    // seconds.
+    if (session.status === "Running") {
+      session.agentUrl = agentUrl(sessionId);
+      session.previewUrl = previewUrl(sessionId);
+    }
 
     const annotations = pod.metadata?.annotations ?? {};
     const repo = annotations[REPO_ANNOTATION];

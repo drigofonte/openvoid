@@ -89,6 +89,17 @@ spec:
           env:
             - name: PORT
               value: "4000"
+            # Phase 7: env-driven routing config. kind defaults are
+            # baked into client.ts/server.ts but setting them
+            # explicitly here keeps the values visible at the manifest
+            # level — DOKS (Phase 8) and Helm (Phase 9) only need to
+            # override the values, not introduce them.
+            - name: OPENVOID_DOMAIN_BASE
+              value: "127.0.0.1.nip.io"
+            - name: OPENVOID_URL_SCHEME
+              value: "http"
+            - name: OPENVOID_LANDING_ORIGIN
+              value: "http://app.127.0.0.1.nip.io"
           readinessProbe:
             httpGet:
               path: /healthz

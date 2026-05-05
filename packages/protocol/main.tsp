@@ -43,6 +43,12 @@ model Session {
   @doc("Reachable URL of the agent (when status is Running). Empty until Phase 5/6.")
   endpointUrl?: string;
 
+  @doc("Public URL of the OpenCode agent UI. Populated when status is Running. Edge auth-injection means the link Just Works in a browser — no password prompt.")
+  agentUrl?: url;
+
+  @doc("Public URL of the user's live preview (typically port 3000). Populated when status is Running. Unauthenticated — anyone with the URL can reach the user's app.")
+  previewUrl?: url;
+
   @doc("Git URL of the workspace cloned at session start.")
   repo?: string;
 
