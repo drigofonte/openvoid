@@ -85,7 +85,10 @@ describe("buildSessionPodManifest (Phase 4.1: workspace volume + fsGroup)", () =
     const volumes = manifest.spec?.volumes ?? [];
     const workspace = volumes.find((v) => v.name === WORKSPACE_VOLUME_NAME);
     expect(workspace, "workspace volume should be declared").toBeDefined();
-    expect(workspace?.emptyDir).toEqual({});
+    // Phase 7 follow-up: the emptyDir gains a sizeLimit cap. Asserted
+    // in detail in the resource-budget describe block; the original
+    // intent here is just "this is an emptyDir, not a PVC".
+    expect(workspace?.emptyDir).toBeDefined();
   });
 
   it("mounts the workspace volume on the main container", () => {
@@ -453,6 +456,38 @@ describe("buildSessionPodManifest (Phase 6.2: OpenCode main container + Secrets)
     expect(env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD")).toBeDefined();
     const mounts = manifest.spec?.containers?.[0]?.volumeMounts ?? [];
     expect(mounts.find((m) => m.name === OPENCODE_AUTH_VOLUME_NAME)).toBeDefined();
+  });
+});
+
+describe("buildSessionPodManifest (Phase 7 follow-up: per-session resource budget)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/example/x",
+  };
+
+  it("caps the workspace emptyDir at 10Gi (prevents node-disk exhaustion)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const workspace = manifest.spec?.volumes?.find(
+      (v) => v.name === WORKSPACE_VOLUME_NAME,
+    );
+    expect(workspace?.emptyDir?.sizeLimit).toBe("10Gi");
+  });
+
+  it("gives the main session container Guaranteed-QoS memory (request === limit === 1Gi) and a 1-vCPU cap", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const main = manifest.spec?.containers?.[0];
+    expect(main?.resources?.requests).toEqual({ cpu: "100m", memory: "1Gi" });
+    expect(main?.resources?.limits).toEqual({ cpu: "1000m", memory: "1Gi" });
+  });
+
+  it("sets small bounded resources on git-clone and git-finalizer (they're idle most of the time)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const inits = manifest.spec?.initContainers ?? [];
+    for (const init of inits) {
+      expect(init.resources?.limits?.memory, init.name).toBe("128Mi");
+      expect(init.resources?.limits?.cpu, init.name).toBe("200m");
+    }
   });
 });
 

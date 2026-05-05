@@ -23,7 +23,33 @@ export const ACTIVE_DEADLINE_SECONDS = 14400;
 // Graduates to a chart value in Phase 7.
 export const TERMINATION_GRACE_PERIOD_SECONDS = 180;
 
+// Per-session resource budget. Sized for a single OpenCode agent + the
+// user's dev server in the same container.
+//
+// Picked after the kind control-plane OOM during a Phase 7 demo:
+// without limits, multiple long-running sessions drift up until Docker
+// Desktop's memory cap kicks in and the API server briefly disappears.
+// Matched memory request and limit gives the pod Guaranteed QoS so the
+// kubelet protects it last when the node is pressured. Graduates to
+// chart values (`session.resources.*`) in Phase 9.
+export const SESSION_CPU_REQUEST = "100m";
+export const SESSION_CPU_LIMIT = "1000m";
+export const SESSION_MEMORY_REQUEST = "1Gi";
+export const SESSION_MEMORY_LIMIT = "1Gi";
+
+// Init container (clone) and sidecar (finalizer) are short-lived or
+// near-idle most of the time; small budgets are plenty.
+export const SESSION_INIT_CPU_REQUEST = "50m";
+export const SESSION_INIT_CPU_LIMIT = "200m";
+export const SESSION_INIT_MEMORY_REQUEST = "64Mi";
+export const SESSION_INIT_MEMORY_LIMIT = "128Mi";
+
+// Workspace emptyDir cap. A user might pull a chunky repo or have the
+// agent build a sizeable artifact tree; 10Gi keeps the per-session
+// disk footprint bounded. K8s evicts the pod if the volume grows past
+// the limit (a clean failure mode rather than node-disk exhaustion).
 export const WORKSPACE_VOLUME_NAME = "workspace";
+export const WORKSPACE_SIZE_LIMIT = "10Gi";
 // Mount path on the agent main container. Matches OpenCode's WORKDIR
 // (/workspace/repo) so the agent's cwd is the cloned repo. The
 // initContainer (git-clone) and sidecar (git-finalizer) mount the same
@@ -235,7 +261,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
       volumes: [
         {
           name: WORKSPACE_VOLUME_NAME,
-          emptyDir: {},
+          emptyDir: { sizeLimit: WORKSPACE_SIZE_LIMIT },
         },
         {
           name: GIT_CREDS_VOLUME_NAME,
@@ -261,6 +287,16 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         {
           name: GIT_CLONE_CONTAINER_NAME,
           image: GIT_CLONE_IMAGE,
+          resources: {
+            requests: {
+              cpu: SESSION_INIT_CPU_REQUEST,
+              memory: SESSION_INIT_MEMORY_REQUEST,
+            },
+            limits: {
+              cpu: SESSION_INIT_CPU_LIMIT,
+              memory: SESSION_INIT_MEMORY_LIMIT,
+            },
+          },
           env: [
             { name: "REPO_URL", value: spec.repo },
             { name: "BRANCH", value: branch },
@@ -290,6 +326,16 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
           name: GIT_FINALIZER_CONTAINER_NAME,
           image: GIT_FINALIZER_IMAGE,
           restartPolicy: "Always",
+          resources: {
+            requests: {
+              cpu: SESSION_INIT_CPU_REQUEST,
+              memory: SESSION_INIT_MEMORY_REQUEST,
+            },
+            limits: {
+              cpu: SESSION_INIT_CPU_LIMIT,
+              memory: SESSION_INIT_MEMORY_LIMIT,
+            },
+          },
           env: [
             {
               name: "GIT_TOKEN",
@@ -315,6 +361,16 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         {
           name: "session",
           image: spec.image,
+          resources: {
+            requests: {
+              cpu: SESSION_CPU_REQUEST,
+              memory: SESSION_MEMORY_REQUEST,
+            },
+            limits: {
+              cpu: SESSION_CPU_LIMIT,
+              memory: SESSION_MEMORY_LIMIT,
+            },
+          },
           ports: [
             {
               name: OPENCODE_AGENT_PORT_NAME,
