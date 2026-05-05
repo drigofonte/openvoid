@@ -1,14 +1,29 @@
 ---
 title: "feat: v1 staged walkthrough — coding-session lifecycle proof"
 type: feat
-status: active
+status: superseded-for-active-work
 date: 2026-05-01
 revision: 6
 origin: docs/brainstorms/2026-05-01-monorepo-layout-requirements.md
 deepened: 2026-05-05
+phases_complete: [0, 1, 2, 3, 4, 5, 6, 7]
+active_work_in:
+  - docs/plans/2026-05-05-001-feat-v1-production-readiness-plan.md
+  - docs/plans/2026-05-05-002-feat-landing-page-redesign-plan.md
 ---
 
 # v1 Staged Walkthrough — Coding-Session Lifecycle Proof
+
+> **📌 Active scope has split out of this document as of 2026-05-05.**
+>
+> Phases 0–7 are complete and shipped. The implementation units below for those phases retain their original detail and remain the historical record (decisions, rev history, threat model, parity matrix, key technical choices — read here for *why*).
+>
+> **Active work for the remaining v1 milestone tracks in two companion plans:**
+>
+> - **Phases 8 → 10 (DOKS public deploy, Helm + CI + ArgoCD, safety rails):** [`2026-05-05-001-feat-v1-production-readiness-plan.md`](2026-05-05-001-feat-v1-production-readiness-plan.md)
+> - **Landing page UX rewrite (Remix-based replacement of the throwaway vanilla-TS landing):** [`2026-05-05-002-feat-landing-page-redesign-plan.md`](2026-05-05-002-feat-landing-page-redesign-plan.md)
+>
+> The Phase 8 / 9 / 10 implementation units further down in this document are **lifted into the production-readiness plan verbatim** and are tracked there now. The copies below are kept for completeness of the rev-6 historical snapshot. If you find a discrepancy, the production-readiness plan is authoritative for active scope; this document is authoritative for *why* a decision was made.
 
 ## Overview
 
