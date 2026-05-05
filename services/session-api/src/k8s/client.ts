@@ -608,25 +608,47 @@ export class K8sSessionOps implements SessionOps {
       podOwner: owner,
     };
 
-    // Step 2: Service.
-    const service = await this.core.createNamespacedService({
-      namespace: SESSION_NAMESPACE,
-      body: buildSessionService(spec, owner),
-    });
+    // Steps 2–4 are wrapped in a rollback try/catch. Without this, a
+    // failure on Service or either Ingress creation leaves the Pod we
+    // just created consuming resources for `activeDeadlineSeconds`
+    // (4h) before the kubelet failsafe reaps it. The Service / agent
+    // Ingress / preview Ingress all carry ownerReferences pointing at
+    // the Pod, so deleting the Pod cascades to whichever ones already
+    // got created — best-effort, swallow non-fatal cleanup errors.
+    try {
+      // Step 2: Service.
+      const service = await this.core.createNamespacedService({
+        namespace: SESSION_NAMESPACE,
+        body: buildSessionService(spec, owner),
+      });
 
-    // Step 3: two Ingresses — agent (with auth-injection snippet),
-    // preview (no auth). Order doesn't matter functionally; sequential
-    // for clear error attribution.
-    const agentIngress = await this.networking.createNamespacedIngress({
-      namespace: SESSION_NAMESPACE,
-      body: buildSessionAgentIngress(spec, opts),
-    });
-    const previewIngress = await this.networking.createNamespacedIngress({
-      namespace: SESSION_NAMESPACE,
-      body: buildSessionPreviewIngress(spec, opts),
-    });
+      // Step 3: two Ingresses — agent (with auth-injection snippet),
+      // preview (no auth). Order doesn't matter functionally; sequential
+      // for clear error attribution.
+      const agentIngress = await this.networking.createNamespacedIngress({
+        namespace: SESSION_NAMESPACE,
+        body: buildSessionAgentIngress(spec, opts),
+      });
+      const previewIngress = await this.networking.createNamespacedIngress({
+        namespace: SESSION_NAMESPACE,
+        body: buildSessionPreviewIngress(spec, opts),
+      });
 
-    return { pod, service, agentIngress, previewIngress };
+      return { pod, service, agentIngress, previewIngress };
+    } catch (err) {
+      if (pod.metadata?.name) {
+        try {
+          await this.core.deleteNamespacedPod({
+            name: pod.metadata.name,
+            namespace: SESSION_NAMESPACE,
+          });
+        } catch {
+          // Best-effort. The original create error is what we surface
+          // to the caller; failing the rollback shouldn't shadow it.
+        }
+      }
+      throw err;
+    }
   }
 
   async getSessionPod(sessionId: string): Promise<V1Pod | null> {
@@ -664,7 +686,13 @@ export class K8sSessionOps implements SessionOps {
     await swallow404(
       this.core.deleteNamespacedService({ name, namespace: SESSION_NAMESPACE }),
     );
-    await this.core.deleteNamespacedPod({ name, namespace: SESSION_NAMESPACE });
+    // Pod delete must also tolerate a concurrent GC / external delete that
+    // already removed the Pod between getSessionPod and here; otherwise the
+    // route surfaces 503 on what is, from the user's perspective, a
+    // successful "make this gone" outcome.
+    await swallow404(
+      this.core.deleteNamespacedPod({ name, namespace: SESSION_NAMESPACE }),
+    );
     return true;
   }
 }
