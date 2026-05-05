@@ -16,6 +16,10 @@ allow_k8s_contexts("kind-openvoid-local")
 # the Session API. Tilt watches the file and re-applies on edits.
 k8s_yaml("infra/local/session-api.yaml")
 
+# Phase 7: landing page Deployment + Service + Ingress, plus an Ingress
+# in front of the Session API at api.127.0.0.1.nip.io.
+k8s_yaml("infra/local/landing.yaml")
+
 # Build the dev image straight from the repo root so the workspace context
 # (root package.json, pnpm-lock.yaml, packages/protocol, services/session-api)
 # is all available to the build.
@@ -49,6 +53,34 @@ k8s_resource(
     "session-api",
     port_forwards=[port_forward(4000, 4000, name="http")],
     labels=["api"],
+)
+
+# Phase 7 landing page. Built from the workspace root the same way as
+# session-api so the build context can see the @openvoid/protocol
+# package. The kind ingress at app.127.0.0.1.nip.io is what end users
+# hit; the port_forward is a convenience for direct dev hits without
+# the ingress in the loop.
+docker_build(
+    "localhost:5001/openvoid/landing:dev",
+    context=".",
+    dockerfile="services/landing/Dockerfile",
+    only=[
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "turbo.json",
+        "packages/protocol",
+        "services/landing",
+    ],
+    build_args={
+        "VITE_OPENVOID_API_URL": "http://api.127.0.0.1.nip.io",
+    },
+)
+
+k8s_resource(
+    "landing",
+    port_forwards=[port_forward(8080, 80, name="http")],
+    labels=["ui"],
 )
 
 # Per-session Pod images. Tilt never sees a tracked manifest pointing at

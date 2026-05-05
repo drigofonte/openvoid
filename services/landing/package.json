@@ -1,0 +1,23 @@
+{
+  "name": "@openvoid/landing",
+  "version": "0.0.0",
+  "private": true,
+  "description": "openvoid landing page — single static page that drives the Session API. Phase 7 stop-gap; replaced by the long-term front-end after v1.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@openvoid/protocol": "workspace:*",
+    "@types/node": "22.12.0",
+    "happy-dom": "16.7.2",
+    "typescript": "5.7.2",
+    "vite": "6.0.7",
+    "vitest": "4.1.5"
+  }
+}
