@@ -19,6 +19,24 @@ name: openvoid-local
 
 nodes:
   - role: control-plane
+    # `ingress-ready=true` is the node label ingress-nginx pins onto via
+    # nodeSelector (see infra/local/ingress-nginx-values.yaml). Combined
+    # with extraPortMappings below and the controller's hostPort:enabled
+    # values, the host reaches the cluster ingress at http://127.0.0.1/.
+    # Pattern from kind.sigs.k8s.io/docs/user/ingress/.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
 
 containerdConfigPatches:
   - |-

@@ -1,0 +1,71 @@
+# ingress-nginx Helm values for the local kind cluster.
+#
+# Pinned chart version: 4.15.1 (controller 1.15.1). The kind setup follows
+# the canonical ingress-nginx kind quickstart:
+# https://kind.sigs.k8s.io/docs/user/ingress/#ingress-nginx — host-port mode
+# on the control-plane node, paired with `extraPortMappings` 80/443 in
+# infra/local/kind-cluster.yaml. nip.io resolves any subdomain of
+# `<ip>.nip.io` to that IP, so `<anything>.127.0.0.1.nip.io` lands on the
+# local ingress with no DNS setup.
+#
+# DOKS uses a different values file (Phase 8 — service.type: LoadBalancer).
+# The shared knobs here (allowSnippetAnnotations, ingressClassResource) stay
+# the same on DOKS so per-session Ingress logic in services/session-api/ is
+# cluster-agnostic.
+
+controller:
+  # Bind the controller's pod to host ports 80/443 on the control-plane
+  # node. Combined with kind's extraPortMappings, the host can curl
+  # http://127.0.0.1/ and reach the cluster ingress.
+  hostPort:
+    enabled: true
+    ports:
+      http: 80
+      https: 443
+
+  # Pin the controller pod to the control-plane node, which carries the
+  # `ingress-ready=true` label set in infra/local/kind-cluster.yaml. The
+  # toleration is needed because kind's control-plane node has the standard
+  # NoSchedule taint.
+  nodeSelector:
+    ingress-ready: "true"
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Equal
+      effect: NoSchedule
+
+  # In-cluster Service is fine as ClusterIP — public traffic enters via
+  # hostPort, not via this Service. publishService.enabled=false avoids a
+  # spurious "no LoadBalancer ingress" status warning that the controller
+  # logs when the Service has no external IP.
+  service:
+    type: ClusterIP
+  publishService:
+    enabled: false
+
+  # Honor `nginx.ingress.kubernetes.io/configuration-snippet` annotations.
+  # Required for Phase 7's per-session Ingress to inject the
+  # `Authorization: Basic <base64>` header at the edge from the
+  # `opencode-server-password` Secret. CVE-2022-4886 means snippet
+  # annotations allow arbitrary nginx config injection by anyone with
+  # `Ingress` create permission in any namespace; v1's threat model already
+  # trusts the operator (the Session API has cluster-scoped Pod-create
+  # permission), so the additional risk is bounded. Same trade-off applies
+  # on DOKS in Phase 8.
+  allowSnippetAnnotations: true
+
+  # ingress-nginx 1.12+ added a validating webhook that rejects "risky"
+  # annotations (configuration-snippet, server-snippet, …) unless the
+  # cluster-wide annotation-risk-level is set to `Critical`. The default
+  # is `High`, which is what blocks the snippet annotation we rely on.
+  # Same trade-off as `allowSnippetAnnotations` above.
+  config:
+    annotations-risk-level: Critical
+
+  # `nginx` is the default IngressClass for this cluster. Per-session
+  # Ingresses set `ingressClassName: nginx` explicitly anyway.
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: true
+    controllerValue: "k8s.io/ingress-nginx"
