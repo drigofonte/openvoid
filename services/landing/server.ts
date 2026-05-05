@@ -5,7 +5,14 @@ import { createLandingRouter } from './app/router.ts'
 
 const router = createLandingRouter()
 
-const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000
+const port = (() => {
+  if (!process.env.PORT) return 3000
+  const parsed = Number.parseInt(process.env.PORT, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid PORT env var: ${JSON.stringify(process.env.PORT)} — expected a positive integer`)
+  }
+  return parsed
+})()
 
 const server = http.createServer(
   createRequestListener(async (request) => {
