@@ -151,7 +151,7 @@ No prior solutions exist in `docs/solutions/` for: Remix 3 application structure
 
 - **Double-submit defence:** UI-side via a `clientEntry` button that flips a `pending` closure variable on `on('click', async (e, signal) => …)` and calls `handle.update()` to disable itself. Plus a hidden `idempotency-key` form field generated via `crypto.randomUUID()` per-mount, forwarded by the controller to the Session API as `Idempotency-Key: <uuid>`. *(API may not enforce the header today — flag in Open Questions.)*
 
-- **CSS strategy:** plain CSS with CSS variables, served as a static asset and `<link rel="stylesheet">`'d from `app/ui/document.tsx`. The wireframe's design tokens lift directly to `app/styles/theme.css`. **Do not** adopt `remix/ui`'s `createTheme()` — the existing CSS-variable approach maps cleanly onto Remix 3's own theming model and avoids coupling to a moving API.
+- **Styling architecture: plain CSS + design tokens, no component library.** See [Styling Architecture](#styling-architecture) below for full rationale. Summary: hand-rolled CSS with custom properties (`--wf-bg`, `--wf-fg`, etc.) lifted from `wireframe-primitives.jsx`'s injected `<style>` block, served as `app/styles/theme.css` + `app/styles/base.css` and linked from `app/ui/document.tsx`. No Tailwind, no shadcn/ui, no first-party `@remix-run/ui/*` interactive components, no `createTheme()`/`css()` mixins.
 
 - **Test runner: `remix/test`** (Node native test-runner shape, exposed as `remix test`). Diverges from the rest of the repo (which uses vitest), but is on the supported framework path. Use `playwright` for any future E2E (the bookstore demo has Playwright wired up; v1 doesn't ship E2E).
 
@@ -196,6 +196,59 @@ Remix 3 is beta. If GA slips beyond **2026-09-30**, this plan migrates to React 
 - Q3 2026 ends (2026-09-30) without a `remix@3.0.0` GA release, OR
 - Two consecutive minor versions during Q2/Q3 2026 introduce breaking renames that exceed the 2-week refactor budget, OR
 - A production-blocking issue surfaces in `remix@3.0.0-beta.x` that the team cannot mitigate within one sprint.
+
+## Styling Architecture
+
+**Decision: plain CSS + design tokens, no component library.** Hand-rolled CSS with custom properties lifted from `wireframe-primitives.jsx`, served as static assets, linked from `app/ui/document.tsx`. Component primitives are thin wrappers over `class="wf-…"` selectors.
+
+### Alternatives considered (rejected)
+
+| Option | Status | Why rejected |
+|--------|--------|--------------|
+| **shadcn/ui** | React-only | Remix 3 is built on a forked Preact; React libraries do not work without rewrites. |
+| **Mantine, Chakra, MUI, Radix, Headless UI, Ariakit** | React-only | Same as shadcn/ui. |
+| **Preact-compatible libraries via `preact/compat`** | Untested in Remix 3 | The Remix team forked Preact and did not adopt `preact/compat`. Compatibility risk is real and unverified. |
+| **First-party `@remix-run/ui/*` components** (Button, Listbox, Menu, Popover, Select, Combobox, Accordion, Tabs, Glyph, Anchor, Breadcrumbs, Separator) | Available, opinionated | The shipped Button alone is ~150 lines of `css({...})` defining a blue/slate visual language. The wireframes' warm-orange-on-off-white palette would require theme-token overrides plus shape adjustments (padding, border, hover transitions). Fighting their defaults > authoring 30-line custom primitives. |
+| **`createTheme()` + `css({...})` + `mix={...}`** (framework styling system, not its components) | First-party, beta API | Genuinely nice for typed token references (`theme.colors.action.primary.background` resolving to `var(--rmx-...)`). But the API is in beta — renames during the beta window cost us refactor time. The `css()` import path renamed within `3.0.0-beta.0`'s release week (`remix/component` → `remix/ui`). Defer to a post-Unit-6 polish pass if the value surfaces. |
+| **Tailwind v4** | Works as separate process | Remix 3 doesn't use Vite, so Tailwind's `@vitejs/plugin-tailwind` doesn't apply. Would need to run `tailwindcss --watch` alongside `tsx watch` — adds a moving dependency. The wireframes weren't designed in Tailwind utility classes; rewriting them would lose visual fidelity. Not a fit at the 4-screen / 12-primitive scale. |
+| **Open Props / Pico CSS / classless CSS** | Framework-agnostic | Different visual language; conflicts with the wireframes' specific look (warm off-white #FAFAF9, accent orange #E8590C, Inter / JetBrains Mono). |
+
+### Why plain CSS wins for this scope
+
+1. **The wireframes are already in this shape.** `wireframe-primitives.jsx`'s injected `<style>` block is hand-rolled CSS with custom properties (`--wf-bg`, `--wf-fg`, `--wf-accent`, `--wf-line`, etc.) and class-based components (`.wf-card`, `.wf-btn`, `.wf-btn-pri`, `.wf-chip`, `.wf-input`, `.wf-eyebrow`, `.wf-progress-track`, etc.). Lifting this to `app/styles/theme.css` is mechanical.
+2. **The bookstore demo itself uses plain CSS in `app/assets/app.css`** (239 lines, `@layer app, rmx;` for specificity ordering). The framework's first-party styling system coexists with plain CSS rather than replacing it.
+3. **At 4 screens × ~12 thin primitives, abstraction debt is unjustified.** Tailwind / Mantine-style libraries earn their keep at scale. We're not at scale.
+4. **Beta-decoupling.** Plain CSS has zero coupling to `remix/ui`'s evolving API. If `createTheme()` or `css()` rename, we don't refactor.
+
+### Graduate-to-`createTheme()` trigger conditions
+
+Revisit this decision at Unit 6 (polish) or in a future iteration if any of these surface:
+
+- More than 2 primitives need typed token references at runtime (e.g., the JSX needs `theme.colors.action.primary.background` rather than just a `class="wf-btn-pri"` lookup).
+- Visual drift between primitives that token-typed references would prevent (e.g., one primitive uses `var(--wf-fg)` while another uses `var(--wf-text-primary)` and the two diverge).
+- The wireframe's design system grows past ~20 primitives or the team adds a second design language (dark mode beyond a CSS-variable swap, alternate density modes, brand-themed variants).
+- `createTheme()` reaches GA and the API stabilizes such that adopting it costs less than the refactor saves.
+
+If none of these surface, plain CSS stays.
+
+### What to port from the wireframes
+
+The wireframe-primitives.jsx style block defines (verbatim names that become CSS classes):
+
+- **Surface:** `wf-card`, `wf-hairline`, `wf-bg-alt`, `wf-grid-bg`, `wf-stripe-bg`, `wf-divider`
+- **Typography:** `wf-h1`, `wf-h2`, `wf-h3`, `wf-eyebrow`, `wf-mono`, `wf-muted`, `wf-faint`, `wf-link`
+- **Layout helpers:** `wf-row`, `wf-col`, `wf-spacer`, `wf-toolbar`, `wf-sidebar`, `wf-side-item`, `wf-side-section`
+- **Controls:** `wf-btn`, `wf-btn-pri`, `wf-btn-acc`, `wf-btn-ghost`, `wf-btn-danger`, `wf-input`, `wf-chip`, `wf-chip-acc`, `wf-chip-ok`, `wf-chip-warn`, `wf-chip-danger`
+- **Atoms:** `wf-dot`, `wf-dot-ok`, `wf-dot-acc`, `wf-dot-warn`, `wf-dot-danger`, `wf-keycap`, `wf-skeleton-line`
+- **Animations:** `wf-pulse`, `wf-blink`, `wf-progress-track`, `wf-progress-fill`
+
+Custom properties (CSS variables) at `:root`:
+
+- `--wf-bg`, `--wf-bg-alt`, `--wf-fg`, `--wf-fg-muted`, `--wf-fg-faint`, `--wf-line`, `--wf-line-soft`
+- `--wf-accent`, `--wf-accent-soft`, `--wf-accent-override` (for the wireframe canvas's accent-tweak feature; not needed in production landing)
+- `--wf-ok`, `--wf-ok-soft`, `--wf-warn`, `--wf-warn-soft`, `--wf-danger`, `--wf-danger-soft`
+
+Fonts: Inter (UI), JetBrains Mono (mono accents). Loaded from Google Fonts via `<link>` in document head, matching the wireframe HTML.
 
 ## Open Questions
 
