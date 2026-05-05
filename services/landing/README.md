@@ -81,16 +81,26 @@ services/landing/
 └── tsconfig.json
 ```
 
-## Installed Claude Code skills
+## Installed Claude Code skill
 
-Three skills from the upstream Remix repo are committed at the repo
-root's `.claude/skills/` so any contributor with Claude Code has
-framework-shaped guidance available. Run `bash scripts/sync-remix-skills.sh`
-from the repo root to refresh them (the script pins to a specific
-upstream SHA — bumps are deliberate).
+The upstream Remix `remix` skill is committed at the repo root's
+`.claude/skills/remix/` so any contributor with Claude Code has
+framework-shaped guidance available. Run
+`bash scripts/sync-remix-skills.sh` from the repo root to refresh it
+(the script pins to a specific upstream SHA — bumps are deliberate).
 
-| Skill | When to invoke |
-|---|---|
-| `expert-typescript-programmer` | Writing or refactoring TS in this package — strict types, generics, type guards. |
-| `write-tests` | Authoring tests with `remix/test` — fixtures, mocks, the Node-test-runner shape. |
-| `author-ui-modules` | Building `clientEntry` components with `mix={on(...)}` mixins, plain-context `handle.context.set(...)`, and the `packages/ui`-style listbox/select patterns. |
+The skill is the canonical "build a Remix 3 app" reference shipped by
+the framework team at `template/.agents/skills/remix/` in
+`remix-run/remix`. It contains:
+
+- `SKILL.md` — the entry-point with classification rules and a table
+  pointing at the right deep-dive reference for the task at hand.
+- `references/` — 11 deep-dive files covering routing & controllers,
+  middleware & server, assets & browser modules, data & validation,
+  auth & sessions, the component model, mixins / styling / events,
+  hydration & frames & navigation, animation, and testing patterns.
+
+When working in this package — invoke the skill (`/skill remix`) and
+let the SKILL.md classify the task before reading deeper references.
+Loading more than two or three reference files at once is a sign the
+task hasn't been narrowed enough yet.
