@@ -1,0 +1,105 @@
+# Phase 7 — kind-only manifest for the landing page + an Ingress in
+# front of the Session API at api.127.0.0.1.nip.io. Phase 9's Helm chart
+# absorbs both into chart templates; the raw YAML is deliberately
+# disposable.
+#
+# The landing page is a static SPA built by Vite and served by an
+# nginx:alpine pod. It calls the Session API at api.127.0.0.1.nip.io
+# (baked in at build-arg time as VITE_OPENVOID_API_URL).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: landing
+  namespace: openvoid-system
+  labels:
+    app.kubernetes.io/name: landing
+    app.kubernetes.io/part-of: openvoid
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: landing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: landing
+    spec:
+      containers:
+        - name: landing
+          image: localhost:5001/openvoid/landing:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: landing
+  namespace: openvoid-system
+  labels:
+    app.kubernetes.io/name: landing
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: landing
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: landing
+  namespace: openvoid-system
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.127.0.0.1.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: landing
+                port:
+                  name: http
+---
+# Session API Ingress at api.127.0.0.1.nip.io — gives the browser a
+# stable hostname to call from app.127.0.0.1.nip.io. The Session API
+# Service itself lives in infra/local/session-api.yaml; this Ingress
+# only exposes it. Phase 9 collapses both into the Helm chart.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: session-api
+  namespace: openvoid-system
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.127.0.0.1.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: session-api
+                port:
+                  name: http

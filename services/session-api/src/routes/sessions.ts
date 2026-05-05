@@ -2,11 +2,13 @@ import { Hono } from "hono";
 import id128 from "id128";
 import type { components } from "@openvoid/protocol";
 import {
-  type PodOps,
+  type SessionOps,
   OPENCODE_IMAGE,
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
+  agentUrl,
+  previewUrl,
 } from "../k8s/client.js";
 
 const { Ulid } = id128;
@@ -69,7 +71,7 @@ function errorMessage(err: unknown): string {
   return "unknown error";
 }
 
-export function sessionsRouter(podOps: PodOps): Hono {
+export function sessionsRouter(sessionOps: SessionOps): Hono {
   const app = new Hono();
 
   app.post("/sessions", async (c) => {
@@ -92,7 +94,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
 
     const sessionId = Ulid.generate().toCanonical();
     try {
-      await podOps.createSessionPod({
+      await sessionOps.createSessionResources({
         sessionId,
         image: sessionImage(),
         repo: body.repo,
@@ -100,7 +102,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
       });
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to create pod: ${errorMessage(err)}`),
+        jsonError("k8s_unavailable", `Failed to create session resources: ${errorMessage(err)}`),
         503,
       );
     }
@@ -113,7 +115,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
     const sessionId = c.req.param("id");
     let pod;
     try {
-      pod = await podOps.getSessionPod(sessionId);
+      pod = await sessionOps.getSessionPod(sessionId);
     } catch (err) {
       return c.json(
         jsonError("k8s_unavailable", `Failed to get pod: ${errorMessage(err)}`),
@@ -131,6 +133,16 @@ export function sessionsRouter(podOps: PodOps): Hono {
     const ip = pod.status?.podIP;
     if (ip) session.endpointUrl = `http://${ip}`;
 
+    // Surface the public URLs once the pod is Running. Until then the
+    // routing isn't ready (Service has no endpoints, ingress-nginx may
+    // not have programmed the hosts yet) — better to omit the fields
+    // than to hand the landing page links that 502 for the first few
+    // seconds.
+    if (session.status === "Running") {
+      session.agentUrl = agentUrl(sessionId);
+      session.previewUrl = previewUrl(sessionId);
+    }
+
     const annotations = pod.metadata?.annotations ?? {};
     const repo = annotations[REPO_ANNOTATION];
     const branch = annotations[BRANCH_ANNOTATION];
@@ -146,10 +158,10 @@ export function sessionsRouter(podOps: PodOps): Hono {
     const sessionId = c.req.param("id");
     let deleted: boolean;
     try {
-      deleted = await podOps.deleteSessionPod(sessionId);
+      deleted = await sessionOps.deleteSessionResources(sessionId);
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to delete pod: ${errorMessage(err)}`),
+        jsonError("k8s_unavailable", `Failed to delete session resources: ${errorMessage(err)}`),
         503,
       );
     }

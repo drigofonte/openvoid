@@ -1314,6 +1314,34 @@ This is the **third "magic moment"**: first was Phase 5 (kubectl-exec lifecycle)
 
 ---
 
+#### Phase 7 — Residual findings (deferred from ce:review on 2026-05-05)
+
+The Phase 7 review surfaced these P2/P3 items that are intentionally **not** fixed on the Phase 7 branch. Each is small enough to address opportunistically; the relevant Phase 8 / Phase 9 unit is noted where applicable.
+
+- [ ] **Auth-header password validation** — `loadOpencodeAuthHeader` (`services/session-api/src/k8s/client.ts`) base64-decodes the Secret value and embeds it in the per-session Ingress `configuration-snippet` annotation. The current code asserts (in a comment) that the password is alphanumeric; no runtime validation. If Phase 9's chart-managed Secret generation drifts (or an operator hand-creates a Secret with `"`, `\`, or newlines), the rendered nginx config can be malformed or — worst case — injection-prone. **Fix:** reject passwords containing nginx metacharacters at boot. **Owner:** Phase 9 (Unit 9.1) when the chart graduates Secret generation.
+
+- [ ] **CORS empty-env hardening** — `landingOrigin()` in `server.ts` silently falls back to the kind default if `OPENVOID_LANDING_ORIGIN` is set but empty. A typo in a Phase 8 DOKS deploy (`export OPENVOID_LANDING_ORIGIN=''`) silently restores the kind default and breaks the landing page with a cryptic CORS error. **Fix:** validate at boot — log the resolved origin; fail fast if the env var is set to an empty string or a non-`http(s)://` value. **Owner:** Phase 8 (Unit 8.3 — DOKS env wiring).
+
+- [ ] **`openapi-typescript` defaults-as-required workaround** — Fields that carry `default:` in the OpenAPI spec (`branch`, `idleTimeoutSeconds`) are generated as required in TS, contradicting the TypeSpec `?` optionality and the API's actual contract. `services/landing/src/api.ts` carries a local `CreateSessionInput` type to work around it. **Fix:** investigate the openapi-typescript flag (`--default-non-nullable`?) or upstream the fix; remove the duplicate type. **Owner:** Phase 9 (chart consolidation is a natural place to revisit codegen).
+
+- [ ] **Polling-error retry on transient failures** — `services/landing/src/app.ts:pollUntilReady` exits to `idle` on the first API error, even transient 5xx. A brief Session API restart during a session create kills the user's flow. **Fix:** distinguish transient (network, 5xx) from permanent (4xx) errors; retry transient with backoff up to the polling timeout. **Owner:** the post-v1 front-end replacement; current landing is throwaway.
+
+- [ ] **Ingress readiness gate** — `routes/sessions.ts` surfaces `agentUrl`/`previewUrl` when `pod.status.phase === Running`, but ingress-nginx may need 1–5 s to program the new host rules. The first click on the link can 502. **Fix:** check `Ingress.status.loadBalancer.ingress` (or programatically curl with retry) before populating URL fields. **Owner:** Phase 9 (chart) — add an `ingressReady` field or hold URLs until the LB is provisioned.
+
+- [ ] **`opencode-server-password` Secret rotation watcher** — the Session API caches `authHeaderValue` at boot. Rotating the Secret in cluster requires API restart; until then, new sessions use stale headers and get OpenCode's password prompt in the browser. **Fix:** Watcher on the Secret + cache invalidation. **Owner:** Phase 9 (Unit 9.1) when the Secret becomes chart-managed.
+
+- [ ] **Internal-IP exposure via `endpointUrl`** — `GET /sessions/:id` returns `endpointUrl: http://<podIP>` for any pod with an IP, leaking internal cluster CIDR to API clients. `agentUrl`/`previewUrl` supersede this field for the user-facing path. **Fix:** drop `endpointUrl` from the response (or restrict to debug-only header). **Owner:** Phase 8 / Phase 9 — small TypeSpec change.
+
+- [ ] **Agent-native readiness** — the Session API is well-shaped for agent calls (3 endpoints, OpenAPI contract, stable error codes), but no agent-facing tool layer exists (no Vercel AI SDK / MCP / function-definition wrapper) and no system prompt documents the session lifecycle. Authoring at least one example agent integration before Phase 8 ships public DOKS would validate the API surface. A `GET /sessions` (list) endpoint is also missing — agents creating sessions over time need to enumerate. **Owner:** Phase 8.
+
+- [ ] **K8s client error-shape robustness (`is404` helper)** — the helper reads three error properties (`code`, `statusCode`, `response.statusCode`) by `as`-casting unknown. A future `@kubernetes/client-node` upgrade could change the shape and silently break 404 detection. **Fix:** add a unit test that constructs realistic SDK error shapes; consider a typed error helper from the SDK if one becomes available. **Owner:** opportunistic (next time the SDK is upgraded).
+
+- [ ] **`SessionOps.getSessionPod` naming** — after `createSession*Resources` / `deleteSession*Resources`, the remaining `getSessionPod` reads as a leftover. Cosmetic. **Fix:** rename to `getSession` or `getSessionState`; update callers. **Owner:** opportunistic.
+
+- [ ] **Vite `allowedHosts: true` DNS-rebinding trade-off** — the dev-server-bind instructions tell agents to set `allowedHosts: true`, which opens the dev server to any `Host` header. The risk requires DNS-rebinding the user's browser, but is real. **Fix:** consider templating the per-session preview hostname into `vite.config.js` so the agent can use a narrow allowlist instead. **Owner:** Phase 9+ — needs a way for the agent to know its own session ID at config-write time.
+
+---
+
 ### Phase 8: Public deploy on DOKS — ingress-nginx + cloudflared + landing page (Slice 8 — rev 6)
 
 **Demo checkpoint at end of phase:** The same browser flow Phase 7 proved on kind now runs on DOKS at real public URLs. An operator visits `https://app.<domain>` (a real Cloudflare-fronted hostname they control), clicks "Create new app", and sees the agent UI + live preview at `https://<sid>.{agent,preview}.<domain>` — no port-forward, no kubectl, no IP addresses. The architecture is the same as Phase 7 (per-session Service + Ingress with edge auth-injection, landing page served by nginx) — the only differences are: (a) ingress-nginx is exposed via a DigitalOcean LoadBalancer instead of host-port mappings, (b) a cloudflared Tunnel + wildcard CNAME at Cloudflare DNS routes `*.<domain>` to that LoadBalancer, (c) `VITE_OPENVOID_API_URL` is built into the landing page image at `https://api.<domain>`.
