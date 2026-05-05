@@ -5,9 +5,11 @@ import { dirname, resolve } from "node:path";
 import type { V1Pod } from "@kubernetes/client-node";
 import { sessionsRouter } from "../src/routes/sessions.js";
 import {
-  type PodOps,
+  type SessionOps,
   type SessionPodSpec,
+  type SessionResources,
   buildSessionPodManifest,
+  buildSessionResources,
   SESSION_LABEL,
   MANAGED_BY_LABEL,
   MANAGED_BY_VALUE,
@@ -31,6 +33,8 @@ import {
   OPENCODE_IMAGE,
   OPENCODE_AGENT_PORT,
   OPENCODE_AGENT_PORT_NAME,
+  OPENCODE_PREVIEW_PORT,
+  OPENCODE_PREVIEW_PORT_NAME,
   OPENCODE_PASSWORD_SECRET_NAME,
   OPENCODE_PASSWORD_SECRET_KEY,
   OPENCODE_AUTH_SECRET_NAME,
@@ -39,15 +43,20 @@ import {
   OPENCODE_AUTH_MOUNT_PATH,
 } from "../src/k8s/client.js";
 
-function makeMockOps(): PodOps & {
-  createSessionPod: ReturnType<typeof vi.fn>;
+const TEST_AUTH_HEADER = "Basic b3BlbmNvZGU6dGVzdC1wYXNz"; // "opencode:test-pass"
+
+function makeMockOps(): SessionOps & {
+  createSessionResources: ReturnType<typeof vi.fn>;
   getSessionPod: ReturnType<typeof vi.fn>;
-  deleteSessionPod: ReturnType<typeof vi.fn>;
+  deleteSessionResources: ReturnType<typeof vi.fn>;
 } {
   return {
-    createSessionPod: vi.fn(async (spec: SessionPodSpec) => buildSessionPodManifest(spec)),
+    createSessionResources: vi.fn(
+      async (spec: SessionPodSpec): Promise<SessionResources> =>
+        buildSessionResources(spec, { authHeaderValue: TEST_AUTH_HEADER }),
+    ),
     getSessionPod: vi.fn(async () => null),
-    deleteSessionPod: vi.fn(async () => false),
+    deleteSessionResources: vi.fn(async () => false),
   };
 }
 
@@ -447,6 +456,25 @@ describe("buildSessionPodManifest (Phase 6.2: OpenCode main container + Secrets)
   });
 });
 
+describe("buildSessionPodManifest (Phase 7.2: preview port on main container)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/example/x",
+  };
+
+  it("declares the preview-http port at 3000 alongside agent-http", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    const ports = manifest.spec?.containers?.[0]?.ports ?? [];
+    expect(ports).toContainEqual({
+      name: OPENCODE_PREVIEW_PORT_NAME,
+      containerPort: OPENCODE_PREVIEW_PORT,
+    });
+    expect(OPENCODE_PREVIEW_PORT_NAME).toBe("preview-http");
+    expect(OPENCODE_PREVIEW_PORT).toBe(3000);
+  });
+});
+
 describe("sessionsRouter", () => {
   let ops: ReturnType<typeof makeMockOps>;
   let app: ReturnType<typeof sessionsRouter>;
@@ -470,8 +498,8 @@ describe("sessionsRouter", () => {
       expect(typeof body.sessionId).toBe("string");
       expect(body.sessionId).toHaveLength(26);
 
-      expect(ops.createSessionPod).toHaveBeenCalledOnce();
-      const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
+      expect(ops.createSessionResources).toHaveBeenCalledOnce();
+      const arg = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
       expect(arg.image).toBe(OPENCODE_IMAGE);
       expect(arg.repo).toBe("https://github.com/example/x");
       expect(arg.branch).toBeUndefined();
@@ -492,7 +520,7 @@ describe("sessionsRouter", () => {
           body: JSON.stringify({ repo: "https://github.com/example/x" }),
         });
         expect(res.status).toBe(201);
-        const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
+        const arg = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
         expect(arg.image).toBe("nginx:alpine");
       } finally {
         vi.unstubAllEnvs();
@@ -509,7 +537,7 @@ describe("sessionsRouter", () => {
         }),
       });
       expect(res.status).toBe(201);
-      const arg = ops.createSessionPod.mock.calls[0][0] as SessionPodSpec;
+      const arg = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
       expect(arg.branch).toBe("develop");
     });
 
@@ -586,7 +614,7 @@ describe("sessionsRouter", () => {
         expect(body.code).toBe("invalid_request");
         expect(body.message).toContain("HTTPS");
       }
-      expect(ops.createSessionPod).not.toHaveBeenCalled();
+      expect(ops.createSessionResources).not.toHaveBeenCalled();
     });
 
     it("rejects negative idleTimeoutSeconds with 400", async () => {
@@ -620,7 +648,7 @@ describe("sessionsRouter", () => {
     });
 
     it("returns 503 when the K8s client throws", async () => {
-      ops.createSessionPod.mockRejectedValueOnce(new Error("apiserver unreachable"));
+      ops.createSessionResources.mockRejectedValueOnce(new Error("apiserver unreachable"));
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -633,7 +661,7 @@ describe("sessionsRouter", () => {
     });
 
     it("returns 503 with a safe message when a non-Error value is thrown", async () => {
-      ops.createSessionPod.mockRejectedValueOnce("just a string");
+      ops.createSessionResources.mockRejectedValueOnce("just a string");
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -729,20 +757,20 @@ describe("sessionsRouter", () => {
 
   describe("DELETE /sessions/:id", () => {
     it("returns 204 when the pod was deleted", async () => {
-      ops.deleteSessionPod.mockResolvedValueOnce(true);
+      ops.deleteSessionResources.mockResolvedValueOnce(true);
       const res = await app.request("/sessions/x", { method: "DELETE" });
       expect(res.status).toBe(204);
       expect(await res.text()).toBe("");
     });
 
     it("returns 404 (not 500) when the pod does not exist", async () => {
-      ops.deleteSessionPod.mockResolvedValueOnce(false);
+      ops.deleteSessionResources.mockResolvedValueOnce(false);
       const res = await app.request("/sessions/missing", { method: "DELETE" });
       expect(res.status).toBe(404);
     });
 
     it("returns 503 when the K8s client throws", async () => {
-      ops.deleteSessionPod.mockRejectedValueOnce(new Error("boom"));
+      ops.deleteSessionResources.mockRejectedValueOnce(new Error("boom"));
       const res = await app.request("/sessions/x", { method: "DELETE" });
       expect(res.status).toBe(503);
     });

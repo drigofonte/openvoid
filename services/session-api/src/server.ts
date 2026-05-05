@@ -2,18 +2,31 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { sessionsRouter } from "./routes/sessions.js";
 import { mountDocs } from "./lib/scalar.js";
-import { makePodOps } from "./k8s/client.js";
+import { makeSessionOps } from "./k8s/client.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 
-const app = new Hono();
+async function main(): Promise<void> {
+  // makeSessionOps reads the opencode-server-password Secret; failure
+  // here is fatal — the per-session Ingress can't inject Authorization
+  // headers without it, and shipping a half-broken API would surface as
+  // a confusing OpenCode password prompt at first session create.
+  const sessionOps = await makeSessionOps();
 
-app.get("/healthz", (c) => c.json({ ok: true }));
+  const app = new Hono();
 
-mountDocs(app);
+  app.get("/healthz", (c) => c.json({ ok: true }));
 
-app.route("/", sessionsRouter(makePodOps()));
+  mountDocs(app);
 
-serve({ fetch: app.fetch, port: PORT }, ({ port }) => {
-  console.log(`session-api listening on :${port}`);
+  app.route("/", sessionsRouter(sessionOps));
+
+  serve({ fetch: app.fetch, port: PORT }, ({ port }) => {
+    console.log(`session-api listening on :${port}`);
+  });
+}
+
+main().catch((err) => {
+  console.error("session-api failed to start:", err);
+  process.exit(1);
 });

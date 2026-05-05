@@ -18,9 +18,10 @@ metadata:
   name: session-api
   namespace: openvoid-system
 ---
-# Session API needs to manage Pods in the openvoid-sessions namespace only.
-# Phase 4 replaces these pod permissions with permissions on the
-# CodingSession custom resource.
+# Session API needs to manage Pods + per-session Service + Ingress in the
+# openvoid-sessions namespace, and needs to read the
+# opencode-server-password Secret once at boot for edge auth-injection
+# on the per-session agent Ingress.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -30,6 +31,20 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["create", "get", "list", "delete"]
+  # Read-only, scoped to a single resourceName — least privilege. The
+  # Session API only needs the password value at boot to compute the
+  # `Basic <base64>` header that ingress-nginx injects on the agent
+  # ingress. It must not be able to enumerate or read other Secrets.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["opencode-server-password"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

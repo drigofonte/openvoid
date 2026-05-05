@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import id128 from "id128";
 import type { components } from "@openvoid/protocol";
 import {
-  type PodOps,
+  type SessionOps,
   OPENCODE_IMAGE,
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
@@ -69,7 +69,7 @@ function errorMessage(err: unknown): string {
   return "unknown error";
 }
 
-export function sessionsRouter(podOps: PodOps): Hono {
+export function sessionsRouter(sessionOps: SessionOps): Hono {
   const app = new Hono();
 
   app.post("/sessions", async (c) => {
@@ -92,7 +92,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
 
     const sessionId = Ulid.generate().toCanonical();
     try {
-      await podOps.createSessionPod({
+      await sessionOps.createSessionResources({
         sessionId,
         image: sessionImage(),
         repo: body.repo,
@@ -100,7 +100,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
       });
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to create pod: ${errorMessage(err)}`),
+        jsonError("k8s_unavailable", `Failed to create session resources: ${errorMessage(err)}`),
         503,
       );
     }
@@ -113,7 +113,7 @@ export function sessionsRouter(podOps: PodOps): Hono {
     const sessionId = c.req.param("id");
     let pod;
     try {
-      pod = await podOps.getSessionPod(sessionId);
+      pod = await sessionOps.getSessionPod(sessionId);
     } catch (err) {
       return c.json(
         jsonError("k8s_unavailable", `Failed to get pod: ${errorMessage(err)}`),
@@ -146,10 +146,10 @@ export function sessionsRouter(podOps: PodOps): Hono {
     const sessionId = c.req.param("id");
     let deleted: boolean;
     try {
-      deleted = await podOps.deleteSessionPod(sessionId);
+      deleted = await sessionOps.deleteSessionResources(sessionId);
     } catch (err) {
       return c.json(
-        jsonError("k8s_unavailable", `Failed to delete pod: ${errorMessage(err)}`),
+        jsonError("k8s_unavailable", `Failed to delete session resources: ${errorMessage(err)}`),
         503,
       );
     }

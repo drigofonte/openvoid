@@ -1,4 +1,12 @@
-import { CoreV1Api, KubeConfig, type V1Pod } from "@kubernetes/client-node";
+import {
+  CoreV1Api,
+  KubeConfig,
+  NetworkingV1Api,
+  type V1Ingress,
+  type V1OwnerReference,
+  type V1Pod,
+  type V1Service,
+} from "@kubernetes/client-node";
 
 export const SESSION_NAMESPACE = "openvoid-sessions";
 export const SESSION_LABEL = "openvoid.io/session-id";
@@ -42,9 +50,16 @@ export const OPENCODE_IMAGE = "localhost:5001/openvoid/opencode:dev";
 export const OPENCODE_AGENT_PORT = 8080;
 export const OPENCODE_AGENT_PORT_NAME = "agent-http";
 
+// The user's preview port — convention is 3000 (Next.js, Vite) but the
+// agent can run anything on it. Phase 7 wires the per-session preview
+// Ingress to expose this. The container port is informational; the
+// Service/Ingress chain is what makes traffic flow.
+export const OPENCODE_PREVIEW_PORT = 3000;
+export const OPENCODE_PREVIEW_PORT_NAME = "preview-http";
+
 // `opencode-server-password` Secret — applied out-of-band, mirroring
 // Phase 4's `git-creds`. The HTTP Basic password the OpenCode server
-// requires to start (per Phase 0.3 spike). Phase 7's chart graduates
+// requires to start (per Phase 0.3 spike). Phase 9's chart graduates
 // this to an auto-generated chart-managed Secret.
 export const OPENCODE_PASSWORD_SECRET_NAME = "opencode-server-password";
 export const OPENCODE_PASSWORD_SECRET_KEY = "password";
@@ -61,6 +76,21 @@ export const OPENCODE_AUTH_VOLUME_NAME = "opencode-auth";
 export const OPENCODE_AUTH_MOUNT_PATH =
   "/var/opencode-data/opencode/auth.json";
 
+// Phase 7 routing config. `OPENVOID_DOMAIN_BASE` and `OPENVOID_URL_SCHEME`
+// drive the per-session host names and surfaced URLs. Defaults match the
+// kind setup (nip.io + http); DOKS overrides via env in Phase 8 then via
+// chart values in Phase 9.
+export const INGRESS_CLASS_NAME = "nginx";
+export const DEFAULT_DOMAIN_BASE = "127.0.0.1.nip.io";
+export const DEFAULT_URL_SCHEME = "http";
+
+// `OPENCODE_BASIC_USER` is fixed by OpenCode's HTTP Basic auth
+// implementation: the username is "opencode", the password comes from
+// OPENCODE_SERVER_PASSWORD. The agent UI loads inside an iframe via the
+// per-session ingress, which injects this header at the edge so the
+// browser never sees a password prompt.
+export const OPENCODE_BASIC_USER = "opencode";
+
 export type SessionPodSpec = {
   sessionId: string;
   image: string;
@@ -69,10 +99,108 @@ export type SessionPodSpec = {
   createdAt?: string;
 };
 
-export interface PodOps {
-  createSessionPod(spec: SessionPodSpec): Promise<V1Pod>;
+// Lightweight reference back to the parent Pod, used to build
+// ownerReferences on Service + Ingress so K8s garbage-collects them when
+// the Pod disappears (cascade delete).
+export type PodOwner = { name: string; uid: string };
+
+export type BuildResourcesOpts = {
+  // Pre-formatted `Basic <base64(opencode:password)>`. Loaded once at
+  // Session API boot via `loadOpencodeAuthHeader` and reused for every
+  // session — the password is cluster-wide, not per-session.
+  authHeaderValue: string;
+  domainBase?: string;
+  urlScheme?: string;
+  // Optional — when present, Service + Ingresses get ownerReferences on
+  // the Pod (cascade delete via GC). At the unit-test boundary it can be
+  // omitted; in production it's filled in after `createNamespacedPod`
+  // returns the live Pod with its UID.
+  podOwner?: PodOwner;
+};
+
+export type SessionResources = {
+  pod: V1Pod;
+  service: V1Service;
+  agentIngress: V1Ingress;
+  previewIngress: V1Ingress;
+};
+
+export interface SessionOps {
+  createSessionResources(spec: SessionPodSpec): Promise<SessionResources>;
   getSessionPod(sessionId: string): Promise<V1Pod | null>;
-  deleteSessionPod(sessionId: string): Promise<boolean>;
+  deleteSessionResources(sessionId: string): Promise<boolean>;
+}
+
+function envOr(name: string, fallback: string): string {
+  const v = process.env[name];
+  return v && v.length > 0 ? v : fallback;
+}
+
+export function getDomainBase(): string {
+  return envOr("OPENVOID_DOMAIN_BASE", DEFAULT_DOMAIN_BASE);
+}
+
+export function getUrlScheme(): string {
+  return envOr("OPENVOID_URL_SCHEME", DEFAULT_URL_SCHEME);
+}
+
+// Session IDs are ULIDs (uppercase); host labels and resource names must
+// be lowercase per K8s/DNS rules. Centralize the conversion so every URL
+// surfaced by the API (and every Ingress host) is consistent.
+function sidLower(sessionId: string): string {
+  return sessionId.toLowerCase();
+}
+
+export function agentHost(sessionId: string, domainBase = getDomainBase()): string {
+  return `${sidLower(sessionId)}.agent.${domainBase}`;
+}
+
+export function previewHost(sessionId: string, domainBase = getDomainBase()): string {
+  return `${sidLower(sessionId)}.preview.${domainBase}`;
+}
+
+export function agentUrl(
+  sessionId: string,
+  domainBase = getDomainBase(),
+  urlScheme = getUrlScheme(),
+): string {
+  return `${urlScheme}://${agentHost(sessionId, domainBase)}/`;
+}
+
+export function previewUrl(
+  sessionId: string,
+  domainBase = getDomainBase(),
+  urlScheme = getUrlScheme(),
+): string {
+  return `${urlScheme}://${previewHost(sessionId, domainBase)}/`;
+}
+
+function podName(sessionId: string): string {
+  return `session-${sidLower(sessionId)}`;
+}
+
+function commonLabels(sessionId: string): Record<string, string> {
+  return {
+    [SESSION_LABEL]: sessionId,
+    [MANAGED_BY_LABEL]: MANAGED_BY_VALUE,
+  };
+}
+
+function ownerReferenceFor(owner: PodOwner | undefined): V1OwnerReference[] | undefined {
+  if (!owner) return undefined;
+  return [
+    {
+      apiVersion: "v1",
+      kind: "Pod",
+      name: owner.name,
+      uid: owner.uid,
+      // controller=false: nothing in our model "controls" the Pod from
+      // the Service/Ingress side. blockOwnerDeletion=false: K8s GC will
+      // not stall Pod deletion waiting for these to clear.
+      controller: false,
+      blockOwnerDeletion: false,
+    },
+  ];
 }
 
 export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
@@ -82,12 +210,9 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
     apiVersion: "v1",
     kind: "Pod",
     metadata: {
-      name: `session-${spec.sessionId.toLowerCase()}`,
+      name: podName(spec.sessionId),
       namespace: SESSION_NAMESPACE,
-      labels: {
-        [SESSION_LABEL]: spec.sessionId,
-        [MANAGED_BY_LABEL]: MANAGED_BY_VALUE,
-      },
+      labels: commonLabels(spec.sessionId),
       annotations: {
         [REPO_ANNOTATION]: spec.repo,
         [BRANCH_ANNOTATION]: branch,
@@ -98,7 +223,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
       restartPolicy: "Never",
       activeDeadlineSeconds: ACTIVE_DEADLINE_SECONDS,
       terminationGracePeriodSeconds: TERMINATION_GRACE_PERIOD_SECONDS,
-      // Defense in depth alongside Phase 8's NetworkPolicy — the agent
+      // Defense in depth alongside Phase 9's NetworkPolicy — the agent
       // pod must not be able to reach the K8s API. The pod has no
       // legitimate reason to enumerate Secrets or query other resources;
       // refusing the SA token closes the easiest path for a compromised
@@ -195,6 +320,12 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               name: OPENCODE_AGENT_PORT_NAME,
               containerPort: OPENCODE_AGENT_PORT,
             },
+            // Preview port. Declaring the port is informational, but it
+            // documents the contract the per-session Service routes to.
+            {
+              name: OPENCODE_PREVIEW_PORT_NAME,
+              containerPort: OPENCODE_PREVIEW_PORT,
+            },
           ],
           env: [
             {
@@ -231,31 +362,261 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
   };
 }
 
-export class K8sPodOps implements PodOps {
-  constructor(private readonly api: CoreV1Api) {}
+export function buildSessionService(
+  spec: SessionPodSpec,
+  podOwner?: PodOwner,
+): V1Service {
+  return {
+    apiVersion: "v1",
+    kind: "Service",
+    metadata: {
+      name: podName(spec.sessionId),
+      namespace: SESSION_NAMESPACE,
+      labels: commonLabels(spec.sessionId),
+      ownerReferences: ownerReferenceFor(podOwner),
+    },
+    spec: {
+      type: "ClusterIP",
+      // Match the Pod's session-id label rather than name — both
+      // identify the same Pod (one per session) but the label is the
+      // stable identifier the rest of the system already uses.
+      selector: { [SESSION_LABEL]: spec.sessionId },
+      ports: [
+        {
+          name: OPENCODE_AGENT_PORT_NAME,
+          port: OPENCODE_AGENT_PORT,
+          targetPort: OPENCODE_AGENT_PORT_NAME,
+          protocol: "TCP",
+        },
+        {
+          name: OPENCODE_PREVIEW_PORT_NAME,
+          port: OPENCODE_PREVIEW_PORT,
+          targetPort: OPENCODE_PREVIEW_PORT_NAME,
+          protocol: "TCP",
+        },
+      ],
+    },
+  };
+}
 
-  async createSessionPod(spec: SessionPodSpec): Promise<V1Pod> {
-    const body = buildSessionPodManifest(spec);
-    return this.api.createNamespacedPod({ namespace: SESSION_NAMESPACE, body });
+type IngressKind = "agent" | "preview";
+
+function buildSessionIngress(
+  spec: SessionPodSpec,
+  kind: IngressKind,
+  opts: BuildResourcesOpts,
+): V1Ingress {
+  const domainBase = opts.domainBase ?? getDomainBase();
+  const isAgent = kind === "agent";
+  const host = isAgent
+    ? agentHost(spec.sessionId, domainBase)
+    : previewHost(spec.sessionId, domainBase);
+  const portName = isAgent ? OPENCODE_AGENT_PORT_NAME : OPENCODE_PREVIEW_PORT_NAME;
+
+  // The configuration-snippet annotation is per-Ingress in
+  // ingress-nginx, not per-rule. To keep the agent host authenticated
+  // and the preview host untouched, the two hosts live on separate
+  // Ingress resources — the agent one carries the snippet, the preview
+  // one has no auth-related annotations.
+  //
+  // The injected header value is fixed at boot from the
+  // `opencode-server-password` Secret (see loadOpencodeAuthHeader).
+  // Quote-safety: the password is a 32-char alphanumeric string from
+  // openssl/randAlphaNum (Phase 6 / Phase 9), so it never contains `"`
+  // or `\` — embedding it in the nginx string literal is safe.
+  const annotations: Record<string, string> = {};
+  if (isAgent) {
+    annotations["nginx.ingress.kubernetes.io/configuration-snippet"] =
+      `proxy_set_header Authorization "${opts.authHeaderValue}";\n`;
+  }
+
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "Ingress",
+    metadata: {
+      name: `${podName(spec.sessionId)}-${kind}`,
+      namespace: SESSION_NAMESPACE,
+      labels: commonLabels(spec.sessionId),
+      annotations,
+      ownerReferences: ownerReferenceFor(opts.podOwner),
+    },
+    spec: {
+      ingressClassName: INGRESS_CLASS_NAME,
+      rules: [
+        {
+          host,
+          http: {
+            paths: [
+              {
+                path: "/",
+                pathType: "Prefix",
+                backend: {
+                  service: {
+                    name: podName(spec.sessionId),
+                    port: { name: portName },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+export function buildSessionAgentIngress(
+  spec: SessionPodSpec,
+  opts: BuildResourcesOpts,
+): V1Ingress {
+  return buildSessionIngress(spec, "agent", opts);
+}
+
+export function buildSessionPreviewIngress(
+  spec: SessionPodSpec,
+  opts: BuildResourcesOpts,
+): V1Ingress {
+  return buildSessionIngress(spec, "preview", opts);
+}
+
+export function buildSessionResources(
+  spec: SessionPodSpec,
+  opts: BuildResourcesOpts,
+): SessionResources {
+  return {
+    pod: buildSessionPodManifest(spec),
+    service: buildSessionService(spec, opts.podOwner),
+    agentIngress: buildSessionAgentIngress(spec, opts),
+    previewIngress: buildSessionPreviewIngress(spec, opts),
+  };
+}
+
+// Loaded once at boot (server.ts) and cached on the SessionOps. Rotation
+// path is documented as "restart the Session API" — Phase 9's chart can
+// add a Watcher when v1.5 needs zero-downtime rotation.
+export async function loadOpencodeAuthHeader(api: CoreV1Api): Promise<string> {
+  let secret;
+  try {
+    secret = await api.readNamespacedSecret({
+      name: OPENCODE_PASSWORD_SECRET_NAME,
+      namespace: SESSION_NAMESPACE,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Cannot read Secret ${SESSION_NAMESPACE}/${OPENCODE_PASSWORD_SECRET_NAME} ` +
+        `(required for edge auth-injection on per-session ingress): ${reason}`,
+    );
+  }
+
+  const passwordB64 = secret.data?.[OPENCODE_PASSWORD_SECRET_KEY];
+  if (passwordB64 === undefined) {
+    throw new Error(
+      `Secret ${SESSION_NAMESPACE}/${OPENCODE_PASSWORD_SECRET_NAME} ` +
+        `is missing key "${OPENCODE_PASSWORD_SECRET_KEY}".`,
+    );
+  }
+  const password = Buffer.from(passwordB64, "base64").toString("utf8");
+  if (password.length === 0) {
+    throw new Error(
+      `Secret ${SESSION_NAMESPACE}/${OPENCODE_PASSWORD_SECRET_NAME}.${OPENCODE_PASSWORD_SECRET_KEY} ` +
+        `decoded to an empty string.`,
+    );
+  }
+  return `Basic ${Buffer.from(`${OPENCODE_BASIC_USER}:${password}`).toString("base64")}`;
+}
+
+export class K8sSessionOps implements SessionOps {
+  constructor(
+    private readonly core: CoreV1Api,
+    private readonly networking: NetworkingV1Api,
+    private readonly authHeaderValue: string,
+  ) {}
+
+  async createSessionResources(spec: SessionPodSpec): Promise<SessionResources> {
+    // Step 1: Pod first — its UID becomes the ownerRef target for the
+    // Service + Ingresses. Cascade-delete via GC handles cleanup when
+    // the Pod disappears.
+    const pod = await this.core.createNamespacedPod({
+      namespace: SESSION_NAMESPACE,
+      body: buildSessionPodManifest(spec),
+    });
+
+    const owner: PodOwner | undefined =
+      pod.metadata?.name && pod.metadata?.uid
+        ? { name: pod.metadata.name, uid: pod.metadata.uid }
+        : undefined;
+
+    const opts: BuildResourcesOpts = {
+      authHeaderValue: this.authHeaderValue,
+      podOwner: owner,
+    };
+
+    // Step 2: Service.
+    const service = await this.core.createNamespacedService({
+      namespace: SESSION_NAMESPACE,
+      body: buildSessionService(spec, owner),
+    });
+
+    // Step 3: two Ingresses — agent (with auth-injection snippet),
+    // preview (no auth). Order doesn't matter functionally; sequential
+    // for clear error attribution.
+    const agentIngress = await this.networking.createNamespacedIngress({
+      namespace: SESSION_NAMESPACE,
+      body: buildSessionAgentIngress(spec, opts),
+    });
+    const previewIngress = await this.networking.createNamespacedIngress({
+      namespace: SESSION_NAMESPACE,
+      body: buildSessionPreviewIngress(spec, opts),
+    });
+
+    return { pod, service, agentIngress, previewIngress };
   }
 
   async getSessionPod(sessionId: string): Promise<V1Pod | null> {
-    const list = await this.api.listNamespacedPod({
+    const list = await this.core.listNamespacedPod({
       namespace: SESSION_NAMESPACE,
       labelSelector: `${SESSION_LABEL}=${sessionId}`,
     });
     return list.items[0] ?? null;
   }
 
-  async deleteSessionPod(sessionId: string): Promise<boolean> {
+  async deleteSessionResources(sessionId: string): Promise<boolean> {
     const pod = await this.getSessionPod(sessionId);
     if (!pod?.metadata?.name) return false;
-    await this.api.deleteNamespacedPod({
-      name: pod.metadata.name,
-      namespace: SESSION_NAMESPACE,
-    });
+    const name = pod.metadata.name;
+
+    // Belt-and-braces deletion: ownerReferences cause GC to remove the
+    // Service + Ingresses when the Pod is gone, but GC isn't immediate.
+    // Tearing them down explicitly keeps the demo flow's "everything's
+    // gone right now" feel and shields against GC backlogs in CI.
+    // 404s are expected — concurrent deletes / GC racing — so swallow
+    // them per resource.
+    const swallow404 = async (op: Promise<unknown>): Promise<void> => {
+      try {
+        await op;
+      } catch (err) {
+        if (!is404(err)) throw err;
+      }
+    };
+    await swallow404(
+      this.networking.deleteNamespacedIngress({ name: `${name}-agent`, namespace: SESSION_NAMESPACE }),
+    );
+    await swallow404(
+      this.networking.deleteNamespacedIngress({ name: `${name}-preview`, namespace: SESSION_NAMESPACE }),
+    );
+    await swallow404(
+      this.core.deleteNamespacedService({ name, namespace: SESSION_NAMESPACE }),
+    );
+    await this.core.deleteNamespacedPod({ name, namespace: SESSION_NAMESPACE });
     return true;
   }
+}
+
+function is404(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: number; statusCode?: number; response?: { statusCode?: number } };
+  return e.code === 404 || e.statusCode === 404 || e.response?.statusCode === 404;
 }
 
 export function loadKubeConfig(): KubeConfig {
@@ -268,7 +629,10 @@ export function loadKubeConfig(): KubeConfig {
   return kc;
 }
 
-export function makePodOps(): PodOps {
+export async function makeSessionOps(): Promise<SessionOps> {
   const kc = loadKubeConfig();
-  return new K8sPodOps(kc.makeApiClient(CoreV1Api));
+  const core = kc.makeApiClient(CoreV1Api);
+  const networking = kc.makeApiClient(NetworkingV1Api);
+  const authHeaderValue = await loadOpencodeAuthHeader(core);
+  return new K8sSessionOps(core, networking, authHeaderValue);
 }
