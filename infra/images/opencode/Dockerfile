@@ -58,10 +58,14 @@ ENV HOME=/var/opencode-data \
 # → finalizer). With a direct symlink, the binary itself becomes
 # PID 1 and receives SIGTERM directly.
 COPY --from=builder /opt/opencode/node_modules /opt/opencode/node_modules
-RUN ln -sf "$(find /opt/opencode/node_modules -path '*linux-*-musl/bin/opencode' -type f | head -1)" /usr/local/bin/opencode
+RUN ln -sf "$(find /opt/opencode/node_modules -path '*linux-*-musl/bin/opencode' -type f | head -1)" /usr/local/bin/opencode \
+ && opencode --version
 
-# Baked-in config and entrypoint.
+# Baked-in config and entrypoint. The `node -e` validates the JSON
+# syntax at build time so a malformed opencode.json fails the build
+# rather than crashing the agent at first boot.
 COPY opencode.json /var/opencode-config/opencode/opencode.json
+RUN node -e 'JSON.parse(require("fs").readFileSync("/var/opencode-config/opencode/opencode.json","utf8"))'
 COPY entrypoint.sh /usr/local/bin/opencode-entrypoint
 RUN chmod +x /usr/local/bin/opencode-entrypoint
 

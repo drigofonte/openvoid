@@ -20,13 +20,19 @@
 #                              Mounted from the cluster-scoped
 #                              `opencode-server-password` Secret.
 #
-# Reads (file mount, optional at boot):
+# Reads (file mount, content-optional at boot):
 #   $XDG_DATA_HOME/opencode/auth.json — LLM provider credentials,
-#       projected from the cluster-scoped `opencode-auth` Secret. The
-#       server boots fine without this; `/global/health` returns 200,
-#       but prompt requests fail with an upstream-auth error. That's
-#       the expected failure mode for "agent up but cannot reach LLM"
-#       and is documented as such in Phase 6.2.
+#       projected from the cluster-scoped `opencode-auth` Secret. If
+#       this file is present but its contents are empty/malformed
+#       (no usable provider entry), the server still boots,
+#       `/global/health` returns 200, and prompt requests fail with
+#       an upstream-auth error — the expected "agent up but cannot
+#       reach LLM" mode. The Secret resource itself is required:
+#       if `opencode-auth` is absent from the cluster, the kubelet
+#       blocks the pod with CreateContainerConfigError before this
+#       entrypoint ever runs (the volumeMount is not declared
+#       optional). Both Secrets must be applied out-of-band before
+#       creating sessions; the demo scripts check for this.
 
 set -eu
 
@@ -44,12 +50,19 @@ if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
   exit 1
 fi
 
+# Install the trap before backgrounding the child so a SIGTERM
+# arriving during the microsecond between `&` and `trap` cannot land
+# on a signal-naïve PID 1. The `${CHILD:-}` default makes the trap
+# safe to fire before CHILD is set — `kill -TERM ""` and
+# `wait ""` are both no-ops at the redirected `2>/dev/null`. Once
+# CHILD is set, SIGTERM is forwarded to the real child process.
+#
+# `kill -TERM` is load-bearing: opencode does not catch SIGTERM as
+# PID 1 (Linux's PID-1 special case), but as a non-PID-1 child it
+# terminates on the default disposition.
+trap 'kill -TERM "${CHILD:-}" 2>/dev/null; wait "${CHILD:-}" 2>/dev/null' TERM INT
+
 opencode serve --hostname 0.0.0.0 --port 8080 &
 CHILD=$!
-
-# `kill -TERM` is the load-bearing line: opencode does not catch
-# SIGTERM as PID 1 (Linux's PID-1 special case), but as a non-PID-1
-# child it terminates on the default disposition.
-trap 'kill -TERM "$CHILD" 2>/dev/null; wait "$CHILD"' TERM INT
 
 wait "$CHILD"

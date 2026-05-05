@@ -48,11 +48,18 @@ Symmetrically, `git-creds` is **never** mounted on this container.
 The mount discipline is asserted in the Session API's unit tests
 (`services/session-api/test/routes.sessions.test.ts`).
 
-If the auth Secret is missing or malformed, the server still boots and
-`/global/health` returns 200 — but prompt requests fail with an
-upstream-auth error from the LLM provider. That is the expected
-failure mode for "agent up but cannot reach LLM" and is documented in
-Phase 6.2.
+If `auth.json` is **present but empty or malformed** (no usable
+provider entry), the server still boots, `/global/health` returns 200,
+and prompt requests fail with an upstream-auth error from the LLM
+provider — the expected "agent up but cannot reach LLM" mode.
+
+If the `opencode-auth` **Secret resource is absent from the cluster
+entirely**, the kubelet blocks the pod with `CreateContainerConfigError`
+before any container starts. The volumeMount is required (no
+`optional: true`); graceful degradation only applies to content-level
+failures, not Secret-resource absence. Both Secrets must be applied
+out-of-band before creating sessions — the demo scripts at
+`scripts/demos/demo-opencode-*.sh` precondition-check for them.
 
 ## Baked-in configuration
 
