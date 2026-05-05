@@ -1,39 +1,42 @@
 # syntax=docker/dockerfile:1.7
-# Multi-stage build for @openvoid/landing.
-# Vite builds the static bundle inside a pnpm-aware Node image, then
-# the dist/ tree is copied into nginx:alpine for serving.
+# Single-stage Dockerfile for @openvoid/landing — Remix 3 (beta) on
+# Node 24-alpine, runs `tsx server.ts` directly (no separate build
+# step, matching the bookstore demo's pattern).
 #
-# Build-arg VITE_OPENVOID_API_URL is the only thing that differs
-# between kind and DOKS — everything else is the same image. kind
-# defaults bake http://api.127.0.0.1.nip.io; Phase 8 sets
-# https://api.<domain> for DOKS.
+# This is the **Unit 1 minimal** shape, sufficient to keep `tilt up`
+# working through the redesign. Unit 5 of the landing-redesign plan
+# refines this to:
+#   - 3-stage build (builder / dev / runtime) matching
+#     services/session-api/Dockerfile,
+#   - SCC-friendly chgrp/chmod for v1.5 OpenShift readiness,
+#   - hot-reload via `tsx watch` in a dev target,
+#   - smaller runtime image via `pnpm deploy --prod`.
+#
+# Until then the dev loop runs `pnpm --filter @openvoid/landing dev`
+# directly when not using Tilt.
 
-ARG NODE_VERSION=20-alpine
+FROM node:24-alpine
 
-FROM node:${NODE_VERSION} AS builder
 WORKDIR /workspace
 
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Workspace manifests for pnpm-aware caching.
+# Copy workspace manifests first for cache-friendly install order.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/protocol/package.json packages/protocol/
 COPY services/landing/package.json services/landing/
 
 RUN pnpm install --frozen-lockfile
 
-# Sources.
+# Copy sources.
 COPY packages/protocol packages/protocol
 COPY services/landing services/landing
 
-ARG VITE_OPENVOID_API_URL=http://api.127.0.0.1.nip.io
-ENV VITE_OPENVOID_API_URL=${VITE_OPENVOID_API_URL}
+WORKDIR /workspace/services/landing
 
-RUN pnpm --filter @openvoid/landing build
+ENV NODE_ENV=production \
+    PORT=3000
 
+EXPOSE 3000
 
-FROM nginx:1.27-alpine AS runtime
-COPY services/landing/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /workspace/services/landing/dist /usr/share/nginx/html
-
-EXPOSE 80
+CMD ["pnpm", "exec", "tsx", "server.ts"]
