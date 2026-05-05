@@ -56,22 +56,27 @@ k8s_resource(
 # references are at runtime). `docker_build` would therefore build but not
 # push to the kind registry, leaving Pods in Init:ImagePullBackOff. Use a
 # `local_resource` per image that explicitly builds and pushes.
-local_resource(
-    "git-clone-image",
-    cmd=" && ".join([
-        "docker build -t localhost:5001/openvoid/git-clone:dev infra/images/git-clone",
-        "docker push localhost:5001/openvoid/git-clone:dev",
-    ]),
-    deps=["infra/images/git-clone"],
-    labels=["images"],
-)
+# Build, push, and bust the kind node's cached copy. The cache-bust
+# is required because the kind node pulls `:dev` once and then keeps
+# the cached blob — `imagePullPolicy: IfNotPresent` (the K8s default
+# for non-`:latest` tags) means a freshly-rebuilt `:dev` image gets
+# ignored at the next pod creation. `crictl rmi` deletes the cached
+# image; the next pod pull goes back to localhost:5001 for the new
+# layers. `|| true` handles the first-run case where nothing is
+# cached yet.
+def session_pod_image(name, dir):
+    image = "localhost:5001/openvoid/{}:dev".format(name)
+    local_resource(
+        "{}-image".format(name),
+        cmd=" && ".join([
+            "docker build -t {} {}".format(image, dir),
+            "docker push {}".format(image),
+            "docker exec openvoid-local-control-plane crictl rmi {} || true".format(image),
+        ]),
+        deps=[dir],
+        labels=["images"],
+    )
 
-local_resource(
-    "git-finalizer-image",
-    cmd=" && ".join([
-        "docker build -t localhost:5001/openvoid/git-finalizer:dev infra/images/git-finalizer",
-        "docker push localhost:5001/openvoid/git-finalizer:dev",
-    ]),
-    deps=["infra/images/git-finalizer"],
-    labels=["images"],
-)
+session_pod_image("git-clone",     "infra/images/git-clone")
+session_pod_image("git-finalizer", "infra/images/git-finalizer")
+session_pod_image("opencode",      "infra/images/opencode")

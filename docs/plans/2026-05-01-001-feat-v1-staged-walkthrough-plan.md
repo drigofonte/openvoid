@@ -980,7 +980,7 @@ The plan groups units into 9 phases (one per vertical slice from the brainstorm)
 >
 > Both Secrets graduate to chart-managed in Phase 7 — `opencode-server-password` becomes auto-generated; `opencode-auth` stays referenced (real third-party keys can't be auto-generated, same posture as `git-creds`).
 
-- [ ] **Unit 6.0: Spike — verify OpenCode auth mechanism (path, env-var fallback, OpenRouter format)**
+- [x] **Unit 6.0: Spike — verify OpenCode auth mechanism (path, env-var fallback, OpenRouter format)**
 
 **Goal:** Determine, before writing any pod-manifest code, exactly *how* OpenCode reads LLM-provider credentials at runtime, so Unit 6.2 can pick between (a) mounting a `auth.json` file at OpenCode's expected path and (b) injecting per-provider env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`). The OpenRouter format and base-URL handling specifically need verification — OpenRouter is OpenAI-compatible, but OpenCode may treat it as a distinct provider type.
 
@@ -1012,7 +1012,7 @@ The spike's output also pins the chart-value shape for `session.opencode.{provid
 
 ---
 
-- [ ] **Unit 6.1: OpenCode container image (rev 4 — SCC-friendly)**
+- [x] **Unit 6.1: OpenCode container image (rev 4 — SCC-friendly)**
 
 **Goal:** A minimal Dockerfile installs OpenCode and runs `opencode serve --host 0.0.0.0 --port 8080`. The image is built into both the kind local registry (`localhost:5001/openvoid/opencode:dev`) and GHCR (`ghcr.io/openvoid/opencode:<sha>` for DOKS).
 
@@ -1063,7 +1063,7 @@ The spike's output also pins the chart-value shape for `session.opencode.{provid
 
 ---
 
-- [ ] **Unit 6.2: Session API uses OpenCode as the per-session main container (out-of-band Secrets — server password + LLM auth)**
+- [x] **Unit 6.2: Session API uses OpenCode as the per-session main container (out-of-band Secrets — server password + LLM auth)**
 
 **Goal:** `services/session-api/src/k8s/client.ts`'s `buildSessionPodManifest` swaps the placeholder `nginx:alpine` for OpenCode. Env-var wiring threads `OPENCODE_SERVER_PASSWORD` (from a cluster-scoped Secret applied out-of-band, mirroring Phase 4's `git-creds` pattern), `OPENVOID_REPO_PATH=/workspace/repo`, etc. The LLM provider auth (`auth.json` content for one or more of Anthropic / OpenAI / OpenRouter) is mounted from a separate `opencode-auth` Secret on the **agent main container only**, using whichever delivery mechanism Unit 6.0's spike confirmed (file mount or env-var projection). `automountServiceAccountToken: false` is set on the per-session pod (untrusted). The Phase 5 sidecar and Phase 4 init container are untouched — this is a pure main-container swap.
 

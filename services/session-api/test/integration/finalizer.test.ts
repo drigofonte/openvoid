@@ -9,11 +9,19 @@
 //
 //   1. `tilt up`                                 (kind cluster + session-api)
 //   2. Apply git-creds Secret (per Phase 4 README).
-//   3. Export the test inputs:
+//   3. Apply opencode-server-password and opencode-auth Secrets
+//      (Phase 6.2 preconditions; see infra/local/*.example).
+//   4. Export the test inputs:
 //      - OPENVOID_TEST_REPO         e.g. https://github.com/<you>/openvoid-test
 //      - OPENVOID_TEST_GITHUB_TOKEN platform PAT with Contents:read+write on the repo
 //      - OPENVOID_API_URL           default http://localhost:4000
-//   4. `INTEGRATION=1 pnpm --filter @openvoid/session-api test:integration`
+//   5. `INTEGRATION=1 pnpm --filter @openvoid/session-api test:integration`
+//
+// After Phase 6.2: the agent main container is OpenCode by default, so
+// kubectl-exec edits target /workspace/repo (the WORKSPACE_MOUNT_PATH),
+// not /usr/share/nginx/html. The finalizer is unchanged; this test
+// continues to characterize the SIGTERM cascade specifically — it
+// happens to also exercise OpenCode's image boot as a side effect.
 //
 // The repo MUST already have at least one commit on `main` — git clone
 // fails on an empty repo (see "Resolved during Phase 4 verification" in
@@ -164,9 +172,10 @@ describe.skipIf(!INTEGRATION)("git-finalizer SIGTERM cascade (Phase 5.2)", () =>
       try {
         await waitForPodPhase(sessionId, "Running", 60_000);
 
-        // Edit a file in the workspace via the main (nginx) container's
-        // filesystem — same volume, different mount path (/usr/share/nginx/html
-        // for nginx, /workspace for the sidecar; both see /repo/<file>).
+        // Edit a file in the workspace via the agent main container's
+        // filesystem. After Phase 6.2 both the main container and the
+        // sidecar mount the workspace volume at /workspace; the cloned
+        // repo lives at /workspace/repo for both.
         const podName = `session-${sessionId.toLowerCase()}`;
         kubectl([
           "exec",
@@ -178,7 +187,7 @@ describe.skipIf(!INTEGRATION)("git-finalizer SIGTERM cascade (Phase 5.2)", () =>
           "--",
           "sh",
           "-c",
-          `echo "phase-5 finalizer e2e $(date -Iseconds)" > /usr/share/nginx/html/repo/finalizer-test.txt`,
+          `echo "phase-5 finalizer e2e $(date -Iseconds)" > /workspace/repo/finalizer-test.txt`,
         ]);
 
         await deleteSession(sessionId);
@@ -238,7 +247,7 @@ describe.skipIf(!INTEGRATION)("git-finalizer SIGTERM cascade (Phase 5.2)", () =>
           "--",
           "sh",
           "-c",
-          `echo "force-delete test" > /usr/share/nginx/html/repo/force-delete-test.txt`,
+          `echo "force-delete test" > /workspace/repo/force-delete-test.txt`,
         ]);
 
         // Documented "do not force-delete sessions" rule: SIGKILL skips

@@ -1,3 +1,6 @@
+# Custom
+.ignore
+
 # Node / TypeScript
 node_modules/
 dist/
@@ -30,6 +33,10 @@ coverage/
 *.key
 infra/local/git-creds-secret.yaml
 !infra/local/git-creds-secret.yaml.example
+infra/local/opencode-password-secret.yaml
+!infra/local/opencode-password-secret.yaml.example
+infra/local/opencode-auth-secret.yaml
+!infra/local/opencode-auth-secret.yaml.example
 
 # Go
 bin/
