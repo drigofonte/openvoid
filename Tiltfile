@@ -55,11 +55,14 @@ k8s_resource(
     labels=["api"],
 )
 
-# Phase 7 landing page. Built from the workspace root the same way as
-# session-api so the build context can see the @openvoid/protocol
-# package. The kind ingress at app.127.0.0.1.nip.io is what end users
-# hit; the port_forward is a convenience for direct dev hits without
-# the ingress in the loop.
+# Landing page (Remix 3). Built from the workspace root so the build
+# context can see @openvoid/protocol. The kind ingress at
+# app.127.0.0.1.nip.io is what end users hit; the port_forward is a
+# convenience for direct dev hits without the ingress in the loop.
+#
+# `OPENVOID_API_URL` is now a runtime env var on the Deployment (set
+# in infra/local/landing.yaml), not a build-arg — one image works for
+# both kind and DOKS.
 docker_build(
     "localhost:5001/openvoid/landing:dev",
     context=".",
@@ -72,14 +75,11 @@ docker_build(
         "packages/protocol",
         "services/landing",
     ],
-    build_args={
-        "VITE_OPENVOID_API_URL": "http://api.127.0.0.1.nip.io",
-    },
 )
 
 k8s_resource(
     "landing",
-    port_forwards=[port_forward(8080, 80, name="http")],
+    port_forwards=[port_forward(8088, 3000, name="http")],
     labels=["ui"],
 )
 

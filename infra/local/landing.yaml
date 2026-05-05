@@ -1,11 +1,10 @@
-# Phase 7 — kind-only manifest for the landing page + an Ingress in
-# front of the Session API at api.127.0.0.1.nip.io. Phase 9's Helm chart
-# absorbs both into chart templates; the raw YAML is deliberately
-# disposable.
+# kind-only manifest for the landing page + an Ingress in front of the
+# Session API at api.127.0.0.1.nip.io. Phase 9's Helm chart absorbs
+# both into chart templates; the raw YAML is deliberately disposable.
 #
-# The landing page is a static SPA built by Vite and served by an
-# nginx:alpine pod. It calls the Session API at api.127.0.0.1.nip.io
-# (baked in at build-arg time as VITE_OPENVOID_API_URL).
+# The landing page is a Remix 3 (beta) Node server. It calls the
+# Session API in-cluster at session-api.openvoid-system.svc:4000 —
+# server-side fetch, no CORS round-trip through the public ingress.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -31,20 +30,37 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: OPENVOID_API_URL
+              value: "http://session-api.openvoid-system.svc.cluster.local:4000"
           readinessProbe:
             httpGet:
               path: /
               port: http
             initialDelaySeconds: 1
             periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Resource budget tuned for the Remix 3 Node server (Node 24
+          # baseline ~80 MiB + framework runtime + app code). Matches
+          # services/session-api's shape; Unit 5 of the redesign plan
+          # may revise once we have profiling data.
           resources:
             requests:
-              cpu: 10m
-              memory: 16Mi
+              cpu: 50m
+              memory: 96Mi
             limits:
-              cpu: 100m
-              memory: 64Mi
+              cpu: 500m
+              memory: 256Mi
 ---
 apiVersion: v1
 kind: Service
@@ -81,10 +97,12 @@ spec:
                 port:
                   name: http
 ---
-# Session API Ingress at api.127.0.0.1.nip.io — gives the browser a
-# stable hostname to call from app.127.0.0.1.nip.io. The Session API
-# Service itself lives in infra/local/session-api.yaml; this Ingress
-# only exposes it. Phase 9 collapses both into the Helm chart.
+# Session API Ingress at api.127.0.0.1.nip.io — kept for backward
+# compatibility with any tooling that hits the Session API directly
+# from the host browser (e.g. Scalar API docs at /reference). The
+# Remix 3 landing itself talks to the API in-cluster via the
+# OPENVOID_API_URL env var above; this Ingress is no longer load-
+# bearing for the magic-moment flow but doesn't cost anything to keep.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

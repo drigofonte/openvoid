@@ -2,22 +2,26 @@
   "name": "@openvoid/landing",
   "version": "0.0.0",
   "private": true,
-  "description": "openvoid landing page — single static page that drives the Session API. Phase 7 stop-gap; replaced by the long-term front-end after v1.",
+  "description": "openvoid landing page — long-term front-end. Remix 3 (beta) app driving the Session API.",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=24.3.0"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
+    "dev": "NODE_ENV=development tsx watch server.ts",
+    "start": "tsx server.ts",
+    "test": "NODE_ENV=test remix test",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "remix": "3.0.0-beta.0"
   },
   "devDependencies": {
     "@openvoid/protocol": "workspace:*",
+    "@types/dom-navigation": "1.0.7",
     "@types/node": "22.12.0",
-    "happy-dom": "16.7.2",
-    "typescript": "5.7.2",
-    "vite": "6.0.7",
-    "vitest": "4.1.5"
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
   }
 }

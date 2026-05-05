@@ -1,0 +1,51 @@
+/*
+ * openvoid landing — element resets + base typography.
+ * Mirrors the bookstore demo's layered approach (`@layer app, rmx;`)
+ * so framework-shipped styles can override only when intended.
+ */
+
+@layer app, rmx;
+
+@layer app {
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+    line-height: inherit;
+  }
+
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  html, body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--wf-page-bg);
+    color: var(--wf-fg);
+    font-family: var(--wf-font);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

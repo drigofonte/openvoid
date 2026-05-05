@@ -1,58 +1,96 @@
 # @openvoid/landing
 
-Throwaway Phase 7 landing page. Vanilla TypeScript + Vite, served by
-nginx in the cluster. Drives the [Session API](../session-api) from a
-browser at `http://app.127.0.0.1.nip.io/` (kind) or
-`https://app.<domain>/` (DOKS, Phase 8).
+The openvoid landing page — a [Remix 3](https://remix.run) (beta) app
+that drives the [Session API](../session-api). Implements the
+wireframe-faithful UX from the Claude Design bundle: prompt-first
+Create screen, polling Provisioning state, two-tab Ready handoff,
+confirm-driven Kill flow with a "Saved → GitHub" recap.
 
-This package is **intentionally short-lived** — the long-term front-end
-will replace it. Don't extract abstractions or build a design system
-here. If a feature wants more than ~50 lines of behavior, reconsider
-whether it belongs in the throwaway page or in whatever comes next.
+The earlier vanilla-TS landing was an explicit Phase 7 stop-gap. This
+package replaces it as the **long-term front-end**, tracking the
+landing-redesign plan at
+[`docs/plans/2026-05-05-002-feat-landing-page-redesign-plan.md`](../../docs/plans/2026-05-05-002-feat-landing-page-redesign-plan.md).
+
+## ⚠️ Beta-grade dependency
+
+This package pins `remix@3.0.0-beta.0`. Remix 3 reached public beta
+on **2026-04-29**; APIs renamed within the release week. We pin
+exactly (no `^`) and budget bumps deliberately. If GA slips past
+**2026-09-30** the project's [migration / fallback path](../../docs/plans/2026-05-05-002-feat-landing-page-redesign-plan.md#migration--fallback-path)
+documents how to fall back to React Router 7 — visual + UX assets
+survive the migration.
+
+When upgrading the pin: re-read the
+[bookstore demo](https://github.com/remix-run/remix/tree/main/demos/bookstore)
+source for the target version, diff against the pinned SHA in
+`scripts/sync-remix-skills.sh`, and budget ~1 day for refactoring
+import paths and component shapes.
 
 ## Local dev
 
-```bash
-# From the repo root:
+```sh
+# From the repo root, after a successful pnpm install:
 pnpm --filter @openvoid/landing dev
 ```
 
-Vite serves the page at <http://localhost:5173/>. By default the page
-calls the Session API at the URL set in `VITE_OPENVOID_API_URL` — if
-unset, requests are relative (which works inside the cluster, not
-locally with `pnpm dev`). For pure UI hacking you can leave it unset
-and stub the API.
+The dev server listens on http://localhost:3000/. `tsx watch`
+reloads on source changes.
 
-## Build
+To talk to a real Session API, set `OPENVOID_API_URL`:
 
-```bash
-pnpm --filter @openvoid/landing build
+```sh
+OPENVOID_API_URL=http://localhost:4000 \
+  pnpm --filter @openvoid/landing dev
 ```
 
-Output lands at `services/landing/dist/`.
+In the kind cluster (`tilt up`), this is set on the Deployment to
+`http://session-api.openvoid-system.svc.cluster.local:4000`. The
+browser hits the landing pod through ingress-nginx at
+`http://app.127.0.0.1.nip.io/`; the landing then proxies API calls
+server-side. No CORS in the loop.
 
-## Docker / cluster
+## Stack
 
-The kind flow is driven by Tilt — the Tiltfile builds the image as
-`localhost:5001/openvoid/landing:dev` with `VITE_OPENVOID_API_URL=
-http://api.127.0.0.1.nip.io` and applies `infra/local/landing.yaml`.
+| Concern | Choice |
+|---|---|
+| Framework | Remix 3 (beta), framework mode |
+| Language | TypeScript 5.7, strict, ESM, JSX via `remix/ui` |
+| Server | Built-in Node `http.createServer` + `createRequestListener` |
+| Bundler | None — runs `tsx server.ts` directly |
+| Styling | Plain CSS + design tokens lifted from the wireframe primitives. See [Styling Architecture](../../docs/plans/2026-05-05-002-feat-landing-page-redesign-plan.md#styling-architecture) for the rejected alternatives (Tailwind, shadcn/ui, `createTheme()`). |
+| Tests | `remix/test` (Node native test-runner shape), not vitest |
+| Node | ≥ 24.3.0 (the package's own engines floor; the repo root stays at ≥ 20) |
 
-To build manually:
+## Layout
 
-```bash
-docker build \
-  -t localhost:5001/openvoid/landing:dev \
-  -f services/landing/Dockerfile \
-  --build-arg VITE_OPENVOID_API_URL=http://api.127.0.0.1.nip.io \
-  .
+```
+services/landing/
+├── app/
+│   ├── actions/<route>/
+│   │   ├── controller.tsx     # server-side handlers; render(<Page/>)
+│   │   └── page.tsx           # JSX render-fn component
+│   ├── ui/                    # primitives (Card, Button, Chip, …)
+│   ├── render.tsx             # renderToStream → HTMLResponse helper
+│   ├── routes.ts              # typed route table
+│   └── router.ts              # createRouter() + middleware
+├── public/styles/
+│   ├── theme.css              # design tokens + .wf-* component classes
+│   └── base.css               # element resets, body bg, typography
+├── server.ts                  # http server bootstrap
+├── package.json
+└── tsconfig.json
 ```
 
-## Files
+## Installed Claude Code skills
 
-- `index.html` — page shell with the four state sections.
-- `src/app.ts` — DOM wiring + polling loops.
-- `src/state.ts` — pure state machine (testable without happy-dom).
-- `src/api.ts` — typed fetch wrapper around `@openvoid/protocol`.
-- `src/styles.css` — ~150 lines of hand-rolled CSS.
-- `nginx.conf` — single SPA fallback, hashed-asset caching.
-- `Dockerfile` — multi-stage Vite build → nginx:alpine.
+Three skills from the upstream Remix repo are committed at the repo
+root's `.claude/skills/` so any contributor with Claude Code has
+framework-shaped guidance available. Run `bash scripts/sync-remix-skills.sh`
+from the repo root to refresh them (the script pins to a specific
+upstream SHA — bumps are deliberate).
+
+| Skill | When to invoke |
+|---|---|
+| `expert-typescript-programmer` | Writing or refactoring TS in this package — strict types, generics, type guards. |
+| `write-tests` | Authoring tests with `remix/test` — fixtures, mocks, the Node-test-runner shape. |
+| `author-ui-modules` | Building `clientEntry` components with `mix={on(...)}` mixins, plain-context `handle.context.set(...)`, and the `packages/ui`-style listbox/select patterns. |
