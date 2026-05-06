@@ -1,7 +1,23 @@
 import * as http from 'node:http'
+import { setDefaultResultOrder } from 'node:dns'
 import { createRequestListener } from 'remix/node-fetch-server'
 
 import { createLandingRouter } from './app/router.ts'
+
+// Force IPv4-first DNS resolution. Node 18+ defaults to `verbatim`,
+// which respects whatever order the OS resolver returns. On macOS
+// + Docker Desktop + nip.io, that often puts `::1` ahead of
+// `127.0.0.1`, and Node's fetch (via Undici) does not always fall
+// back cleanly when the IPv6 connection is refused — the request
+// surfaces as `ECONNREFUSED 127.0.0.1:80` (the IPv4 address from
+// the URL is a red herring; the actual attempt was on `::1`).
+//
+// Affects every outbound HTTP call from this server, including
+// the Session API client and ingress-readiness probes. IPv4-first
+// is the right default for kind-on-localhost and DOKS via
+// cloudflared (both bind IPv4); revisit if/when we deploy onto an
+// IPv6-only network.
+setDefaultResultOrder('ipv4first')
 
 const router = createLandingRouter()
 
