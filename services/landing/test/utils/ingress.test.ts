@@ -9,8 +9,8 @@ const SID = '01HABCDEF'
 const READY_VIEW: View = {
   kind: 'ready',
   sessionId: SID,
-  agentUrl: 'https://01habcdef.agent.example/',
-  previewUrl: 'https://01habcdef.preview.example/',
+  agentUrl: 'http://01habcdef.agent.example/',
+  previewUrl: 'http://01habcdef.preview.example/',
 }
 
 function fakeFetch(
@@ -26,10 +26,9 @@ function fakeFetch(
 }
 
 describe('gateOnIngressReadiness', () => {
-  it('keeps ready when both probes succeed', async () => {
+  it('keeps ready when the agent probe succeeds', async () => {
     const fetch = fakeFetch({
       [READY_VIEW.agentUrl]: new Response(null, { status: 200 }),
-      [READY_VIEW.previewUrl]: new Response(null, { status: 200 }),
     })
 
     const result = await gateOnIngressReadiness(READY_VIEW, { fetch })
@@ -37,10 +36,9 @@ describe('gateOnIngressReadiness', () => {
     assert.deepEqual(result, READY_VIEW)
   })
 
-  it('keeps ready when probes return 4xx (HEAD often unsupported, treat as reachable)', async () => {
+  it('keeps ready when the agent returns 4xx (HEAD often unsupported, treat as reachable)', async () => {
     const fetch = fakeFetch({
       [READY_VIEW.agentUrl]: new Response(null, { status: 401 }),
-      [READY_VIEW.previewUrl]: new Response(null, { status: 405 }),
     })
 
     const result = await gateOnIngressReadiness(READY_VIEW, { fetch })
@@ -48,10 +46,23 @@ describe('gateOnIngressReadiness', () => {
     assert.equal(result.kind, 'ready')
   })
 
-  it('downgrades to provisioning(running-pre-ingress) when agent probe fails', async () => {
+  it('does NOT probe the preview URL — preview readiness depends on the user starting a dev server', async () => {
+    // Preview URL is intentionally not in the fakeFetch map. If the
+    // gate probed it, fakeFetch would throw `unexpected fetch:` and
+    // the test would fail. Asserting via "no fetch happened" rather
+    // than mocking a 502 keeps the contract explicit.
+    const fetch = fakeFetch({
+      [READY_VIEW.agentUrl]: new Response(null, { status: 200 }),
+    })
+
+    const result = await gateOnIngressReadiness(READY_VIEW, { fetch })
+
+    assert.deepEqual(result, READY_VIEW)
+  })
+
+  it('downgrades to provisioning(running-pre-ingress) when agent probe returns 5xx', async () => {
     const fetch = fakeFetch({
       [READY_VIEW.agentUrl]: new Response(null, { status: 503 }),
-      [READY_VIEW.previewUrl]: new Response(null, { status: 200 }),
     })
 
     const result = await gateOnIngressReadiness(READY_VIEW, { fetch })
@@ -64,21 +75,9 @@ describe('gateOnIngressReadiness', () => {
     })
   })
 
-  it('downgrades when preview probe fails', async () => {
-    const fetch = fakeFetch({
-      [READY_VIEW.agentUrl]: new Response(null, { status: 200 }),
-      [READY_VIEW.previewUrl]: new Response(null, { status: 502 }),
-    })
-
-    const result = await gateOnIngressReadiness(READY_VIEW, { fetch })
-
-    assert.equal(result.kind, 'provisioning')
-  })
-
-  it('downgrades when a probe throws (network error)', async () => {
+  it('downgrades when the agent probe throws (network error)', async () => {
     const fetch = fakeFetch({
       [READY_VIEW.agentUrl]: new TypeError('connection refused'),
-      [READY_VIEW.previewUrl]: new Response(null, { status: 200 }),
     })
 
     const result = await gateOnIngressReadiness(READY_VIEW, { fetch })
@@ -100,12 +99,14 @@ describe('gateOnIngressReadiness', () => {
     assert.deepEqual(result, provisioning)
   })
 
-  it('honours the timeout (probe rejects on AbortSignal)', async (t) => {
+  it('honours the timeout (probe rejects on AbortSignal)', async () => {
     // Fake fetch that hangs forever unless aborted.
     const fetch: typeof globalThis.fetch = ((_, init?: RequestInit) =>
-      new Promise((_, reject) => {
+      new Promise((_resolve, reject) => {
         const signal = init?.signal
-        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+        signal?.addEventListener('abort', () =>
+          reject(new DOMException('Aborted', 'AbortError')),
+        )
       })) as typeof globalThis.fetch
 
     const start = Date.now()
@@ -114,6 +115,5 @@ describe('gateOnIngressReadiness', () => {
 
     assert.equal(result.kind, 'provisioning')
     assert.ok(elapsed < 500, `probe should have timed out quickly; took ${elapsed}ms`)
-    void t // keep TS happy on unused param
   })
 })
