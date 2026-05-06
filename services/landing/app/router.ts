@@ -7,6 +7,7 @@ import * as path from 'node:path'
 
 import { routes } from './routes.ts'
 import homeController from './actions/home/controller.tsx'
+import sessionsController from './actions/sessions/controller.tsx'
 
 const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public')
 
@@ -31,6 +32,7 @@ export function createLandingRouter() {
   const router = createRouter({ middleware })
 
   router.map(routes.home, homeController)
+  router.map(routes.sessions, sessionsController)
 
   return router
 }
