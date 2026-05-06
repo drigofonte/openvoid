@@ -17,6 +17,11 @@ export interface InputProps {
 /**
  * Text input — 34px height, 8px radius, focus ring in the accent
  * colour. Maps to `wireframe-primitives.jsx`'s `.wf-input` class.
+ *
+ * `defaultValue` becomes the `value=` HTML attribute (the
+ * server-rendered initial value). React-style `defaultValue=` is
+ * not preserved through Remix 3's renderer — unknown attribute
+ * names get lowercased, and the browser ignores `defaultvalue=`.
  */
 export function Input() {
   return ({
@@ -36,7 +41,7 @@ export function Input() {
           name={name}
           type="url"
           placeholder={placeholder}
-          defaultValue={defaultValue}
+          value={defaultValue}
           required={required || undefined}
           autoComplete={autoComplete}
         />
@@ -50,7 +55,7 @@ export function Input() {
           name={name}
           type="email"
           placeholder={placeholder}
-          defaultValue={defaultValue}
+          value={defaultValue}
           required={required || undefined}
           autoComplete={autoComplete}
         />
@@ -63,7 +68,7 @@ export function Input() {
         name={name}
         type="text"
         placeholder={placeholder}
-        defaultValue={defaultValue}
+        value={defaultValue}
         required={required || undefined}
         autoComplete={autoComplete}
       />
