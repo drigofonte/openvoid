@@ -1,26 +1,100 @@
 import type { Controller } from 'remix/fetch-router'
+import { redirect } from 'remix/response/redirect'
+import * as s from 'remix/data-schema'
+import { minLength } from 'remix/data-schema/checks'
+import * as f from 'remix/data-schema/form-data'
+
 import type { routes } from '../../routes.ts'
+import { ApiError, createSession } from '../../utils/api.ts'
 import { render } from '../../render.tsx'
-import { HomePage } from './page.tsx'
+import { HomePage, type PreviousValues } from './page.tsx'
+import { parseDoneParams } from './done-banner.tsx'
 
 /**
  * Home controller.
  *
- * Unit 1: `index` renders the placeholder Create screen so the
- * scaffold's design tokens, layout primitives, and typography are
- * verifiable end-to-end. `create` is wired up in Unit 3 (form
- * validation + POST to the Session API + redirect to
- * `/sessions/:id`).
+ * - `index` (GET /) renders the Create page; the optional Done
+ *   banner appears above the form when the URL carries
+ *   `?done=:id&repo=&branch=` (post-Stop redirect from
+ *   `/sessions/:id`, Unit 4).
+ * - `create` (POST /) validates the form, posts to the Session
+ *   API, redirects to `/sessions/:id` on success, or re-renders
+ *   the Create page with an inline error on validation /
+ *   upstream failure.
+ *
+ * The double-submit defence is the `idempotencyKey` hidden field:
+ * generated server-side on the GET render, **persisted across
+ * POST re-renders** (a fresh key on retry would defeat upstream
+ * dedup), forwarded to the Session API as `Idempotency-Key`.
+ * The visual `clientEntry` "Starting…" button lands in Unit 4.
  */
+
+const CreateSchema = f.object({
+  repo: f.field(s.string().pipe(minLength(1))),
+  branch: f.field(s.string().pipe(minLength(1))),
+  idempotencyKey: f.field(s.string().pipe(minLength(1))),
+  prompt: f.field(s.string().pipe(minLength(1))),
+})
+
+function asString(value: FormDataEntryValue | null): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function readPreviousValues(formData: FormData): PreviousValues {
+  return {
+    repo: asString(formData.get('repo')),
+    branch: asString(formData.get('branch')),
+    prompt: asString(formData.get('prompt')),
+  }
+}
+
 export default {
   actions: {
-    index() {
-      return render(<HomePage />)
+    index({ url }) {
+      const done = parseDoneParams(url.searchParams)
+      return render(<HomePage done={done} idempotencyKey={crypto.randomUUID()} />)
     },
-    create() {
-      // Placeholder — Unit 3 wires the form schema, idempotency-key
-      // forwarding, and the upstream POST.
-      return new Response('Not implemented yet — Unit 3', { status: 501 })
+    async create({ get, url }) {
+      const formData = get(FormData)
+      const submittedKey = asString(formData.get('idempotencyKey'))
+      const idempotencyKey = submittedKey ?? crypto.randomUUID()
+      const done = parseDoneParams(url.searchParams)
+      const previousValues = readPreviousValues(formData)
+
+      const parsed = s.parseSafe(CreateSchema, formData)
+      if (!parsed.success) {
+        return render(
+          <HomePage
+            done={done}
+            idempotencyKey={idempotencyKey}
+            error={{ message: 'Please fill in the prompt and a Git repo URL.' }}
+            previousValues={previousValues}
+          />,
+          { status: 400 },
+        )
+      }
+
+      try {
+        const session = await createSession(
+          { repo: parsed.value.repo, branch: parsed.value.branch },
+          parsed.value.idempotencyKey,
+        )
+        return redirect(`/sessions/${session.sessionId}`)
+      } catch (error) {
+        if (error instanceof ApiError) {
+          const status = error.status >= 400 && error.status < 600 ? error.status : 502
+          return render(
+            <HomePage
+              done={done}
+              idempotencyKey={parsed.value.idempotencyKey}
+              error={{ message: error.message, code: error.code }}
+              previousValues={previousValues}
+            />,
+            { status },
+          )
+        }
+        throw error
+      }
     },
   },
 } satisfies Controller<typeof routes.home>

@@ -10,8 +10,12 @@
  * - Branch names with slashes (`feat/sid`) are URL-encoded so the
  *   resulting URL stays valid.
  *
- * Returns `null` when the input cannot be parsed as a URL — the UI
- * should fall back to plain copy in that case.
+ * Returns `null` when the input cannot be parsed as a URL, OR
+ * when the URL uses a non-HTTP(S) scheme (`javascript:`, `data:`,
+ * `file:`, …). The Done banner renders this string as an `<a href>`,
+ * so dangerous schemes would be a clickable XSS vector.
+ *
+ * The UI falls back to plain copy when this returns `null`.
  */
 export function branchUrl(repoUrl: string, branch: string): string | null {
   let url: URL
@@ -20,6 +24,8 @@ export function branchUrl(repoUrl: string, branch: string): string | null {
   } catch {
     return null
   }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
 
   url.username = ''
   url.password = ''
