@@ -47,4 +47,19 @@ describe('branchUrl', () => {
     assert.equal(branchUrl('not a url', 'main'), null)
     assert.equal(branchUrl('', 'main'), null)
   })
+
+  it('returns null for non-HTTP(S) schemes (XSS guard)', () => {
+    // Done banner renders branchUrl output as <a href>, so `javascript:`,
+    // `data:`, `file:` and friends would be clickable XSS vectors.
+    assert.equal(branchUrl('javascript:alert(1)', 'main'), null)
+    assert.equal(branchUrl('data:text/html,<script>alert(1)</script>', 'main'), null)
+    assert.equal(branchUrl('file:///etc/passwd', 'main'), null)
+    assert.equal(branchUrl('vbscript:msgbox(1)', 'main'), null)
+  })
+
+  it('returns null for SSH-style git URLs', () => {
+    // `git@github.com:org/repo.git` is not a valid URL per WHATWG; surfaces
+    // as a parse failure today. The Done banner falls back to plain copy.
+    assert.equal(branchUrl('git@github.com:example/x.git', 'main'), null)
+  })
 })
