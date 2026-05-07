@@ -3,7 +3,9 @@ import { css } from 'remix/ui'
 import { Card } from '../../ui/card.tsx'
 import { Eyebrow } from '../../ui/eyebrow.tsx'
 import { Layout } from '../../ui/layout.tsx'
+import { isTerminal } from '../../utils/poll.ts'
 import type { View } from '../../utils/derive.ts'
+import { StatusPoller } from './client/status-poller.tsx'
 import { Done } from './components/done.tsx'
 import { Failed } from './components/failed.tsx'
 import { KillConfirm } from './components/kill-confirm.tsx'
@@ -43,6 +45,15 @@ export function SessionPage() {
     <Layout title={pageTitle(view)} url="app.openvoid.dev">
       {actionError ? <ActionErrorBanner error={actionError} /> : null}
       {renderView(view, confirmStop)}
+      {isTerminal(view) ? null : (
+        <StatusPoller
+          sessionId={view.sessionId}
+          initialKind={view.kind}
+          initialPendingPhase={view.kind === 'provisioning' ? (view.pendingPhase ?? null) : null}
+          initialAgentUrl={view.kind === 'ready' ? view.agentUrl : null}
+          initialPreviewUrl={view.kind === 'ready' ? view.previewUrl : null}
+        />
+      )}
     </Layout>
   )
 }

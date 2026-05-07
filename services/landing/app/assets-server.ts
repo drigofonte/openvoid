@@ -40,9 +40,19 @@ export const assetServer = createAssetServer({
   allow: [
     `${SERVICE_DIR}/app/assets/**`,
     `${SERVICE_DIR}/app/**/client/**`,
+    `${SERVICE_DIR}/app/utils/**`,
     'node_modules/**',
   ],
-  deny: [`${SERVICE_DIR}/app/**/*.server.*`],
+  deny: [
+    `${SERVICE_DIR}/app/**/*.server.*`,
+    // Server-only client of the Session API. Uses process.env and
+    // exports a global mutable `apiBaseOverride` test seam — neither
+    // is appropriate to ship to a browser.
+    `${SERVICE_DIR}/app/utils/api.ts`,
+    // Server-only HEAD probes via global fetch; safe enough to ship,
+    // but only ever called from controllers, so keep it off the wire.
+    `${SERVICE_DIR}/app/utils/ingress.ts`,
+  ],
   target: { es: '2022', chrome: '109', safari: '16.4' },
   sourceMaps: process.env.NODE_ENV === 'development' ? 'external' : undefined,
   minify: process.env.NODE_ENV === 'production',
