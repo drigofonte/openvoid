@@ -2,6 +2,7 @@ import { css } from 'remix/ui'
 
 import { Card } from '../../ui/card.tsx'
 import { Eyebrow } from '../../ui/eyebrow.tsx'
+import { Avatar } from '../../ui/avatar.tsx'
 import { Layout } from '../../ui/layout.tsx'
 import { isTerminal } from '../../utils/poll.ts'
 import type { View } from '../../utils/derive.ts'
@@ -43,7 +44,11 @@ export interface SessionPageProps {
 
 export function SessionPage() {
   return ({ view, confirmStop = false, actionError = null }: SessionPageProps) => (
-    <Layout title={pageTitle(view)} url="app.openvoid.dev">
+    <Layout
+      title={pageTitle(view)}
+      topBarPath={`/sessions/${view.sessionId}`}
+      topBarRight={<Avatar />}
+    >
       <FocusH1 />
       <div role="status" aria-live="polite" class="sr-only">
         {phaseAnnouncement(view, confirmStop)}
@@ -155,7 +160,7 @@ function pageTitle(view: View): string {
  */
 export function SessionNotFoundPage() {
   return ({ sessionId }: { sessionId: string }) => (
-    <Layout title="openvoid — session not found" url="app.openvoid.dev">
+    <Layout title="openvoid — session not found" topBarPath="/sessions/not-found">
       <FocusH1 />
       <Card padding="32px">
         <div class="wf-col" mix={css({ gap: '20px' })}>

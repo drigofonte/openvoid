@@ -203,6 +203,29 @@ textarea.wf-input {
   50%, 100% { opacity: 0; }
 }
 
+/* ── spinner (Provisioning hero) ─────────────────────────── */
+.wf-spinner {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: 2px solid var(--wf-line);
+  border-top-color: var(--wf-accent);
+  animation: wf-spin 1s linear infinite;
+}
+@keyframes wf-spin { to { transform: rotate(360deg); } }
+
+.wf-app-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid var(--wf-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
+}
+
 /* ── progress track ──────────────────────────────────────── */
 .wf-progress-track {
   height: 4px;

@@ -53,7 +53,7 @@ describe('home / index', () => {
 
     assert.equal(response.status, 200)
     const html = await response.text()
-    assert.match(html, /What should the agent build\?/)
+    assert.match(html, /What should we build today\?/)
     assert.match(html, /name="prompt"/)
     assert.match(html, /name="repo"/)
     assert.match(html, /name="branch"/)

@@ -10,16 +10,15 @@ import { SuggestionChips } from './client/suggestion-chips.tsx'
 import { DoneBanner, type DoneParams } from './done-banner.tsx'
 
 /**
- * Wireframe-faithful suggestion-chip copy. In Unit 3 these are
- * static — clicking does nothing. The `clientEntry` that wires
- * chip click → textarea-replace lands in Unit 4 alongside the
- * polling Frame's asset-pipeline scaffolding.
+ * Short chip labels matching the wireframe's "Try:" row. Clicking
+ * a chip drops the label text into the prompt textarea as a starter;
+ * the user is expected to flesh it out before submitting.
  */
 const SUGGESTIONS = [
-  'A Notion-style notes app with markdown blocks.',
-  'A URL shortener with click analytics.',
-  'A habit tracker with streaks and reminders.',
-  'An internal admin panel for managing users.',
+  'Notion clone',
+  'URL shortener',
+  'Habit tracker',
+  'Internal admin panel',
 ] as const
 
 export interface PreviousValues {
@@ -41,14 +40,14 @@ export interface HomePageProps {
  * so the flow works without JS; the server-rendered idempotency
  * key is the double-submit defence.
  *
- * Top-of-form areas in priority order:
+ * Layout (top → bottom):
  *   1. Done banner (when `?done=` is present)
- *   2. Inline error (when the create action failed)
- *   3. Eyebrow + heading
- *   4. Prompt textarea + suggestion chips
- *   5. Repo URL + branch row
- *   6. Inert "Stack: auto / DB: postgres / Attach 📎" chips
- *   7. Submit button
+ *   2. Inline error banner (when the create action failed)
+ *   3. Eyebrow + heading + subhead (centered, outside the card)
+ *   4. Card with prompt textarea + bottom toolbar
+ *   5. "Try:" suggestion chips
+ *   6. Advanced expander (repo + branch — required, but visually
+ *      deferred since the wireframes show a prompt-only flow)
  */
 export function HomePage() {
   return ({
@@ -57,7 +56,19 @@ export function HomePage() {
     error = null,
     previousValues = {},
   }: HomePageProps) => (
-    <Layout title="openvoid — start a session" url="app.openvoid.dev">
+    <Layout
+      title="openvoid — start a session"
+      topBarPath="/new"
+      topBarRight={
+        <a
+          href="/"
+          class="wf-btn wf-btn-ghost"
+          mix={css({ textDecoration: 'none' })}
+        >
+          Cancel
+        </a>
+      }
+    >
       {done ? <DoneBanner done={done} /> : null}
       {error ? (
         <div
@@ -80,43 +91,123 @@ export function HomePage() {
         </div>
       ) : null}
 
-      <Card padding="32px">
-        <form method="post" action="/" class="wf-col" mix={css({ gap: '20px' })}>
-          <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+      <form
+        method="post"
+        action="/"
+        class="wf-col"
+        mix={css({ gap: '24px', alignItems: 'stretch' })}
+      >
+        <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
 
-          <div class="wf-col" mix={css({ gap: '6px' })}>
-            <Eyebrow>New session · Step 1 of 1</Eyebrow>
-            <h1 class="wf-h1" mix={css({ margin: 0 })}>
-              What should the agent build?
-            </h1>
-            <p
-              class="wf-muted"
-              mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}
-            >
-              Describe the change in plain English. We'll spin up a private dev
-              environment, run the agent, and push commits to a fresh branch.
-            </p>
-          </div>
+        <div
+          class="wf-col"
+          mix={css({ gap: '8px', alignItems: 'center', textAlign: 'center', marginTop: '16px' })}
+        >
+          <Eyebrow>Step 1 of 1</Eyebrow>
+          <h1 class="wf-h1" mix={css({ fontSize: '28px', margin: 0 })}>
+            What should we build today?
+          </h1>
+          <p
+            class="wf-muted"
+            mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}
+          >
+            Describe the app — the agent will scaffold and start a session.
+          </p>
+        </div>
 
-          <div class="wf-col" mix={css({ gap: '8px' })}>
-            <label
-              for="prompt"
-              class="wf-eyebrow"
-              mix={css({ color: 'var(--wf-fg-muted)' })}
-            >
+        <Card padding="16px">
+          <div class="wf-col" mix={css({ gap: '12px' })}>
+            <label for="prompt" class="sr-only">
               Prompt
             </label>
             <Textarea
               name="prompt"
               id="prompt"
-              rows={6}
+              rows={5}
               required
-              placeholder="e.g. Add a /health endpoint that returns build SHA and uptime."
+              placeholder="A weekend planner that pulls events from my Google calendar, lets me drag them onto a 2-day grid, and emails me a summary Friday at 5pm."
               defaultValue={previousValues.prompt}
             />
-            <SuggestionChips targetId="prompt" suggestions={[...SUGGESTIONS]} />
-          </div>
 
+            <div
+              class="wf-row"
+              mix={css({
+                gap: '8px',
+                flexWrap: 'wrap',
+                paddingTop: '6px',
+                borderTop: '1px solid var(--wf-line-soft)',
+              })}
+            >
+              <button
+                type="button"
+                class="wf-chip"
+                disabled
+                aria-disabled="true"
+                title="Coming soon"
+                mix={css({ opacity: 0.6 })}
+              >
+                📎 Attach
+              </button>
+              <button
+                type="button"
+                class="wf-chip"
+                disabled
+                aria-disabled="true"
+                title="Coming soon"
+                mix={css({ opacity: 0.6 })}
+              >
+                Stack: auto
+              </button>
+              <button
+                type="button"
+                class="wf-chip"
+                disabled
+                aria-disabled="true"
+                title="Coming soon"
+                mix={css({ opacity: 0.6 })}
+              >
+                DB: postgres
+              </button>
+              <span class="wf-spacer" />
+              <span
+                class="wf-row"
+                aria-hidden="true"
+                mix={css({ gap: '4px', alignItems: 'center' })}
+              >
+                <span class="wf-keycap">⌘</span>
+                <span class="wf-keycap">↵</span>
+                <span class="wf-faint" mix={css({ fontSize: '12px', marginLeft: '4px' })}>
+                  to start
+                </span>
+              </span>
+              <SubmitButton label="Start session" />
+            </div>
+          </div>
+        </Card>
+
+        <div
+          class="wf-row"
+          mix={css({ gap: '8px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' })}
+        >
+          <span class="wf-faint" mix={css({ fontSize: '12.5px' })}>Try:</span>
+          <SuggestionChips targetId="prompt" suggestions={[...SUGGESTIONS]} />
+        </div>
+
+        <details
+          class="wf-col"
+          mix={css({ gap: '12px', marginTop: '8px', alignSelf: 'center', maxWidth: '640px', width: '100%' })}
+        >
+          <summary
+            class="wf-muted"
+            mix={css({
+              fontSize: '12.5px',
+              cursor: 'pointer',
+              listStyle: 'none',
+              userSelect: 'none',
+            })}
+          >
+            Repository (advanced)
+          </summary>
           <div
             class="wf-row"
             mix={css({ gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' })}
@@ -149,45 +240,8 @@ export function HomePage() {
               <Input name="branch" id="branch" defaultValue={previousValues.branch ?? 'main'} />
             </div>
           </div>
-
-          <div class="wf-row" mix={css({ gap: '8px', flexWrap: 'wrap' })}>
-            <button
-              type="button"
-              class="wf-chip"
-              disabled
-              aria-disabled="true"
-              title="Coming soon"
-              mix={css({ opacity: 0.6 })}
-            >
-              Stack: auto
-            </button>
-            <button
-              type="button"
-              class="wf-chip"
-              disabled
-              aria-disabled="true"
-              title="Coming soon"
-              mix={css({ opacity: 0.6 })}
-            >
-              DB: postgres
-            </button>
-            <button
-              type="button"
-              class="wf-chip"
-              disabled
-              aria-disabled="true"
-              title="Coming soon"
-              mix={css({ opacity: 0.6 })}
-            >
-              Attach 📎
-            </button>
-          </div>
-
-          <div class="wf-row" mix={css({ gap: '12px', justifyContent: 'flex-end' })}>
-            <SubmitButton label="Start session" />
-          </div>
-        </form>
-      </Card>
+        </details>
+      </form>
     </Layout>
   )
 }
