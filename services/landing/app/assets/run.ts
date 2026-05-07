@@ -15,7 +15,13 @@ import { run } from 'remix/ui'
 const app = run({
   async loadModule(moduleUrl, exportName) {
     const mod = await import(moduleUrl)
-    return mod[exportName]
+    const value = mod[exportName]
+    if (typeof value !== 'function') {
+      throw new Error(
+        `[remix-runtime] export ${exportName} from ${moduleUrl} is not a function (got ${typeof value})`,
+      )
+    }
+    return value
   },
   async resolveFrame(src, signal, target) {
     const headers = new Headers({ accept: 'text/html' })

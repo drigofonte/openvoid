@@ -20,24 +20,58 @@ export const StopButton = clientEntry(
   function StopButton(handle: Handle<{ sessionId: string }>) {
     let dialogOpen = false
     let submitting = false
+    let triggerEl: HTMLElement | null = null
 
     function openDialog(event: Event) {
       event.preventDefault()
+      triggerEl = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
       dialogOpen = true
       handle.update()
+      // Move focus into the dialog after the next paint so screen
+      // readers and keyboard users land on the confirm CTA.
+      handle.queueTask(() => {
+        document.querySelector<HTMLButtonElement>('[data-stop-confirm]')?.focus()
+      })
     }
 
     function closeDialog() {
       if (submitting) return
       dialogOpen = false
       handle.update()
+      // Return focus to the trigger so keyboard navigation
+      // continues from where it was.
+      handle.queueTask(() => {
+        triggerEl?.focus()
+      })
+    }
+
+    // Esc closes the dialog (when open + not submitting). The
+    // setup function runs on both the server (SSR) and the client
+    // (hydration) — guard for `document` so SSR doesn't crash.
+    // Listener is bound for the lifetime of the component;
+    // handle.signal tears it down on unmount.
+    if (typeof document !== 'undefined') {
+      document.addEventListener(
+        'keydown',
+        (event) => {
+          if (event.key === 'Escape' && dialogOpen && !submitting) {
+            event.preventDefault()
+            closeDialog()
+          }
+        },
+        { signal: handle.signal },
+      )
     }
 
     function startSubmit() {
-      submitting = true
-      handle.update()
-      // Form submits natively — the navigation will unmount us
-      // and hydrate fresh on the destination page.
+      // Defer the visual flip via queueTask for the same reason
+      // submit-button.tsx does — synchronous handle.update() inside
+      // a submit-side handler can race with the browser's native
+      // submit dispatch and short-circuit the navigation.
+      handle.queueTask(() => {
+        submitting = true
+        handle.update()
+      })
     }
 
     return () => (
@@ -114,6 +148,7 @@ export const StopButton = clientEntry(
                       type="submit"
                       class="wf-btn wf-btn-danger"
                       disabled={submitting || undefined}
+                      data-stop-confirm
                     >
                       {submitting ? 'Stopping…' : 'Yes, stop & save'}
                     </button>

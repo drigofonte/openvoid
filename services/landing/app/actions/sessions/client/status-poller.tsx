@@ -1,6 +1,7 @@
 import { clientEntry, navigate, type Handle } from 'remix/ui'
 
 import { pollCadenceMs } from '../../../utils/poll.ts'
+import type { StatusResponse } from '../../api/sessions-status/controller.tsx'
 
 /**
  * StatusPoller — invisible clientEntry that polls
@@ -14,26 +15,18 @@ import { pollCadenceMs } from '../../../utils/poll.ts'
  * when the component disconnects (page navigates away or
  * unmounts), the in-flight setTimeout chain stops.
  *
+ * 404-on-poll triggers an immediate navigation: a session that
+ * disappears out-of-band (Operator GC, admin delete, expired
+ * idle-timeout) should land the user on the SessionNotFoundPage
+ * the page controller already renders for that case, not leave
+ * them staring at a frozen Provisioning view forever.
+ *
  * v1 design note: the plan specified `<Frame>`-based polling. We
- * went with JSON poll + SPA navigation instead. Two reasons:
- * (1) avoids the double-fetch where both the page controller and
- * the Frame's resolveFrame would hit the Session API on first
- * render; (2) matches the framework's own guidance ("Use polling
- * or a small JSON state endpoint when the data changes outside
- * this page" — `references/hydration-frames-navigation.md`). Frame
- * polling can land later if the bandwidth cost of full re-renders
- * matters.
+ * went with JSON poll + SPA navigation instead — see
+ * `commit 4ab930e` for full rationale.
  */
 
-interface StatusPayload {
-  kind: string
-  pendingPhase?: string | null
-  agentUrl?: string | null
-  previewUrl?: string | null
-  reason?: string | null
-}
-
-function signature(payload: Pick<StatusPayload, 'kind' | 'pendingPhase' | 'agentUrl' | 'previewUrl'>): string {
+function signature(payload: Pick<StatusResponse, 'kind' | 'pendingPhase' | 'agentUrl' | 'previewUrl'>): string {
   return [
     payload.kind,
     payload.pendingPhase ?? '',
@@ -42,25 +35,45 @@ function signature(payload: Pick<StatusPayload, 'kind' | 'pendingPhase' | 'agent
   ].join('|')
 }
 
+function isStatusResponse(value: unknown): value is StatusResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    typeof (value as { kind: unknown }).kind === 'string'
+  )
+}
+
 export const StatusPoller = clientEntry(
   import.meta.url,
   function StatusPoller(
     handle: Handle<{
       sessionId: string
-      initialKind: string
+      initialKind: StatusResponse['kind']
       initialPendingPhase: string | null
       initialAgentUrl: string | null
       initialPreviewUrl: string | null
     }>,
   ) {
     const start = Date.now()
-    let lastSignature = signature({
-      kind: handle.props.initialKind,
-      pendingPhase: handle.props.initialPendingPhase,
-      agentUrl: handle.props.initialAgentUrl,
-      previewUrl: handle.props.initialPreviewUrl,
-    })
+    // Build the initial signature inline rather than passing
+    // through `signature()` — the prop types are intentionally
+    // wider than StatusResponse's discriminated union so SSR can
+    // pass any string for the initial pendingPhase without TS
+    // narrowing complaints.
+    let lastSignature = [
+      handle.props.initialKind,
+      handle.props.initialPendingPhase ?? '',
+      handle.props.initialAgentUrl ?? '',
+      handle.props.initialPreviewUrl ?? '',
+    ].join('|')
     let timer: ReturnType<typeof setTimeout> | undefined
+
+    const refresh = () => {
+      navigate(window.location.pathname + window.location.search, {
+        history: 'replace',
+      })
+    }
 
     const tick = async (): Promise<void> => {
       if (handle.signal.aborted) return
@@ -68,24 +81,37 @@ export const StatusPoller = clientEntry(
         const response = await fetch(`/api/sessions/${handle.props.sessionId}/status`, {
           headers: { accept: 'application/json' },
           signal: handle.signal,
+          cache: 'no-store',
         })
         if (handle.signal.aborted) return
+
+        if (response.status === 404) {
+          // Session disappeared. Refresh so the page controller's
+          // own 404-handling renders the SessionNotFoundPage.
+          refresh()
+          return
+        }
+
         if (response.ok) {
-          const payload = (await response.json()) as StatusPayload
-          const sig = signature(payload)
-          if (sig !== lastSignature) {
-            // State changed — replace history with a fresh server-render
-            // of the same URL. Returns without scheduling another tick;
-            // the navigation will unmount us and remount on the new page.
-            lastSignature = sig
-            navigate(window.location.pathname + window.location.search, { history: 'replace' })
-            return
+          const raw: unknown = await response.json()
+          if (handle.signal.aborted) return
+          if (!isStatusResponse(raw)) {
+            // Non-conforming body (proxy error page, framework
+            // change). Skip this tick and hope the next one
+            // recovers; do NOT navigate on garbage.
+          } else {
+            const sig = signature(raw)
+            if (sig !== lastSignature) {
+              lastSignature = sig
+              refresh()
+              return
+            }
           }
         }
-      } catch (error) {
+      } catch {
         if (handle.signal.aborted) return
-        // Network error or non-JSON body — keep polling. The page
-        // is unchanged; a transient blip shouldn't disrupt the user.
+        // Network error — keep polling. Transient blip shouldn't
+        // disrupt the user.
       }
       const elapsed = Date.now() - start
       timer = setTimeout(tick, pollCadenceMs(elapsed))

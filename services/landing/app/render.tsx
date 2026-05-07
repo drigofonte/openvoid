@@ -23,9 +23,9 @@ import { resolveAssetHref } from './assets-server.ts'
 export function render(node: RemixNode, init?: ResponseInit): Response {
   const stream = renderToStream(node, {
     async resolveClientEntry(entryId, component) {
-      const exportName = entryId.includes('#')
-        ? (entryId.split('#')[1] ?? component.name)
-        : component.name
+      // `||` (not `??`) so `'file://…#'` falls through to the
+      // function name instead of becoming the empty string.
+      const exportName = (entryId.split('#')[1] || component.name) ?? ''
       if (!exportName) {
         throw new Error(`Cannot resolve client entry export name for ${entryId}`)
       }

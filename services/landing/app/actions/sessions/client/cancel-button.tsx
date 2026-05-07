@@ -20,8 +20,14 @@ export const CancelButton = clientEntry(
     let submitting = false
 
     function startSubmit() {
-      submitting = true
-      handle.update()
+      // Defer the visual flip via queueTask for the same reason
+      // submit-button.tsx does — synchronous handle.update() inside
+      // a submit-side handler can race with the browser's native
+      // submit dispatch and short-circuit the navigation.
+      handle.queueTask(() => {
+        submitting = true
+        handle.update()
+      })
     }
 
     return () => (

@@ -31,7 +31,14 @@ export interface StatusResponse {
 function jsonResponse(body: StatusResponse, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      // Aggressive polling cadence (1s/5s/10s) — never let an
+      // intermediary cache a status response. Stale state would
+      // make the StatusPoller's signature comparison miss real
+      // transitions, leaving the user on a frozen Provisioning view.
+      'cache-control': 'no-store, no-cache, must-revalidate',
+    },
   })
 }
 
