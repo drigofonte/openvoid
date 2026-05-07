@@ -36,6 +36,15 @@ spec:
               value: "3000"
             - name: OPENVOID_API_URL
               value: "http://session-api.openvoid-system.svc.cluster.local:4000"
+            # In-cluster the agent URL's `127.0.0.1.nip.io` host
+            # resolves to the pod's own loopback, not the host
+            # ingress, so the readiness probe always fails. Skip
+            # it; trust the API's `Running` + populated URLs and
+            # let the browser retry-on-click cover the rest. See
+            # services/landing/app/utils/ingress.ts for full
+            # context.
+            - name: LANDING_SKIP_INGRESS_PROBE
+              value: "true"
           readinessProbe:
             httpGet:
               path: /
