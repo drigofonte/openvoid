@@ -2,6 +2,7 @@ import { css } from 'remix/ui'
 
 import { Card } from '../../../ui/card.tsx'
 import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { StopButton } from '../client/stop-button.tsx'
 
 /**
  * Ready view (wireframe variant 04-A) — the magic-moment payoff.
@@ -10,10 +11,10 @@ import { Eyebrow } from '../../../ui/eyebrow.tsx'
  * Both URLs come from the Session API and have already passed the
  * ingress-readiness probe by the time this renders.
  *
- * Stop is rendered as a link to `?confirm=stop` rather than a
- * native form-with-confirm — the SSR-friendly pattern is
- * navigate-to-confirm-page → click "Yes, stop" → POST. The
- * `clientEntry` confirm dialog lands in Unit 4b.
+ * Stop is a clientEntry-driven button: by default it's a plain
+ * `<a href="?confirm=stop">` link the browser can navigate to (so
+ * the flow works without JS). On hydration the click is intercepted
+ * and an in-page confirm dialog opens.
  */
 
 export interface ReadyProps {
@@ -79,13 +80,7 @@ export function Ready() {
         <span class="wf-faint" mix={css({ fontSize: '12.5px' })}>
           <span class="wf-mono">{sessionId}</span>
         </span>
-        <a
-          class="wf-btn wf-btn-danger"
-          href={`/sessions/${sessionId}?confirm=stop`}
-          mix={css({ textDecoration: 'none' })}
-        >
-          Stop & save
-        </a>
+        <StopButton sessionId={sessionId} />
       </div>
     </div>
   )
