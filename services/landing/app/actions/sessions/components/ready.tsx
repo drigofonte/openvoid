@@ -28,7 +28,7 @@ export function Ready() {
     <div class="wf-col" mix={css({ gap: '20px' })}>
       <div class="wf-col" mix={css({ gap: '6px' })}>
         <Eyebrow tone="ok">Ready</Eyebrow>
-        <h1 class="wf-h1">Your session is live</h1>
+        <h1 class="wf-h1" tabindex={-1}>Your session is live</h1>
         <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
           The agent is running and your preview is reachable. Closing this tab
           will leave the session running — use Stop to commit edits and shut it

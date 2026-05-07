@@ -23,7 +23,7 @@ export function Done() {
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
           <Eyebrow tone="ok">Saved</Eyebrow>
-          <h1 class="wf-h1">This session has been stopped</h1>
+          <h1 class="wf-h1" tabindex={-1}>This session has been stopped</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             The agent's edits have been pushed to{' '}
             <code class="wf-mono">feat/{sessionId}</code> on your repo. The dev

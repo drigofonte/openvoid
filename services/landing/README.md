@@ -49,6 +49,14 @@ browser hits the landing pod through ingress-nginx at
 `http://app.127.0.0.1.nip.io/`; the landing then proxies API calls
 server-side. No CORS in the loop.
 
+### Environment variables
+
+| Var | Required | Default | Notes |
+|---|---|---|---|
+| `OPENVOID_API_URL` | Yes (in production) | unset | Base URL for the Session API. Server-side controllers will fail if unset. |
+| `PORT` | No | `3000` | Port the Node server listens on. |
+| `LANDING_SKIP_INGRESS_PROBE` | No | unset | Set to `"true"` in K8s to bypass the per-render HEAD probe of the agent URL. The probe's host (`<sid>.agent.127.0.0.1.nip.io`) resolves to the pod's own loopback in-cluster, so the gate always fails there; trust the API's `Running` + populated URLs instead. Local dev (`pnpm dev` on host) leaves this unset — `127.0.0.1.nip.io` resolves correctly via the host. See [`app/utils/ingress.ts`](app/utils/ingress.ts) for full context. |
+
 ## Stack
 
 | Concern | Choice |

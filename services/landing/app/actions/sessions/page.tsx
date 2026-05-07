@@ -5,6 +5,7 @@ import { Eyebrow } from '../../ui/eyebrow.tsx'
 import { Layout } from '../../ui/layout.tsx'
 import { isTerminal } from '../../utils/poll.ts'
 import type { View } from '../../utils/derive.ts'
+import { FocusH1 } from './client/focus-h1.tsx'
 import { StatusPoller } from './client/status-poller.tsx'
 import { Done } from './components/done.tsx'
 import { Failed } from './components/failed.tsx'
@@ -43,6 +44,10 @@ export interface SessionPageProps {
 export function SessionPage() {
   return ({ view, confirmStop = false, actionError = null }: SessionPageProps) => (
     <Layout title={pageTitle(view)} url="app.openvoid.dev">
+      <FocusH1 />
+      <div role="status" aria-live="polite" class="sr-only">
+        {phaseAnnouncement(view, confirmStop)}
+      </div>
       {actionError ? <ActionErrorBanner error={actionError} /> : null}
       {renderView(view, confirmStop)}
       {isTerminal(view) ? null : (
@@ -58,9 +63,28 @@ export function SessionPage() {
   )
 }
 
+function phaseAnnouncement(view: View, confirmStop: boolean): string {
+  if (confirmStop && view.kind === 'ready') return 'Stop session — confirm dialog'
+  switch (view.kind) {
+    case 'provisioning':
+      return view.pendingPhase === 'running-pre-ingress'
+        ? 'Almost ready — programming routes'
+        : 'Provisioning your session'
+    case 'ready':
+      return 'Session ready — agent and preview links available'
+    case 'stopping':
+      return 'Stopping session'
+    case 'done':
+      return 'Session stopped and saved'
+    case 'failed':
+      return 'Session failed to provision'
+  }
+}
+
 function ActionErrorBanner() {
   return ({ error }: { error: ActionError }) => (
-    <aside
+    <div
+      role="alert"
       class="wf-card"
       mix={css({
         padding: '14px 16px',
@@ -76,7 +100,7 @@ function ActionErrorBanner() {
         Couldn't stop
       </span>
       <span mix={css({ fontSize: '14px' })}>{error.message}</span>
-    </aside>
+    </div>
   )
 }
 
@@ -132,11 +156,12 @@ function pageTitle(view: View): string {
 export function SessionNotFoundPage() {
   return ({ sessionId }: { sessionId: string }) => (
     <Layout title="openvoid — session not found" url="app.openvoid.dev">
+      <FocusH1 />
       <Card padding="32px">
         <div class="wf-col" mix={css({ gap: '20px' })}>
           <div class="wf-col" mix={css({ gap: '6px' })}>
             <Eyebrow tone="danger">Not found</Eyebrow>
-            <h1 class="wf-h1">No session with that ID</h1>
+            <h1 class="wf-h1" tabindex={-1}>No session with that ID</h1>
             <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
               The session <span class="wf-mono">{sessionId}</span> doesn't
               exist or has already been cleaned up. Start a new one.

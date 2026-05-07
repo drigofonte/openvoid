@@ -102,6 +102,21 @@
 }
 .wf-input:focus { outline: 2px solid var(--wf-accent); outline-offset: 1px; }
 
+/*
+ * Keyboard-focus rings — the accent-orange outline is the
+ * canonical "you are here" treatment across all interactive
+ * controls. `:focus-visible` (not `:focus`) so mouse-down on a
+ * button doesn't draw the ring; only keyboard / programmatic
+ * focus does.
+ */
+.wf-btn:focus-visible,
+.wf-link:focus-visible,
+.wf-chip:focus-visible,
+button.wf-chip:focus-visible {
+  outline: 2px solid var(--wf-accent);
+  outline-offset: 2px;
+}
+
 textarea.wf-input {
   display: block;
   height: auto;

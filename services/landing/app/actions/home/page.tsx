@@ -1,7 +1,6 @@
 import { css } from 'remix/ui'
 
 import { Card } from '../../ui/card.tsx'
-import { Chip } from '../../ui/chip.tsx'
 import { Eyebrow } from '../../ui/eyebrow.tsx'
 import { Input } from '../../ui/input.tsx'
 import { Layout } from '../../ui/layout.tsx'
@@ -61,7 +60,8 @@ export function HomePage() {
     <Layout title="openvoid — start a session" url="app.openvoid.dev">
       {done ? <DoneBanner done={done} /> : null}
       {error ? (
-        <aside
+        <div
+          role="alert"
           class="wf-card"
           mix={css({
             padding: '14px 16px',
@@ -77,7 +77,7 @@ export function HomePage() {
             Couldn't start
           </span>
           <span mix={css({ fontSize: '14px' })}>{error.message}</span>
-        </aside>
+        </div>
       ) : null}
 
       <Card padding="32px">
@@ -151,16 +151,31 @@ export function HomePage() {
           </div>
 
           <div class="wf-row" mix={css({ gap: '8px', flexWrap: 'wrap' })}>
-            <span title="Coming soon">
-              <Chip>Stack: auto</Chip>
-            </span>
-            <span title="Coming soon">
-              <Chip>DB: postgres</Chip>
-            </span>
             <button
               type="button"
               class="wf-chip"
               disabled
+              aria-disabled="true"
+              title="Coming soon"
+              mix={css({ opacity: 0.6 })}
+            >
+              Stack: auto
+            </button>
+            <button
+              type="button"
+              class="wf-chip"
+              disabled
+              aria-disabled="true"
+              title="Coming soon"
+              mix={css({ opacity: 0.6 })}
+            >
+              DB: postgres
+            </button>
+            <button
+              type="button"
+              class="wf-chip"
+              disabled
+              aria-disabled="true"
               title="Coming soon"
               mix={css({ opacity: 0.6 })}
             >

@@ -15,7 +15,7 @@ export interface TopBarProps {
  */
 export function TopBar() {
   return ({ url = 'openvoid.dev', right }: TopBarProps) => (
-    <div class="wf-toolbar">
+    <header class="wf-toolbar">
       <Logo />
       <div mix={css({ width: '1px', height: '18px', background: 'var(--wf-line)', margin: '0 4px' })} />
       <div class="wf-row" mix={css({ gap: '6px' })}>
@@ -25,6 +25,6 @@ export function TopBar() {
       </div>
       <div class="wf-spacer" />
       {right}
-    </div>
+    </header>
   )
 }

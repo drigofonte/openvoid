@@ -23,7 +23,7 @@ export function Stopping() {
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
           <Eyebrow>Stopping</Eyebrow>
-          <h1 class="wf-h1">Saving and shutting down…</h1>
+          <h1 class="wf-h1" tabindex={-1}>Saving and shutting down…</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             Committing the agent's edits to a fresh{' '}
             <code class="wf-mono">feat/{sessionId}</code> branch on your repo,
