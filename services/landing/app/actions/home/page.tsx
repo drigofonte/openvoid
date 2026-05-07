@@ -1,12 +1,13 @@
 import { css } from 'remix/ui'
 
-import { Button } from '../../ui/button.tsx'
 import { Card } from '../../ui/card.tsx'
 import { Chip } from '../../ui/chip.tsx'
 import { Eyebrow } from '../../ui/eyebrow.tsx'
 import { Input } from '../../ui/input.tsx'
 import { Layout } from '../../ui/layout.tsx'
 import { Textarea } from '../../ui/textarea.tsx'
+import { SubmitButton } from './client/submit-button.tsx'
+import { SuggestionChips } from './client/suggestion-chips.tsx'
 import { DoneBanner, type DoneParams } from './done-banner.tsx'
 
 /**
@@ -113,18 +114,7 @@ export function HomePage() {
               placeholder="e.g. Add a /health endpoint that returns build SHA and uptime."
               defaultValue={previousValues.prompt}
             />
-            <div class="wf-row" mix={css({ gap: '8px', flexWrap: 'wrap' })}>
-              {SUGGESTIONS.map((text) => (
-                <button
-                  type="button"
-                  class="wf-chip"
-                  mix={css({ cursor: 'pointer' })}
-                  data-suggestion={text}
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
+            <SuggestionChips targetId="prompt" suggestions={[...SUGGESTIONS]} />
           </div>
 
           <div
@@ -179,9 +169,7 @@ export function HomePage() {
           </div>
 
           <div class="wf-row" mix={css({ gap: '12px', justifyContent: 'flex-end' })}>
-            <Button variant="accent" type="submit">
-              Start session
-            </Button>
+            <SubmitButton label="Start session" />
           </div>
         </form>
       </Card>

@@ -2,19 +2,22 @@ import { css } from 'remix/ui'
 
 import { Card } from '../../../ui/card.tsx'
 import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { CancelButton } from '../client/cancel-button.tsx'
 
 /**
  * Provisioning view (wireframe variant 03-A simplified for v1).
  *
  * Renders a progress card with a heading, a status line keyed off
- * `pendingPhase`, and a Cancel form. Polling-driven progress
- * indication lands in Unit 4b (the `clientEntry`-wrapped Frame
- * reloads this view at the cadence from `pollCadenceMs`). For now,
- * users refresh manually to advance the state.
+ * `pendingPhase`, and a Cancel form. Auto-advance is wired via
+ * the StatusPoller mounted in SessionPage; users no longer need
+ * to refresh manually.
  *
  * The Cancel form posts `intent=cancel` to the same route — the
  * controller DELETEs the session and redirects to `/` with no Done
  * banner (nothing was saved, so no `feat/<sid>` link to surface).
+ * The clientEntry CancelButton wraps the form with a "Cancelling…"
+ * pending state so the user sees feedback during the brief
+ * navigation window.
  */
 
 export interface ProvisioningProps {
@@ -49,16 +52,11 @@ export function Provisioning() {
           </div>
 
           <p class="wf-faint" mix={css({ fontSize: '12.5px', margin: 0 })}>
-            <span class="wf-mono">{sessionId}</span> · refresh to update this page
+            <span class="wf-mono">{sessionId}</span>
           </p>
 
           <div class="wf-row" mix={css({ gap: '8px', justifyContent: 'flex-end' })}>
-            <form method="post" action={`/sessions/${sessionId}`}>
-              <input type="hidden" name="intent" value="cancel" />
-              <button type="submit" class="wf-btn wf-btn-ghost">
-                Cancel
-              </button>
-            </form>
+            <CancelButton sessionId={sessionId} />
           </div>
         </div>
       </Card>
