@@ -67,6 +67,7 @@ docker_build(
     "localhost:5001/openvoid/landing:dev",
     context=".",
     dockerfile="services/landing/Dockerfile",
+    target="dev",
     only=[
         "package.json",
         "pnpm-lock.yaml",
@@ -74,6 +75,19 @@ docker_build(
         "turbo.json",
         "packages/protocol",
         "services/landing",
+    ],
+    live_update=[
+        # Hot-sync source into the running container; tsx watch picks up
+        # the change and restarts in ~1 s without an image rebuild.
+        # package.json/pnpm-lock.yaml changes fall outside these syncs
+        # and trigger a full rebuild — intentional, since deps need
+        # reinstall.
+        sync("./services/landing/app", "/workspace/services/landing/app"),
+        sync("./services/landing/server.ts", "/workspace/services/landing/server.ts"),
+        sync(
+            "./packages/protocol/generated",
+            "/workspace/packages/protocol/generated",
+        ),
     ],
 )
 

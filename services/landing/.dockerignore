@@ -1,0 +1,21 @@
+# Build context exclusions for services/landing/Dockerfile.
+# Note: the Tiltfile's docker_build `only=[...]` already narrows the
+# context to a small allow-list. This file is the belt-and-braces
+# guard for non-Tilt invocations (`docker build` from the repo root).
+
+node_modules/
+.turbo/
+*.tsbuildinfo
+*.log
+
+# Tests don't ship in the runtime image; they also slow down builder
+# COPY layers and bust caches when tests change. The dev stage doesn't
+# need them at image-build time either — Tilt syncs sources at runtime.
+test/
+
+# Per-contributor Claude Code local state. Skills live at the repo root
+# under .claude/skills/, not inside the package.
+.claude/
+
+# Editor / OS noise.
+.DS_Store

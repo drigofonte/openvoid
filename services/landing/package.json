@@ -15,14 +15,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "remix": "3.0.0-beta.0"
+    "remix": "3.0.0-beta.0",
+    "tsx": "4.19.2"
   },
   "devDependencies": {
     "@openvoid/protocol": "workspace:*",
     "@types/dom-navigation": "1.0.7",
     "@types/node": "22.12.0",
     "playwright": "1.59.0",
-    "tsx": "4.19.2",
     "typescript": "5.7.2"
   }
 }
