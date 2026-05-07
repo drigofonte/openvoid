@@ -27,7 +27,16 @@ export interface ReadyProps {
 
 export function Ready() {
   return ({ sessionId, agentUrl, previewUrl }: ReadyProps) => (
-    <div class="wf-col" mix={css({ gap: '24px' })}>
+    <div
+      class="wf-col"
+      mix={css({
+        gap: '24px',
+        maxWidth: '720px',
+        width: '100%',
+        marginLeft: 'auto',
+        marginRight: 'auto',
+      })}
+    >
       <div class="wf-col" mix={css({ gap: '8px' })}>
         <Eyebrow tone="ok">Session ready</Eyebrow>
         <h1
