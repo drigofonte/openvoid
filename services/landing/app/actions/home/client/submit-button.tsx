@@ -23,10 +23,16 @@ export const SubmitButton = clientEntry(
     let pending = false
 
     function startSubmit() {
-      // Click fires before the form's native submit, so flipping
-      // pending here disables the button as the navigation begins.
-      pending = true
-      handle.update()
+      // Schedule the visual flip via queueTask so it runs AFTER the
+      // form's native submit event has fired. Mutating `pending` and
+      // calling `handle.update()` synchronously inside the click
+      // handler would race with the browser's submit dispatch and
+      // could swap out the button (or its disabled state) before
+      // `submit` reaches the form.
+      handle.queueTask(() => {
+        pending = true
+        handle.update()
+      })
     }
 
     return () => (
