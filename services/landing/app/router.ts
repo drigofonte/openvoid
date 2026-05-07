@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import * as path from 'node:path'
 
 import { routes } from './routes.ts'
+import assetsController from './actions/assets/controller.tsx'
 import homeController from './actions/home/controller.tsx'
 import sessionsController from './actions/sessions/controller.tsx'
 
@@ -33,6 +34,7 @@ export function createLandingRouter() {
 
   router.map(routes.home, homeController)
   router.map(routes.sessions, sessionsController)
+  router.map(routes.assets, assetsController)
 
   return router
 }

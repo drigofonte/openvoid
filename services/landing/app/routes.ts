@@ -1,18 +1,17 @@
 import { route, get, post } from 'remix/fetch-router/routes'
 
-/**
- * The openvoid landing's route table.
- *
- * - `/` — home (Create screen + optional Done banner via `?done=`).
- * - `/sessions/:id` — Provisioning / Ready / Kill flow / Failed /
- *   Timeout, all derived from the loader payload (Unit 4).
- * - `/api/sessions/:id/status` — JSON resource consumed by the
- *   `<Frame>` polling region inside `clientEntry`-wrapped components
- *   (Unit 4).
- *
- * Static assets (`/styles/*`, etc.) are served by the `staticFiles`
- * middleware in `app/router.ts` and don't need explicit routes here.
- */
+// The openvoid landing's route table.
+//
+// - `/`                        home (Create + optional Done banner via ?done=).
+// - `/sessions/:id`            Provisioning / Ready / Kill flow / Failed,
+//                              all derived from the controller's view derivation.
+// - `/api/sessions/:id/status` HTML fragment consumed by the <Frame> polling
+//                              region in the SessionPage.
+// - `/_rmx/<wild>`             createAssetServer mount, compiles app source on
+//                              demand for the browser (boot + clientEntry modules).
+//
+// Static public assets (e.g. `/styles/...`) are served by the staticFiles
+// middleware in app/router.ts.
 export const routes = route({
   home: route('/', {
     index: get('/'),
@@ -24,5 +23,8 @@ export const routes = route({
   }),
   api: route('/api', {
     sessionsStatus: get('/sessions/:id/status'),
+  }),
+  assets: route('/_rmx', {
+    asset: get('/*path'),
   }),
 })

@@ -27,6 +27,7 @@ export function Document() {
         />
         <link rel="stylesheet" href="/styles/base.css" />
         <link rel="stylesheet" href="/styles/theme.css" />
+        <script type="module" src="/_rmx/app/assets/run.ts" />
       </head>
       <body>{children}</body>
     </html>
