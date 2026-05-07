@@ -99,6 +99,17 @@ describe('gateOnIngressReadiness', () => {
     assert.deepEqual(result, provisioning)
   })
 
+  it('skips the probe entirely when skip=true (returns ready unchanged, no fetch)', async () => {
+    // skip is the in-cluster escape hatch. fakeFetch with no entries
+    // would throw on any fetch — the test passes only if skip prevents
+    // the probe from firing.
+    const fetch = fakeFetch({})
+
+    const result = await gateOnIngressReadiness(READY_VIEW, { fetch, skip: true })
+
+    assert.deepEqual(result, READY_VIEW)
+  })
+
   it('honours the timeout (probe rejects on AbortSignal)', async () => {
     // Fake fetch that hangs forever unless aborted.
     const fetch: typeof globalThis.fetch = ((_, init?: RequestInit) =>

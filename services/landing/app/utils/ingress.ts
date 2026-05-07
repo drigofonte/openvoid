@@ -22,13 +22,32 @@ import type { View } from './derive.ts'
  * refreshing instead of showing a broken agent link.
  *
  * `fetch` is injectable so tests can run without real HTTP.
+ *
+ * **In-cluster skip.** The agent URL has the public-host shape
+ * `<sid>.agent.127.0.0.1.nip.io`. From inside the landing pod,
+ * that resolves to the pod's own loopback (`127.0.0.1`) — not the
+ * host's ingress port — so the probe always fails in-cluster and
+ * the page is stuck on `running-pre-ingress` forever. Set
+ * `LANDING_SKIP_INGRESS_PROBE=true` on the K8s Deployment to
+ * bypass the gate; the R3 contract (API populates both URLs only
+ * once Running + ingresses created) plus the browser's retry-on-
+ * click handle the small remaining window. Local dev (running
+ * `pnpm dev` on the host) keeps the probe — `127.0.0.1.nip.io`
+ * resolves correctly there. Production-readiness Phase 9 should
+ * push ingress-readiness server-side and remove this gate
+ * entirely.
  */
 
 const PROBE_TIMEOUT_MS = 3000
 
+function shouldSkipFromEnv(): boolean {
+  return process.env.LANDING_SKIP_INGRESS_PROBE === 'true'
+}
+
 export interface ProbeOptions {
   fetch?: typeof globalThis.fetch
   timeoutMs?: number
+  skip?: boolean
 }
 
 async function probe(
@@ -50,8 +69,13 @@ async function probe(
 
 export async function gateOnIngressReadiness(
   view: View,
-  { fetch = globalThis.fetch, timeoutMs = PROBE_TIMEOUT_MS }: ProbeOptions = {},
+  {
+    fetch = globalThis.fetch,
+    timeoutMs = PROBE_TIMEOUT_MS,
+    skip = shouldSkipFromEnv(),
+  }: ProbeOptions = {},
 ): Promise<View> {
+  if (skip) return view
   if (view.kind !== 'ready') return view
 
   const agentReady = await probe(view.agentUrl, fetch, timeoutMs)
