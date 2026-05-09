@@ -56,7 +56,10 @@ export function Document() {
         />
         <link rel="stylesheet" href="/styles/base.css" />
         <link rel="stylesheet" href="/styles/theme.css" />
-        <style>{COMPOSITION_CSS}</style>
+        {/* `innerHTML` (vs JSX child text) keeps `>` combinators and other
+            CSS punctuation from being HTML-escaped to `&gt;` etc. Browsers
+            don't decode entities inside <style> — a raw-text element. */}
+        <style innerHTML={COMPOSITION_CSS} />
         <script type="module" src="/_rmx/app/assets/run.ts" />
       </head>
       <body>{children}</body>

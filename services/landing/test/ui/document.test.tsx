@@ -14,6 +14,17 @@ describe('Document', () => {
     assert.match(html, /\.frame\s*\{/)
   })
 
+  it('preserves `>` child combinators in the inlined CSS (no &gt; escape inside <style>)', async () => {
+    const html = await renderToString(<Document title="x">hi</Document>)
+    // `<style>` is a raw-text element; browsers do not decode HTML
+    // entities in its content, so an escaped `&gt;` would break every
+    // direct-child selector in composition.css (`.stack > *`,
+    // `.cover > :first-child`, etc.).
+    assert.match(html, /\.stack\s*>\s*\*/)
+    assert.match(html, /\.cover\s*>\s*:first-child/)
+    assert.doesNotMatch(html, /\.stack\s*&gt;/)
+  })
+
   it('emits the inline <style> after the theme.css <link> so composition rules win on cascade ties', async () => {
     const html = await renderToString(<Document title="x">hi</Document>)
     const themeLinkIdx = html.indexOf('href="/styles/theme.css"')
