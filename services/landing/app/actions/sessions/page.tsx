@@ -46,7 +46,7 @@ export function SessionPage() {
   return ({ view, confirmStop = false, actionError = null }: SessionPageProps) => (
     <Layout
       title={pageTitle(view)}
-      topBarPath={`/sessions/${view.sessionId}`}
+      topBarChrome={{ mode: 'path', path: `/sessions/${view.sessionId}` }}
       topBarRight={<Avatar />}
     >
       <FocusH1 />
@@ -160,7 +160,7 @@ function pageTitle(view: View): string {
  */
 export function SessionNotFoundPage() {
   return ({ sessionId }: { sessionId: string }) => (
-    <Layout title="openvoid — session not found" topBarPath="/sessions/not-found">
+    <Layout title="openvoid — session not found" topBarChrome={{ mode: 'path', path: '/sessions/not-found' }}>
       <FocusH1 />
       <Card padding="32px">
         <div class="wf-col" mix={css({ gap: '20px' })}>
