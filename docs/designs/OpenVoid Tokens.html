@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OpenVoid · Design Tokens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ─────────────────────────────────────────────────────────
+     OpenVoid · Design Tokens
+     v0.1 — extracted from Provisioning / Two-Links / Create Prompt hi-fi.
+     Single source of truth: change a token here, propagate everywhere.
+     ───────────────────────────────────────────────────────── */
+  :root{
+    /* ── Surfaces ─────────────────────────────────────────── */
+    --paper:        oklch(0.972 0.006 75);   /* page background — warm off-white */
+    --paper-2:      oklch(0.955 0.006 75);   /* sunken / inset (toolbars, fields) */
+    --paper-3:      oklch(0.935 0.006 75);   /* hover for paper-2 surfaces */
+    --card:         #ffffff;                  /* elevated surface */
+    --terminal:     #0E0E0E;                  /* terminal/log background */
+
+    /* ── Ink (text + iconography) ────────────────────────── */
+    --ink:          oklch(0.18 0.005 60);    /* primary text, body & headlines */
+    --ink-2:        oklch(0.42 0.005 60);    /* secondary text */
+    --ink-3:        oklch(0.62 0.005 60);    /* tertiary / hints */
+    --ink-4:        oklch(0.78 0.005 60);    /* quaternary / disabled / placeholders */
+
+    /* ── Lines ───────────────────────────────────────────── */
+    --line:         oklch(0.91 0.004 75);    /* default hairline */
+    --line-2:       oklch(0.95 0.004 75);    /* softer hairline (inside cards) */
+
+    /* ── Accent (reserved for LIVE / ACTIVE states only) ─── */
+    --accent:       oklch(0.68 0.18 50);     /* warm orange */
+    --accent-soft:  oklch(0.94 0.04 60);     /* tinted background */
+
+    /* ── Semantic ────────────────────────────────────────── */
+    --ok:           oklch(0.55 0.10 155);    /* success / production */
+    --ok-soft:      oklch(0.94 0.04 155);
+
+    /* ── Type ────────────────────────────────────────────── */
+    --font-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono:    'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+    /* sizes */
+    --fs-display:   44px;     /* page hero ("Let's make something.") */
+    --fs-h1:        38px;     /* section/app name */
+    --fs-h2:        18px;     /* card title */
+    --fs-h3:        15.5px;   /* lede paragraph */
+    --fs-body:      14px;     /* default */
+    --fs-small:     13.5px;   /* secondary copy, list items */
+    --fs-meta:      12.5px;   /* footnotes, crumbs */
+    --fs-eyebrow:   11.5px;   /* uppercase mono labels */
+    --fs-mono-sm:   11px;     /* identifiers, kbds */
+
+    /* line-heights */
+    --lh-tight:     1.05;     /* display + h1 */
+    --lh-snug:      1.15;
+    --lh-normal:    1.5;      /* body */
+    --lh-loose:     1.7;      /* terminal/log */
+
+    /* tracking */
+    --ls-display:  -0.025em;
+    --ls-heading: -0.015em;
+    --ls-body:    -0.005em;
+    --ls-eyebrow:  0.04em;    /* uppercase eyebrow */
+
+    /* weights — limit to 4 */
+    --fw-regular:  400;
+    --fw-medium:   500;
+    --fw-semi:     600;
+    --fw-bold:     700;
+
+    /* ── Spacing scale ───────────────────────────────────── */
+    --sp-1:   4px;
+    --sp-2:   6px;
+    --sp-3:   8px;
+    --sp-4:   10px;
+    --sp-5:   12px;
+    --sp-6:   14px;
+    --sp-7:   18px;
+    --sp-8:   22px;
+    --sp-9:   28px;
+    --sp-10:  40px;
+    --sp-11:  60px;
+    --sp-12:  80px;
+
+    /* ── Radii ───────────────────────────────────────────── */
+    --r-xs:   4px;    /* kbd, small pills */
+    --r-sm:   7px;    /* fields, tools */
+    --r-md:   10px;   /* code blocks, mid surfaces */
+    --r-lg:   14px;   /* cards */
+    --r-pill: 999px;  /* eyebrows, chips */
+
+    /* ── Elevation ───────────────────────────────────────── */
+    --shadow-1: 0 1px 0 rgba(20,18,14,.04), 0 1px 2px rgba(20,18,14,.04);
+    --shadow-2: 0 1px 0 rgba(20,18,14,.04), 0 4px 14px rgba(20,18,14,.06);
+    --shadow-3: 0 1px 0 rgba(20,18,14,.04), 0 12px 32px rgba(20,18,14,.08);
+    --focus-ring: 0 0 0 4px var(--accent-soft);
+
+    /* ── Motion ──────────────────────────────────────────── */
+    --dur-fast:    120ms;     /* hover/color/icon */
+    --dur-base:    200ms;     /* state transitions */
+    --dur-slow:    600ms;     /* progress fills */
+    --dur-breathe: 1800ms;    /* live pulse */
+    --ease-std:    cubic-bezier(.2,.7,.3,1);
+
+    /* ── Layout ──────────────────────────────────────────── */
+    --w-prose:    520px;     /* readable copy */
+    --w-card:     560px;     /* form/info cards */
+    --w-stage:    760px;     /* composer / wide content */
+    --w-page:     1080px;    /* app-shell content */
+    --h-header:   56px;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     Page chrome (just for this reference doc)
+     ───────────────────────────────────────────────────────── */
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:var(--font-sans);font-size:var(--fs-body);line-height:var(--lh-normal);
+    letter-spacing:var(--ls-body);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+  header{
+    height:var(--h-header);display:flex;align-items:center;gap:14px;padding:0 24px;
+    border-bottom:1px solid var(--line);background:var(--paper);
+    position:sticky;top:0;z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:var(--fw-semi);
+    letter-spacing:-0.01em;font-size:15px;color:var(--ink)}
+  .brand-mark{
+    width:22px;height:22px;border-radius:6px;background:var(--ink);
+    display:grid;place-items:center;
+  }
+  .brand-mark::before{content:"";width:9px;height:9px;border-radius:50%;
+    border:1.5px solid var(--paper);}
+  .crumbs{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:13.5px}
+  .crumbs .sep{color:var(--ink-4)}
+  .crumbs .here{color:var(--ink);font-weight:var(--fw-medium)}
+  .grow{flex:1}
+  .ver{
+    font:var(--fw-medium) var(--fs-mono-sm)/1 var(--font-mono);
+    color:var(--ink-3);background:var(--paper-2);
+    padding:4px 8px;border-radius:var(--r-xs);
+  }
+
+  main{max-width:var(--w-page);margin:0 auto;padding:48px 32px 96px}
+
+  /* Hero */
+  .hero{display:flex;flex-direction:column;gap:14px;margin-bottom:48px}
+  .hero .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;height:24px;padding:0 11px;
+    border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);
+    font-size:11px;font-weight:var(--fw-semi);letter-spacing:var(--ls-eyebrow);
+    text-transform:uppercase;align-self:flex-start;
+  }
+  .hero h1{
+    font-size:var(--fs-display);line-height:var(--lh-tight);letter-spacing:var(--ls-display);
+    font-weight:var(--fw-semi);margin:0;color:var(--ink);
+  }
+  .hero p{font-size:15.5px;color:var(--ink);margin:0;max-width:560px;line-height:var(--lh-normal)}
+
+  /* Section scaffold */
+  section{margin-bottom:56px}
+  .sec-head{
+    display:flex;align-items:baseline;gap:12px;margin-bottom:18px;
+    padding-bottom:10px;border-bottom:1px solid var(--line);
+  }
+  .sec-head h2{
+    margin:0;font-size:var(--fs-h2);font-weight:var(--fw-semi);
+    letter-spacing:var(--ls-heading);color:var(--ink);
+  }
+  .sec-head .count{
+    font:var(--fw-medium) 11px/1 var(--font-mono);
+    color:var(--ink-4);
+  }
+  .sec-head .desc{
+    margin-left:auto;font-size:12.5px;color:var(--ink-2);max-width:420px;text-align:right;
+  }
+
+  /* Token row primitive */
+  .row{
+    display:grid;grid-template-columns:200px 1fr 220px;gap:20px;align-items:center;
+    padding:14px 16px;border-radius:var(--r-md);
+    transition:background var(--dur-fast);
+  }
+  .row:hover{background:var(--paper-2)}
+  .row + .row{border-top:1px solid var(--line-2)}
+  .row .name{
+    font:var(--fw-medium) 12.5px/1.4 var(--font-mono);color:var(--ink);
+  }
+  .row .val{
+    font:var(--fw-regular) 12px/1.4 var(--font-mono);color:var(--ink-3);
+  }
+  .row .preview{justify-self:end}
+
+  /* Color swatches */
+  .swatch{
+    width:120px;height:48px;border-radius:var(--r-sm);
+    box-shadow:inset 0 0 0 1px var(--line);
+    position:relative;overflow:hidden;
+  }
+  .swatch.has-text{display:grid;place-items:center}
+  .swatch.has-text span{font:var(--fw-semi) 13px/1 var(--font-sans)}
+
+  /* Type previews */
+  .type-display{font:var(--fw-semi) var(--fs-display)/var(--lh-tight) var(--font-sans);letter-spacing:var(--ls-display)}
+  .type-h1{font:var(--fw-semi) var(--fs-h1)/var(--lh-tight) var(--font-sans);letter-spacing:var(--ls-display)}
+  .type-h2{font:var(--fw-semi) var(--fs-h2)/var(--lh-snug) var(--font-sans);letter-spacing:var(--ls-heading)}
+  .type-h3{font:var(--fw-regular) var(--fs-h3)/var(--lh-normal) var(--font-sans)}
+  .type-body{font:var(--fw-regular) var(--fs-body)/var(--lh-normal) var(--font-sans)}
+  .type-small{font:var(--fw-regular) var(--fs-small)/var(--lh-normal) var(--font-sans);color:var(--ink-2)}
+  .type-meta{font:var(--fw-regular) var(--fs-meta)/var(--lh-normal) var(--font-sans);color:var(--ink-3)}
+  .type-eyebrow{font:var(--fw-semi) var(--fs-eyebrow)/1 var(--font-sans);letter-spacing:var(--ls-eyebrow);text-transform:uppercase;color:var(--accent)}
+  .type-mono{font:var(--fw-medium) var(--fs-mono-sm)/1.4 var(--font-mono);color:var(--ink)}
+
+  /* Spacing preview */
+  .sp-bar{height:24px;background:var(--ink);border-radius:2px}
+
+  /* Radius preview */
+  .rd-box{
+    width:64px;height:48px;background:var(--card);
+    box-shadow:inset 0 0 0 1px var(--line), var(--shadow-1);
+  }
+
+  /* Shadow preview */
+  .sh-box{
+    width:140px;height:56px;background:var(--card);border-radius:var(--r-md);
+  }
+
+  /* Motion preview */
+  .mo-box{
+    width:96px;height:24px;background:var(--paper-2);border-radius:var(--r-pill);
+    position:relative;overflow:hidden;
+  }
+  .mo-box::after{
+    content:"";position:absolute;top:0;left:-30%;width:30%;height:100%;
+    background:var(--ink);border-radius:var(--r-pill);
+    animation:slide var(--dur, 1s) var(--ease-std) infinite;
+  }
+  @keyframes slide{
+    0%{transform:translateX(0)}
+    50%{transform:translateX(330%)}
+    100%{transform:translateX(0)}
+  }
+  .mo-box.breathe::after{
+    animation:breathe var(--dur-breathe) ease-out infinite;
+    left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;
+    background:var(--accent);
+  }
+  @keyframes breathe{
+    0%{transform:scale(.7);opacity:.6}
+    70%{transform:scale(2.6);opacity:0}
+    100%{transform:scale(2.6);opacity:0}
+  }
+
+  /* Component preview cluster */
+  .cluster{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+    padding:18px;background:var(--card);border-radius:var(--r-md);
+    box-shadow:var(--shadow-1);
+  }
+  .pill-eyebrow{
+    display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 11px;
+    border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);
+    font-size:11px;font-weight:var(--fw-semi);letter-spacing:var(--ls-eyebrow);
+    text-transform:uppercase;
+  }
+  .pill-eyebrow .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .pill-status{
+    display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 10px;
+    border-radius:var(--r-pill);background:var(--ok-soft);color:var(--ok);
+    font-size:11px;font-weight:var(--fw-semi);
+  }
+  .btn-pri{
+    display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;
+    border:0;border-radius:9px;background:var(--ink);color:var(--paper);
+    font:var(--fw-semi) 13px/1 var(--font-sans);cursor:pointer;
+  }
+  .btn-sec{
+    display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;
+    border:0;border-radius:9px;background:var(--card);color:var(--ink);
+    box-shadow:inset 0 0 0 1px var(--line);
+    font:var(--fw-semi) 13px/1 var(--font-sans);cursor:pointer;
+  }
+  .btn-ghost{
+    display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px;
+    border:0;border-radius:7px;background:transparent;color:var(--ink-3);
+    font:var(--fw-medium) 12.5px/1 var(--font-sans);cursor:pointer;
+  }
+  .btn-ghost:hover{color:var(--ink);background:var(--paper-2)}
+  .kbd{
+    display:inline-flex;align-items:center;justify-content:center;
+    height:20px;min-width:20px;padding:0 5px;border-radius:var(--r-xs);
+    font:var(--fw-medium) 10.5px/1 var(--font-mono);
+    background:var(--paper-2);color:var(--ink-2);
+    box-shadow:inset 0 0 0 1px var(--line);
+  }
+  .field{
+    appearance:none;height:36px;padding:0 12px;
+    border:0;border-radius:var(--r-sm);background:var(--card);
+    box-shadow:inset 0 0 0 1px var(--line);
+    font:var(--fw-regular) 13px/1 var(--font-sans);color:var(--ink);
+    min-width:200px;
+  }
+
+  .legend{
+    display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;
+    margin-top:12px;
+  }
+  .legend .pair{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 12px;border-radius:var(--r-sm);background:var(--paper-2);
+  }
+  .legend .pair .swatch-sm{
+    width:20px;height:20px;border-radius:var(--r-xs);
+    box-shadow:inset 0 0 0 1px var(--line);
+  }
+  .legend .pair .lbl{font-size:12.5px;color:var(--ink-2)}
+  .legend .pair .lbl b{color:var(--ink);font-weight:var(--fw-semi)}
+
+  footer{
+    margin-top:80px;padding-top:24px;border-top:1px solid var(--line);
+    color:var(--ink-3);font-size:12.5px;display:flex;justify-content:space-between;
+  }
+  footer code{
+    font:var(--fw-medium) 11px/1.5 var(--font-mono);
+    background:var(--paper-2);padding:2px 6px;border-radius:4px;color:var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand"><span class="brand-mark"></span>openvoid</span>
+  <div class="crumbs">
+    <span>system</span>
+    <span class="sep">/</span>
+    <span class="here">tokens</span>
+  </div>
+  <div class="grow"></div>
+  <span class="ver">v0.1</span>
+</header>
+
+<main>
+
+  <div class="hero">
+    <span class="eyebrow"><span class="dot" style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span> Design tokens</span>
+    <h1>The system, in one page.</h1>
+    <p>Every value used across OpenVoid screens — surfaces, ink, type, spacing, radii, elevation, motion. Change a token here and it propagates through every screen.</p>
+  </div>
+
+  <!-- ─────────── Surfaces ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Surfaces</h2>
+      <span class="count">5 tokens</span>
+      <span class="desc">Warm-paper hierarchy. Cards float in pure white; terminal is the lone dark surface.</span>
+    </div>
+    <div class="row">
+      <span class="name">--paper</span>
+      <span class="val">oklch(0.972 0.006 75) · #F8F6F2</span>
+      <div class="preview"><div class="swatch" style="background:var(--paper)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--paper-2</span>
+      <span class="val">oklch(0.955 0.006 75) · sunken / inset</span>
+      <div class="preview"><div class="swatch" style="background:var(--paper-2)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--paper-3</span>
+      <span class="val">oklch(0.935 0.006 75) · hover for paper-2</span>
+      <div class="preview"><div class="swatch" style="background:var(--paper-3)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--card</span>
+      <span class="val">#ffffff · elevated surface</span>
+      <div class="preview"><div class="swatch" style="background:var(--card)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--terminal</span>
+      <span class="val">#0E0E0E · log / boot output</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--terminal)"><span style="color:#E5E2DC">$ openvoid</span></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── Ink ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Ink</h2>
+      <span class="count">4 tokens</span>
+      <span class="desc">A flat ink ladder. <code>--ink</code> for headlines AND body — keep contrast high.</span>
+    </div>
+    <div class="row">
+      <span class="name">--ink</span>
+      <span class="val">oklch(0.18 0.005 60) · primary text</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--ink)"><span style="color:var(--paper)">Aa Bb 123</span></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--ink-2</span>
+      <span class="val">oklch(0.42 0.005 60) · secondary</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--card);box-shadow:inset 0 0 0 1px var(--line)"><span style="color:var(--ink-2)">Aa Bb 123</span></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--ink-3</span>
+      <span class="val">oklch(0.62 0.005 60) · tertiary / hints</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--card);box-shadow:inset 0 0 0 1px var(--line)"><span style="color:var(--ink-3)">Aa Bb 123</span></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--ink-4</span>
+      <span class="val">oklch(0.78 0.005 60) · disabled / placeholder</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--card);box-shadow:inset 0 0 0 1px var(--line)"><span style="color:var(--ink-4)">Aa Bb 123</span></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── Lines ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Lines</h2>
+      <span class="count">2 tokens</span>
+      <span class="desc">Hairlines for separation. Avoid borders where shadow alone will do.</span>
+    </div>
+    <div class="row">
+      <span class="name">--line</span>
+      <span class="val">oklch(0.91 0.004 75) · default hairline</span>
+      <div class="preview"><div class="swatch" style="background:var(--card);border:1px solid var(--line)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--line-2</span>
+      <span class="val">oklch(0.95 0.004 75) · softer (within cards)</span>
+      <div class="preview"><div class="swatch" style="background:var(--card);border:1px solid var(--line-2)"></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── Accent + Semantic ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Accent &amp; semantic</h2>
+      <span class="count">4 tokens</span>
+      <span class="desc">Orange = LIVE only (sessions running, active steps). Green = production.</span>
+    </div>
+    <div class="row">
+      <span class="name">--accent</span>
+      <span class="val">oklch(0.68 0.18 50) · live / active</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--accent)"><span style="color:#fff">live</span></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--accent-soft</span>
+      <span class="val">oklch(0.94 0.04 60) · accent background</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--accent-soft)"><span style="color:var(--accent)">live</span></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--ok</span>
+      <span class="val">oklch(0.55 0.10 155) · production / success</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--ok)"><span style="color:#fff">live</span></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--ok-soft</span>
+      <span class="val">oklch(0.94 0.04 155) · ok background</span>
+      <div class="preview"><div class="swatch has-text" style="background:var(--ok-soft)"><span style="color:var(--ok)">live</span></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── Type ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Typography</h2>
+      <span class="count">10 sizes · 4 weights</span>
+      <span class="desc">Inter for everything readable. JetBrains Mono only for identifiers, URLs, kbds, terminal.</span>
+    </div>
+    <div class="row">
+      <span class="name">--fs-display / 44</span>
+      <span class="val">page hero</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-display">Let's make something.</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-h1 / 38</span>
+      <span class="val">app name, section hero</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-h1">recipe-jar</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-h2 / 18</span>
+      <span class="val">card title</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-h2">Boot sequence</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-h3 / 15.5</span>
+      <span class="val">lede paragraph</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-h3">Provisioning a fresh sandbox and warming up the agent.</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-body / 14</span>
+      <span class="val">default body</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-body">The agent scaffolds the project, sets up your stack, and opens a chat session.</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-small / 13.5</span>
+      <span class="val">list items, secondary copy</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-small">Installing dependencies — 184 packages</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-meta / 12.5</span>
+      <span class="val">crumbs, footnotes, captions</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-meta">maria / recipe-jar / new app</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-eyebrow / 11.5</span>
+      <span class="val">uppercase status pills</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-eyebrow">Spinning up</span></div>
+    </div>
+    <div class="row">
+      <span class="name">--fs-mono-sm / 11</span>
+      <span class="val">URLs, ids, kbds, log lines</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2"><span class="type-mono">recipe-jar.openvoid.dev</span></div>
+    </div>
+    <div class="row">
+      <span class="name">weights</span>
+      <span class="val">400 regular · 500 medium · 600 semi · 700 bold</span>
+      <div class="preview" style="justify-self:start;grid-column:2 / span 2;display:flex;gap:14px;align-items:baseline">
+        <span style="font-weight:400">Regular</span>
+        <span style="font-weight:500">Medium</span>
+        <span style="font-weight:600">Semibold</span>
+        <span style="font-weight:700">Bold</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── Spacing ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Spacing</h2>
+      <span class="count">12 steps</span>
+      <span class="desc">Non-linear scale. Don't invent in-between values — pick the closest step.</span>
+    </div>
+    <div class="row"><span class="name">--sp-1</span><span class="val">4px · tight gaps, kbd inset</span><div class="preview"><div class="sp-bar" style="width:4px"></div></div></div>
+    <div class="row"><span class="name">--sp-2</span><span class="val">6px</span><div class="preview"><div class="sp-bar" style="width:6px"></div></div></div>
+    <div class="row"><span class="name">--sp-3</span><span class="val">8px · default icon gap</span><div class="preview"><div class="sp-bar" style="width:8px"></div></div></div>
+    <div class="row"><span class="name">--sp-4</span><span class="val">10px</span><div class="preview"><div class="sp-bar" style="width:10px"></div></div></div>
+    <div class="row"><span class="name">--sp-5</span><span class="val">12px · button gap</span><div class="preview"><div class="sp-bar" style="width:12px"></div></div></div>
+    <div class="row"><span class="name">--sp-6</span><span class="val">14px</span><div class="preview"><div class="sp-bar" style="width:14px"></div></div></div>
+    <div class="row"><span class="name">--sp-7</span><span class="val">18px · card inner</span><div class="preview"><div class="sp-bar" style="width:18px"></div></div></div>
+    <div class="row"><span class="name">--sp-8</span><span class="val">22px · card padding</span><div class="preview"><div class="sp-bar" style="width:22px"></div></div></div>
+    <div class="row"><span class="name">--sp-9</span><span class="val">28px · section gap</span><div class="preview"><div class="sp-bar" style="width:28px"></div></div></div>
+    <div class="row"><span class="name">--sp-10</span><span class="val">40px · stack between blocks</span><div class="preview"><div class="sp-bar" style="width:40px"></div></div></div>
+    <div class="row"><span class="name">--sp-11</span><span class="val">60px · stage padding</span><div class="preview"><div class="sp-bar" style="width:60px"></div></div></div>
+    <div class="row"><span class="name">--sp-12</span><span class="val">80px · max page padding</span><div class="preview"><div class="sp-bar" style="width:80px"></div></div></div>
+  </section>
+
+  <!-- ─────────── Radii ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Radii</h2>
+      <span class="count">5 tokens</span>
+      <span class="desc">Cards 14px. Fields 7px. Pills full-round. Don't mix arbitrary values.</span>
+    </div>
+    <div class="row">
+      <span class="name">--r-xs</span>
+      <span class="val">4px · kbd, micro tags</span>
+      <div class="preview"><div class="rd-box" style="border-radius:var(--r-xs)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--r-sm</span>
+      <span class="val">7px · fields, ghost buttons</span>
+      <div class="preview"><div class="rd-box" style="border-radius:var(--r-sm)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--r-md</span>
+      <span class="val">10px · code blocks, mid surfaces</span>
+      <div class="preview"><div class="rd-box" style="border-radius:var(--r-md)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--r-lg</span>
+      <span class="val">14px · cards, composer</span>
+      <div class="preview"><div class="rd-box" style="border-radius:var(--r-lg)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--r-pill</span>
+      <span class="val">999px · eyebrows, status chips</span>
+      <div class="preview"><div class="rd-box" style="border-radius:var(--r-pill)"></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── Elevation ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Elevation</h2>
+      <span class="count">3 + focus ring</span>
+      <span class="desc">Shadows, never borders, when surfaces lift. The focus ring is accent-soft, not blue.</span>
+    </div>
+    <div class="row">
+      <span class="name">--shadow-1</span>
+      <span class="val">subtle · pills, inline cards</span>
+      <div class="preview"><div class="sh-box" style="box-shadow:var(--shadow-1)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--shadow-2</span>
+      <span class="val">default · cards, composer</span>
+      <div class="preview"><div class="sh-box" style="box-shadow:var(--shadow-2)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--shadow-3</span>
+      <span class="val">tall · modals, popovers</span>
+      <div class="preview"><div class="sh-box" style="box-shadow:var(--shadow-3)"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--focus-ring</span>
+      <span class="val">0 0 0 4px var(--accent-soft)</span>
+      <div class="preview"><div class="sh-box" style="box-shadow:var(--focus-ring)"></div></div>
+    </div>
+  </section>
+
+  <!-- ─────────── Motion ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Motion</h2>
+      <span class="count">4 durations · 1 easing</span>
+      <span class="desc">One easing curve everywhere. Breathing pulse is the only ambient motion.</span>
+    </div>
+    <div class="row">
+      <span class="name">--dur-fast / 120ms</span>
+      <span class="val">color, hover, icon swaps</span>
+      <div class="preview"><div class="mo-box" style="--dur:.6s"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--dur-base / 200ms</span>
+      <span class="val">state transitions, panel toggles</span>
+      <div class="preview"><div class="mo-box" style="--dur:1s"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--dur-slow / 600ms</span>
+      <span class="val">progress fills, layout reflow</span>
+      <div class="preview"><div class="mo-box" style="--dur:1.6s"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--dur-breathe / 1800ms</span>
+      <span class="val">live pulse on active states</span>
+      <div class="preview"><div class="mo-box breathe"></div></div>
+    </div>
+    <div class="row">
+      <span class="name">--ease-std</span>
+      <span class="val">cubic-bezier(.2, .7, .3, 1)</span>
+      <div class="preview" style="justify-self:end;color:var(--ink-3);font:500 11px/1 var(--font-mono)">decel · single curve</div>
+    </div>
+  </section>
+
+  <!-- ─────────── Components ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Components</h2>
+      <span class="count">recipes</span>
+      <span class="desc">Pre-composed from the tokens above — copy these, don't reinvent.</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="cluster">
+        <span class="pill-eyebrow"><span class="dot"></span> Spinning up</span>
+        <span class="pill-eyebrow" style="background:var(--ok-soft);color:var(--ok)"><span class="dot"></span> Live</span>
+        <span class="pill-status"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span> Production</span>
+        <span style="font:500 12px/1 var(--font-mono);background:var(--paper-2);color:var(--ink-2);padding:5px 9px;border-radius:var(--r-xs)">draft</span>
+      </div>
+
+      <div class="cluster">
+        <button class="btn-pri">Start session →</button>
+        <button class="btn-sec">Open preview</button>
+        <button class="btn-ghost">Cancel</button>
+        <span class="kbd">⌘</span><span class="kbd">↵</span>
+      </div>
+
+      <div class="cluster">
+        <input class="field" placeholder="Describe what to build…" />
+        <span style="font:500 12.5px/1 var(--font-mono);background:var(--paper-2);padding:6px 10px;border-radius:var(--r-xs);color:var(--ink)">recipe-jar.openvoid.dev</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── Application rules ─────────── -->
+  <section>
+    <div class="sec-head">
+      <h2>Application rules</h2>
+      <span class="count">4 principles</span>
+      <span class="desc">When tokens aren't enough — these guardrails keep the system honest.</span>
+    </div>
+    <div class="legend">
+      <div class="pair"><div class="swatch-sm" style="background:var(--accent)"></div><div class="lbl"><b>Accent only for live.</b> Running sessions, active steps, focus rings.</div></div>
+      <div class="pair"><div class="swatch-sm" style="background:var(--ok)"></div><div class="lbl"><b>Green only for prod.</b> Production state, deploy success.</div></div>
+      <div class="pair"><div class="swatch-sm" style="background:var(--ink)"></div><div class="lbl"><b>Black for primary CTA.</b> One per screen, max.</div></div>
+      <div class="pair"><div class="swatch-sm" style="background:var(--paper-2)"></div><div class="lbl"><b>Mono for identifiers.</b> URLs, ids, kbds, code. Never product names.</div></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>OpenVoid design system · v0.1</span>
+    <span>Source: <code>:root</code> in this file</span>
+  </footer>
+
+</main>
+
+</body>
+</html>

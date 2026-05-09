@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OpenVoid — recipe-jar · session ready</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper: oklch(0.972 0.006 75);
+    --paper-2: oklch(0.955 0.006 75);
+    --ink: oklch(0.18 0.005 60);
+    --ink-2: oklch(0.42 0.005 60);
+    --ink-3: oklch(0.62 0.005 60);
+    --ink-4: oklch(0.78 0.005 60);
+    --line: oklch(0.91 0.004 75);
+    --line-2: oklch(0.95 0.004 75);
+    --card: #ffffff;
+    --accent: oklch(0.68 0.18 50);   /* warm orange — reserved for ACTIVE only */
+    --accent-soft: oklch(0.94 0.04 60);
+    --ok: oklch(0.55 0.10 155);
+    --ok-soft: oklch(0.94 0.04 155);
+    --shadow-1: 0 1px 0 rgba(20,18,14,.04), 0 1px 2px rgba(20,18,14,.04);
+    --shadow-2: 0 1px 0 rgba(20,18,14,.04), 0 4px 14px rgba(20,18,14,.06);
+    --shadow-3: 0 1px 0 rgba(20,18,14,.04), 0 14px 40px rgba(20,18,14,.10);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 18px;
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:var(--font-sans);font-size:14px;line-height:1.5;
+    letter-spacing:-0.005em;-webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility}
+
+  /* ── Header ───────────────────────────────────────────── */
+  header{
+    height:56px;display:flex;align-items:center;gap:14px;padding:0 24px;
+    border-bottom:1px solid var(--line);background:var(--paper);
+    position:sticky;top:0;z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-0.01em;
+    font-size:15px;color:var(--ink)}
+  .brand-mark{
+    width:22px;height:22px;border-radius:6px;background:var(--ink);
+    display:grid;place-items:center;position:relative;
+  }
+  .brand-mark::before{
+    content:"";width:9px;height:9px;border-radius:50%;
+    border:1.5px solid var(--paper);
+  }
+  .crumbs{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:13.5px}
+  .crumbs .sep{color:var(--ink-4)}
+  .crumbs .here{color:var(--ink);font-weight:500}
+  .grow{flex:1}
+  .pill{
+    display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 11px;
+    border-radius:999px;font-size:12px;font-weight:500;
+    background:var(--card);color:var(--ink-2);box-shadow:var(--shadow-1);
+  }
+  .pill.live{color:var(--accent);background:var(--accent-soft);box-shadow:none}
+  .dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block;
+    flex-shrink:0}
+  .breathe{position:relative}
+  .breathe::after{
+    content:"";position:absolute;inset:-3px;border-radius:50%;background:currentColor;
+    opacity:.35;animation:breathe 1.8s ease-out infinite;
+  }
+  @keyframes breathe{
+    0%{transform:scale(.8);opacity:.5}
+    70%{transform:scale(2.2);opacity:0}
+    100%{transform:scale(2.2);opacity:0}
+  }
+  .avatar{
+    width:28px;height:28px;border-radius:50%;background:var(--accent-soft);
+    color:var(--accent);font-size:12px;font-weight:600;
+    display:grid;place-items:center;
+  }
+
+  /* ── Stage ────────────────────────────────────────────── */
+  .stage{
+    min-height:calc(100vh - 56px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:64px 24px 80px;gap:40px;position:relative;
+  }
+  /* very subtle paper grain */
+  .stage::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(circle at 50% 0%, oklch(0.99 0.006 75) 0%, transparent 60%);
+  }
+
+  /* ── Hero ─────────────────────────────────────────────── */
+  .hero{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
+    max-width:680px;position:relative}
+  .hero .ready-pill{
+    display:inline-flex;align-items:center;gap:9px;height:30px;padding:0 14px;
+    border-radius:999px;background:var(--accent-soft);color:var(--accent);
+    font-size:12.5px;font-weight:600;letter-spacing:0.005em;
+  }
+  .hero h1{
+    font-size:44px;line-height:1.05;letter-spacing:-0.025em;font-weight:600;
+    margin:6px 0 0;color:var(--ink);
+  }
+  .hero h1 .name{
+    background:linear-gradient(180deg, var(--ink) 0%, oklch(0.32 0.005 60) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    font-weight:700;letter-spacing:-0.03em;
+  }
+  .hero p{
+    font-size:16px;color:var(--ink-2);max-width:520px;margin:6px 0 0;line-height:1.5;
+  }
+
+  /* ── Two cards w/ connector ───────────────────────────── */
+  .duo{
+    position:relative;width:100%;max-width:920px;
+    display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:stretch;
+  }
+  .connector{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:120px;height:60px;pointer-events:none;z-index:0;
+  }
+  .connector svg{width:100%;height:100%;overflow:visible}
+  .connector .flow{
+    stroke:var(--accent);stroke-width:1.5;fill:none;
+    stroke-dasharray:4 5;animation:flow 1.6s linear infinite;
+  }
+  @keyframes flow{to{stroke-dashoffset:-18}}
+
+  .card{
+    background:var(--card);border-radius:var(--r-lg);
+    padding:28px;display:flex;flex-direction:column;gap:16px;
+    box-shadow:var(--shadow-2);position:relative;z-index:1;
+    transition:box-shadow .18s ease, transform .18s ease;
+  }
+  .card:hover{box-shadow:var(--shadow-3);transform:translateY(-1px)}
+  .card .top{display:flex;align-items:center;gap:12px}
+  .card .mark{
+    width:42px;height:42px;border-radius:11px;display:grid;place-items:center;
+    flex-shrink:0;
+  }
+  .mark.chat{
+    background:var(--ink);color:var(--paper);
+  }
+  .mark.preview{
+    background:var(--paper-2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);
+  }
+  .card h2{
+    margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em;color:var(--ink);
+  }
+  .card .sub{font-size:13.5px;color:var(--ink-2);line-height:1.5;margin:0}
+  .card .url{
+    display:flex;align-items:center;gap:10px;
+    background:var(--paper-2);border-radius:var(--r-sm);padding:10px 12px;
+    font-family:var(--font-mono);font-size:12.5px;color:var(--ink);
+    overflow:hidden;
+  }
+  .card .url .scheme{color:var(--ink-3)}
+  .card .url .copy{
+    margin-left:auto;color:var(--ink-3);font-size:11px;font-family:var(--font-sans);
+    padding:2px 8px;border-radius:5px;cursor:pointer;
+    transition:background .12s, color .12s;
+  }
+  .card .url .copy:hover{background:var(--paper);color:var(--ink)}
+  .card .url .copy.copied{color:var(--ok)}
+  .card .actions{display:flex;align-items:center;gap:10px;margin-top:4px}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    height:42px;padding:0 18px;border-radius:10px;border:0;
+    font:600 13.5px/1 var(--font-sans);letter-spacing:-0.005em;
+    cursor:pointer;transition:transform .12s, box-shadow .12s, background .12s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-pri{background:var(--ink);color:var(--paper);flex:1}
+  .btn-pri:hover{background:oklch(0.10 0.004 60)}
+  .btn-sec{background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);flex:1}
+  .btn-sec:hover{box-shadow:inset 0 0 0 1px oklch(0.84 0.004 75)}
+  .btn .kbd{
+    display:inline-flex;align-items:center;justify-content:center;
+    height:18px;min-width:18px;padding:0 5px;border-radius:4px;
+    font:500 10.5px/1 var(--font-mono);
+    background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);
+    margin-left:2px;
+  }
+  .btn-sec .kbd{background:var(--paper-2);color:var(--ink-3)}
+
+  .card .role{
+    position:absolute;top:18px;right:20px;
+    font:500 10.5px/1 var(--font-mono);letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--ink-4);
+  }
+
+  /* the chat card gets a subtle "active" marker — only place orange appears beyond hero pill */
+  .card.chat-card::before{
+    content:"";position:absolute;left:28px;right:28px;top:0;height:2px;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    border-radius:2px;opacity:.5;
+  }
+
+  /* ── Split-view affordance ────────────────────────────── */
+  .split-tip{
+    display:flex;align-items:center;gap:14px;
+    background:var(--card);border-radius:var(--r-md);padding:12px 16px 12px 14px;
+    box-shadow:var(--shadow-1);max-width:920px;width:100%;
+  }
+  .split-icon{
+    width:32px;height:24px;border-radius:5px;
+    display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:2px;
+    background:var(--paper-2);box-shadow:inset 0 0 0 1px var(--line);
+    flex-shrink:0;
+  }
+  .split-icon span{background:var(--ink-4);border-radius:2px}
+  .split-icon span:first-child{background:var(--ink)}
+  .split-tip .text{font-size:12.5px;color:var(--ink-2);flex:1}
+  .split-tip .text b{color:var(--ink);font-weight:600}
+  .split-tip .kbds{display:flex;gap:4px;align-items:center;color:var(--ink-3);font-size:11.5px}
+  .kbd-static{
+    display:inline-flex;align-items:center;justify-content:center;
+    height:20px;min-width:20px;padding:0 5px;border-radius:5px;
+    font:500 10.5px/1 var(--font-mono);
+    background:var(--paper-2);color:var(--ink-2);
+    box-shadow:inset 0 0 0 1px var(--line), 0 1px 0 var(--line);
+  }
+
+  /* ── Footer line: kill session ────────────────────────── */
+  .done-line{
+    display:flex;align-items:center;gap:10px;color:var(--ink-3);font-size:12.5px;
+    margin-top:4px;
+  }
+  .done-line a{
+    color:var(--ink-2);text-decoration:none;font-weight:500;
+    border-bottom:1px solid var(--line);padding-bottom:1px;
+  }
+  .done-line a:hover{color:var(--ink);border-bottom-color:var(--ink-3)}
+
+  /* ── Responsive: stack on narrow ──────────────────────── */
+  @media (max-width: 760px){
+    .duo{grid-template-columns:1fr;gap:18px}
+    .connector{position:relative;left:auto;top:auto;transform:rotate(90deg);
+      width:60px;height:60px;margin:-12px auto;}
+    .hero h1{font-size:34px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark"></div>
+    openvoid
+  </div>
+  <div class="crumbs">
+    <span>maria</span>
+    <span class="sep">/</span>
+    <span class="here">recipe-jar</span>
+  </div>
+  <div class="grow"></div>
+  <div class="pill live">
+    <span class="dot breathe"></span>
+    Session live · 0:42
+  </div>
+  <div class="avatar">M</div>
+</header>
+
+<main class="stage">
+
+  <section class="hero">
+    <div class="ready-pill">
+      <span class="dot"></span>
+      Sandbox ready in 14s
+    </div>
+    <h1>Two tabs, and you're building.</h1>
+    <p>Drive the agent on one. Watch the app come to life on the other. We'll save your work when you're done.</p>
+  </section>
+
+  <div class="duo">
+    <!-- Connector arrow chat → preview -->
+    <div class="connector" aria-hidden="true">
+      <svg viewBox="0 0 120 60" preserveAspectRatio="none">
+        <path class="flow" d="M 6 30 Q 60 -10 114 30" />
+        <path d="M 109 25 L 116 30 L 109 35" stroke="var(--accent)" stroke-width="1.5"
+              fill="none" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
+
+    <article class="card chat-card">
+      <span class="role">01 · drive</span>
+      <div class="top">
+        <div class="mark chat" aria-hidden="true">
+          <!-- chat / agent mark -->
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="12" cy="12" r="3.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h2>Agent chat</h2>
+          <p class="sub" style="margin-top:2px">Tell the agent what to build. Paste references. Ask for changes.</p>
+        </div>
+      </div>
+      <div class="url" data-url="https://chat.openvoid.dev/s/4f2c-recipe">
+        <span class="scheme">https://</span>chat.openvoid.dev/s/4f2c-recipe
+        <span class="copy" data-copy>Copy</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-pri" data-open="https://chat.openvoid.dev/s/4f2c-recipe">
+          Open chat
+          <span class="kbd">⌘1</span>
+        </button>
+      </div>
+    </article>
+
+    <article class="card preview-card">
+      <span class="role">02 · watch</span>
+      <div class="top">
+        <div class="mark preview" aria-hidden="true">
+          <!-- preview / portal mark -->
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="6.5" cy="8.5" r="0.9" fill="currentColor"/>
+            <circle cx="9.2" cy="8.5" r="0.9" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h2>Live preview</h2>
+          <p class="sub" style="margin-top:2px">Your app, running. Hot-reloads as the agent edits. Shareable.</p>
+        </div>
+      </div>
+      <div class="url" data-url="https://recipe-jar.preview.openvoid.dev">
+        <span class="scheme">https://</span>recipe-jar.preview.openvoid.dev
+        <span class="copy" data-copy>Copy</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-sec" data-open="https://recipe-jar.preview.openvoid.dev">
+          Open preview
+          <span class="kbd">⌘2</span>
+        </button>
+      </div>
+    </article>
+  </div>
+
+  <div class="split-tip">
+    <div class="split-icon" aria-hidden="true"><span></span><span></span></div>
+    <div class="text">
+      <b>Drag both tabs into a split window</b> — keep chat on the left, preview on the right.
+    </div>
+    <div class="kbds">
+      <span class="kbd-static">⌘</span><span class="kbd-static">⇧</span><span class="kbd-static">D</span>
+    </div>
+  </div>
+
+  <div class="done-line">
+    Done for the day? <a href="#kill">Come back here and end the session</a> — we'll commit your work to Git.
+  </div>
+
+</main>
+
+<script>
+  // Copy URL on click (no clipboard fallback drama for the demo)
+  document.querySelectorAll('[data-copy]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      const url = e.target.closest('.url').dataset.url;
+      try { await navigator.clipboard.writeText(url); } catch (_) {}
+      const orig = el.textContent;
+      el.textContent = 'Copied';
+      el.classList.add('copied');
+      setTimeout(() => { el.textContent = orig; el.classList.remove('copied'); }, 1200);
+    });
+  });
+
+  // ⌘1 / ⌘2 to open
+  document.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    if (e.key === '1') { e.preventDefault();
+      document.querySelector('[data-open*="chat.openvoid"]').click(); }
+    if (e.key === '2') { e.preventDefault();
+      document.querySelector('[data-open*="preview.openvoid"]').click(); }
+  });
+
+  document.querySelectorAll('[data-open]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      const url = e.currentTarget.dataset.open;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  });
+</script>
+</body>
+</html>
