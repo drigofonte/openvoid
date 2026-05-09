@@ -1,7 +1,7 @@
 ---
 title: "feat: Port Every Layout primitives from React to Remix 3"
 type: feat
-status: active
+status: completed
 date: 2026-05-09
 ---
 
