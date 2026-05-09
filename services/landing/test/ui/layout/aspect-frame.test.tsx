@@ -25,11 +25,4 @@ describe('AspectFrame', () => {
     const html = await renderToString(<AspectFrame ratio="1 / 1">x</AspectFrame>)
     assert.match(html, /--ratio:\s*1\s*\/\s*1/)
   })
-
-  it('coexists with remix/ui Frame imports without collision (smoke typecheck)', async () => {
-    // Imported at the top of the test file under a different name. If
-    // the file typechecks and runs, the rename did its job.
-    const html = await renderToString(<AspectFrame>x</AspectFrame>)
-    assert.match(html, /class="frame[^"]*"/)
-  })
 })

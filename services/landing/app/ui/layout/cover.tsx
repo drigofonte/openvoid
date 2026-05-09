@@ -25,11 +25,11 @@ export interface CoverProps {
  * below. Layout mechanics live in `composition.css`'s `.cover` /
  * `.cover-centered` rules.
  *
- * The original React port walked `children` and wrapped the first
- * child in `<div class="cover-centered">`. Remix 3 has no
- * `Children.map` equivalent, so the Remix port surfaces the centered
- * slot as an explicit `centered` prop. Anything passed as `children`
- * renders after it.
+ * `centered` is an explicit slot prop because Remix 3 has no
+ * `Children.map` equivalent — the `.cover-centered` wrapper has to
+ * be applied at the API boundary rather than discovered by walking
+ * children. Anything passed as `children` renders after the
+ * centered block.
  */
 export function Cover() {
   return ({

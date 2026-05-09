@@ -44,13 +44,13 @@ let switcherCounter = 0
  * in `composition.css`'s `.switcher` rule; this component sets the
  * `--threshold` and `--space` custom properties.
  *
- * The original React port used `useId` + `useEffect` to inject a
- * per-instance `<style>` rule for the dynamic `limit`. The Remix
- * port emits the same rule server-side instead, scoped to a
- * per-instance class drawn from a module counter. When `limit`
- * matches the Every Layout default of 4, the rule is omitted —
- * `composition.css`'s base `.switcher` rule already covers that
- * case.
+ * A non-default `limit` emits a server-rendered sibling `<style>`
+ * carrying the `:nth-last-child(n+limit+1)` rule, scoped to a
+ * per-instance class. composition.css can't pre-bake the rule
+ * because the limit is variable; Remix 3 has no client-time
+ * style-injection hook, so SSR is the only place to emit it. When
+ * `limit` matches the Every Layout default of 4, the rule is
+ * omitted — composition.css's base `.switcher` rule covers it.
  */
 export function Switcher() {
   const scopedClass = `switcher-${++switcherCounter}`
@@ -61,15 +61,19 @@ export function Switcher() {
     id,
     children,
   }: SwitcherProps) => {
-    const overflow = limit + 1
     // `innerHTML` (vs `<style>{rule}</style>`) keeps the `>` combinator
     // and other selector punctuation from getting HTML-escaped — Remix
     // 3's renderer otherwise emits `&gt;`, which browsers do not decode
     // inside <style> (a raw-text element).
-    const limitRule = `.${scopedClass} > :nth-last-child(n+${overflow}), .${scopedClass} > :nth-last-child(n+${overflow}) ~ * { flex-basis: 100%; }`
+    const limitStyle =
+      limit !== DEFAULT_LIMIT ? (
+        <style
+          innerHTML={`.${scopedClass} > :nth-last-child(n+${limit + 1}), .${scopedClass} > :nth-last-child(n+${limit + 1}) ~ * { flex-basis: 100%; }`}
+        />
+      ) : null
     return (
       <>
-        {limit !== DEFAULT_LIMIT && <style innerHTML={limitRule} />}
+        {limitStyle}
         <div
           class={`switcher ${scopedClass}`}
           id={id}
