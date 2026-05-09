@@ -73,7 +73,7 @@ describe('GET /sessions/:id', () => {
 
     assert.equal(response.status, 200)
     const html = await response.text()
-    assert.match(html, /Spinning up your session/)
+    assert.match(html, /Spinning up/)
     assert.match(html, /Cancel/)
   })
 
@@ -90,7 +90,7 @@ describe('GET /sessions/:id', () => {
     const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
 
     const html = await response.text()
-    assert.match(html, /Your session is live/)
+    assert.match(html, /Session ready/)
     assert.match(html, new RegExp(AGENT_URL.replace(/[/.]/g, '\\$&')))
     assert.match(html, new RegExp(PREVIEW_URL.replace(/[/.]/g, '\\$&')))
     assert.match(html, /Stop &amp; save/)
@@ -113,8 +113,8 @@ describe('GET /sessions/:id', () => {
     const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
 
     const html = await response.text()
-    assert.match(html, /Spinning up your session|programming routes/i)
-    assert.doesNotMatch(html, /Your session is live/)
+    assert.match(html, /Spinning up|programming routes/i)
+    assert.doesNotMatch(html, /Session ready/)
   })
 
   it('renders KillConfirm when ?confirm=stop is present and view is Ready', async (t) => {
@@ -146,7 +146,7 @@ describe('GET /sessions/:id', () => {
     )
 
     const html = await response.text()
-    assert.match(html, /Spinning up your session/)
+    assert.match(html, /Spinning up/)
     assert.doesNotMatch(html, /Save your work and shut down\?/)
   })
 
@@ -190,7 +190,7 @@ describe('GET /sessions/:id', () => {
 
     assert.equal(response.status, 200)
     const html = await response.text()
-    assert.match(html, /Spinning up your session/)
+    assert.match(html, /Spinning up/)
   })
 
   it('renders NotFound with status 404 after exhausting retries', async (t) => {
@@ -285,7 +285,7 @@ describe('POST /sessions/:id (intent=stop)', () => {
 
     assert.equal(response.status, 503)
     const html = await response.text()
-    assert.match(html, /Your session is live/)
+    assert.match(html, /Session ready/)
     assert.match(html, /Couldn't stop/)
     assert.match(html, /cluster down/)
   })

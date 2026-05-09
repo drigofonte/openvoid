@@ -25,7 +25,7 @@ export function Failed() {
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
           <Eyebrow tone="danger">Provisioning failed</Eyebrow>
-          <h1 class="wf-h1">Couldn't bring up the session</h1>
+          <h1 class="wf-h1" tabindex={-1}>Couldn't bring up the session</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             {reason
               ? reason

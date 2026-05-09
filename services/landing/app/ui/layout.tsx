@@ -5,7 +5,13 @@ import { TopBar } from './top-bar.tsx'
 
 export interface LayoutProps {
   title?: string
-  url?: string
+  /**
+   * Decorative path appended to `openvoid.dev` in the top-bar URL.
+   * E.g. `/new` on Create, `/sessions/<sid>` on session pages.
+   */
+  topBarPath?: string
+  /** Right-aligned content for the top bar. */
+  topBarRight?: RemixNode
   children?: RemixNode
 }
 
@@ -15,10 +21,10 @@ export interface LayoutProps {
  * wireframe canvas's per-screen padding.
  */
 export function Layout() {
-  return ({ title, url, children }: LayoutProps) => (
+  return ({ title, topBarPath, topBarRight, children }: LayoutProps) => (
     <Document title={title}>
-      <TopBar url={url} />
-      <main mix={css({ maxWidth: '720px', margin: '0 auto', padding: '32px 24px 48px' })}>
+      <TopBar path={topBarPath} right={topBarRight} />
+      <main mix={css({ maxWidth: '960px', margin: '0 auto', padding: '40px 24px 48px' })}>
         {children}
       </main>
     </Document>
