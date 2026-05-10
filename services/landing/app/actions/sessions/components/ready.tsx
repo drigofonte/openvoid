@@ -151,40 +151,46 @@ function ChatCard() {
   return ({ agentUrl }: { agentUrl: string }) => (
     <Card variant="elevated" accentTop>
       <Stack space="var(--sp-7)">
-        <Cluster space="var(--sp-5)" align="flex-start">
-          <span class="wf-icon-mark wf-icon-mark-dark" aria-hidden="true">
-            <ChatGlyph />
-          </span>
-          <div mix={css({ flex: '1', minWidth: 0 })}>
-            <Stack space="var(--sp-2)">
-              <span class="wf-eyebrow" mix={css({ color: 'var(--accent)' })}>
-                01 · drive
-              </span>
-              <h2
-                mix={css({
-                  margin: 0,
-                  fontSize: 'var(--fs-h2)',
-                  lineHeight: 'var(--lh-snug)',
-                  letterSpacing: 'var(--ls-heading)',
-                  fontWeight: 'var(--fw-semi)',
-                  color: 'var(--ink)',
-                })}
-              >
-                Agent chat
-              </h2>
-              <p
-                mix={css({
-                  margin: 0,
-                  fontSize: 'var(--fs-small)',
-                  color: 'var(--ink-2)',
-                  lineHeight: 'var(--lh-normal)',
-                })}
-              >
-                Tell the agent what to build. Paste references. Ask for changes.
-              </p>
-            </Stack>
-          </div>
-        </Cluster>
+        {/* `stack-split` on the top block absorbs the card's free
+            vertical space, so the URL row + action button anchor
+            to the bottom edge regardless of how many lines the
+            description wraps to. */}
+        <div class="stack-split">
+          <Cluster space="var(--sp-5)" align="flex-start">
+            <span class="wf-icon-mark wf-icon-mark-dark" aria-hidden="true">
+              <ChatGlyph />
+            </span>
+            <div mix={css({ flex: '1', minWidth: 0 })}>
+              <Stack space="var(--sp-2)">
+                <span class="wf-eyebrow" mix={css({ color: 'var(--accent)' })}>
+                  01 · drive
+                </span>
+                <h2
+                  mix={css({
+                    margin: 0,
+                    fontSize: 'var(--fs-h2)',
+                    lineHeight: 'var(--lh-snug)',
+                    letterSpacing: 'var(--ls-heading)',
+                    fontWeight: 'var(--fw-semi)',
+                    color: 'var(--ink)',
+                  })}
+                >
+                  Agent chat
+                </h2>
+                <p
+                  mix={css({
+                    margin: 0,
+                    fontSize: 'var(--fs-small)',
+                    color: 'var(--ink-2)',
+                    lineHeight: 'var(--lh-normal)',
+                  })}
+                >
+                  Tell the agent what to build. Paste references. Ask for changes.
+                </p>
+              </Stack>
+            </div>
+          </Cluster>
+        </div>
         <UrlRow url={agentUrl}>
           <CopyButton value={agentUrl} />
         </UrlRow>
@@ -208,40 +214,42 @@ function PreviewCard() {
   return ({ previewUrl }: { previewUrl: string }) => (
     <Card variant="elevated">
       <Stack space="var(--sp-7)">
-        <Cluster space="var(--sp-5)" align="flex-start">
-          <span class="wf-icon-mark wf-icon-mark-line" aria-hidden="true">
-            <PreviewGlyph />
-          </span>
-          <div mix={css({ flex: '1', minWidth: 0 })}>
-            <Stack space="var(--sp-2)">
-              <span class="wf-eyebrow" mix={css({ color: 'var(--ink-3)' })}>
-                02 · watch
-              </span>
-              <h2
-                mix={css({
-                  margin: 0,
-                  fontSize: 'var(--fs-h2)',
-                  lineHeight: 'var(--lh-snug)',
-                  letterSpacing: 'var(--ls-heading)',
-                  fontWeight: 'var(--fw-semi)',
-                  color: 'var(--ink)',
-                })}
-              >
-                Live preview
-              </h2>
-              <p
-                mix={css({
-                  margin: 0,
-                  fontSize: 'var(--fs-small)',
-                  color: 'var(--ink-2)',
-                  lineHeight: 'var(--lh-normal)',
-                })}
-              >
-                See the running app. Hot-reloads as the agent edits.
-              </p>
-            </Stack>
-          </div>
-        </Cluster>
+        <div class="stack-split">
+          <Cluster space="var(--sp-5)" align="flex-start">
+            <span class="wf-icon-mark wf-icon-mark-line" aria-hidden="true">
+              <PreviewGlyph />
+            </span>
+            <div mix={css({ flex: '1', minWidth: 0 })}>
+              <Stack space="var(--sp-2)">
+                <span class="wf-eyebrow" mix={css({ color: 'var(--ink-3)' })}>
+                  02 · watch
+                </span>
+                <h2
+                  mix={css({
+                    margin: 0,
+                    fontSize: 'var(--fs-h2)',
+                    lineHeight: 'var(--lh-snug)',
+                    letterSpacing: 'var(--ls-heading)',
+                    fontWeight: 'var(--fw-semi)',
+                    color: 'var(--ink)',
+                  })}
+                >
+                  Live preview
+                </h2>
+                <p
+                  mix={css({
+                    margin: 0,
+                    fontSize: 'var(--fs-small)',
+                    color: 'var(--ink-2)',
+                    lineHeight: 'var(--lh-normal)',
+                  })}
+                >
+                  See the running app. Hot-reloads as the agent edits.
+                </p>
+              </Stack>
+            </div>
+          </Cluster>
+        </div>
         <UrlRow url={previewUrl}>
           <CopyButton value={previewUrl} />
         </UrlRow>

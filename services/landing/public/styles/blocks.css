@@ -36,6 +36,18 @@
   padding: var(--sp-8);
   transition: transform var(--dur-fast) var(--ease-std),
               box-shadow var(--dur-fast) var(--ease-std);
+  /* Make the card itself a flex column so an inner Stack can
+     grow to fill the card's height. Combined with the Stack's
+     `.stack-split` pattern (composition.css), this lets a card's
+     bottom-row content (URL row + action button) anchor to the
+     card's bottom edge — so two side-by-side cards with
+     different middle-content heights still align their bottom
+     rows. */
+  display: flex;
+  flex-direction: column;
+}
+.wf-card-elev > .stack {
+  flex: 1;
 }
 .wf-card-elev:hover {
   transform: translateY(-1px);
