@@ -202,7 +202,7 @@ function ChatCard() {
             rel="noopener noreferrer"
           >
             Open chat
-            <Kbd>⌘1</Kbd>
+            <Kbd>1</Kbd>
           </a>
         </Cluster>
       </Stack>
@@ -261,7 +261,7 @@ function PreviewCard() {
             rel="noopener noreferrer"
           >
             Open preview
-            <Kbd>⌘2</Kbd>
+            <Kbd>2</Kbd>
           </a>
         </Cluster>
       </Stack>
