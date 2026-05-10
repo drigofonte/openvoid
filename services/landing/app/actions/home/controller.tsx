@@ -36,14 +36,25 @@ const CreateSchema = f.object({
   prompt: f.field(s.string().pipe(minLength(1))),
 })
 
+/**
+ * v1 defaults injected server-side so the form can drop the
+ * repo/branch advanced expander while `CreateSchema` validation
+ * stays unchanged. The Session API still expects a repo URL it
+ * can clone — pick a placeholder it accepts (e.g., a maintained
+ * empty starter repo). Replace with per-environment env-var
+ * resolution if dev/staging/prod need different repos. Repo
+ * selection at the user-facing layer is deferred to a separate
+ * plan.
+ */
+const DEFAULT_REPO = 'https://github.com/openvoid/scratch'
+const DEFAULT_BRANCH = 'main'
+
 function asString(value: FormDataEntryValue | null): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function readPreviousValues(formData: FormData): PreviousValues {
   return {
-    repo: asString(formData.get('repo')),
-    branch: asString(formData.get('branch')),
     prompt: asString(formData.get('prompt')),
   }
 }
@@ -56,6 +67,14 @@ export default {
     },
     async create({ get, url }) {
       const formData = get(FormData)
+      // Inject defaults BEFORE parsing — `CreateSchema` is built
+      // with `f.field` and consumes FormData; mutating the
+      // FormData itself preserves the existing parse contract
+      // without rebuilding the schema. The form no longer renders
+      // `name="repo"` / `name="branch"` inputs, so the controller
+      // is the single source of these values.
+      formData.set('repo', DEFAULT_REPO)
+      formData.set('branch', DEFAULT_BRANCH)
       const submittedKey = asString(formData.get('idempotencyKey'))
       const idempotencyKey = submittedKey ?? crypto.randomUUID()
       const done = parseDoneParams(url.searchParams)
@@ -67,7 +86,7 @@ export default {
           <HomePage
             done={done}
             idempotencyKey={idempotencyKey}
-            error={{ message: 'Please fill in the prompt and a Git repo URL.' }}
+            error={{ message: 'Please add a prompt to start a session.' }}
             previousValues={previousValues}
           />,
           { status: 400 },
