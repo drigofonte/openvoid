@@ -37,21 +37,27 @@ const SUGGESTIONS = [
 const ALTS = [
   {
     label: 'Start from a template',
-    glyph: 'template' as const,
+    d: 'M3 3h18v18H3zM9 9h6v6H9z',
   },
   {
     label: 'Import GitHub repo',
-    glyph: 'github' as const,
+    d: 'M9 19c-5 1.5-5-2.5-7-3M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6C17 15.2 20 14 20 9.3a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.4 0C6.4 2.6 5.4 2.9 5.4 2.9a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.3c0 4.6 3 5.9 5.9 6.2a3.4 3.4 0 0 0-.9 2.6V22',
   },
   {
     label: 'Upload codebase (.zip)',
-    glyph: 'zip' as const,
+    d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8L12 3 7 8M12 3v12',
   },
   {
     label: 'Fork an example',
-    glyph: 'fork' as const,
+    d: 'M3 3h18v18H3zM3 9h18M9 21V9',
   },
 ] as const
+
+// Stable DOM ids the composer's clientEntries hydrate against.
+// Hoisting prevents drift when one site renames in isolation.
+const PROMPT_ID = 'prompt'
+const SLUG_ID = 'lives-at-slug'
+const SLUG_WRAPPER_ID = 'lives-at-wrap'
 
 export interface PreviousValues {
   prompt?: string
@@ -93,9 +99,6 @@ export function HomePage() {
       mainKind="full"
       topBarRight={<HeaderRight />}
     >
-      {done ? <DoneBanner done={done} /> : null}
-      {error ? <ActionErrorBanner error={error} /> : null}
-
       <div
         mix={css({
           maxWidth: 'var(--w-stage)',
@@ -106,6 +109,8 @@ export function HomePage() {
         })}
       >
         <Stack space="var(--sp-9)">
+          {done ? <DoneBanner done={done} /> : null}
+          {error ? <ActionErrorBanner error={error} /> : null}
           <Hero />
           <Composer idempotencyKey={idempotencyKey} previousPrompt={previousValues.prompt} />
           <Alts />
@@ -119,7 +124,7 @@ export function HomePage() {
 
 function HeaderRight() {
   return () => (
-    <div class="wf-row" mix={css({ gap: 'var(--sp-5)' })}>
+    <Cluster space="var(--sp-5)">
       <a
         href="/"
         mix={css({
@@ -133,7 +138,7 @@ function HeaderRight() {
         ← Back to apps
       </a>
       <Avatar />
-    </div>
+    </Cluster>
   )
 }
 
@@ -144,8 +149,6 @@ function ActionErrorBanner() {
       class="wf-card"
       mix={css({
         padding: '14px 16px',
-        margin: '16px auto 0',
-        maxWidth: 'var(--w-stage)',
         borderColor: 'var(--wf-danger)',
         background: 'var(--wf-danger-soft)',
         display: 'flex',
@@ -163,35 +166,33 @@ function ActionErrorBanner() {
 
 function Hero() {
   return () => (
-    <Stack space="var(--sp-3)">
-      <h1
-        mix={css({
-          fontSize: 'var(--fs-display)',
-          lineHeight: 'var(--lh-tight)',
-          letterSpacing: 'var(--ls-display)',
-          fontWeight: 'var(--fw-semi)',
-          margin: 0,
-          color: 'var(--ink)',
-          maxWidth: '760px',
-          textAlign: 'left',
-        })}
-      >
-        Let's make something.
-      </h1>
-      <p
-        mix={css({
-          fontSize: '15.5px',
-          color: 'var(--ink)',
-          margin: 0,
-          maxWidth: 'var(--w-card)',
-          lineHeight: 'var(--lh-normal)',
-          textAlign: 'left',
-        })}
-      >
-        Describe your idea — the agent scaffolds the project, sets up your stack,
-        and opens a chat session you'll keep coming back to.
-      </p>
-    </Stack>
+    <div mix={css({ maxWidth: 'var(--w-card)', textAlign: 'left' })}>
+      <Stack space="var(--sp-3)">
+        <h1
+          mix={css({
+            fontSize: 'var(--fs-display)',
+            lineHeight: 'var(--lh-tight)',
+            letterSpacing: 'var(--ls-display)',
+            fontWeight: 'var(--fw-semi)',
+            margin: 0,
+            color: 'var(--ink)',
+          })}
+        >
+          Let's make something.
+        </h1>
+        <p
+          mix={css({
+            fontSize: '15.5px',
+            color: 'var(--ink)',
+            margin: 0,
+            lineHeight: 'var(--lh-normal)',
+          })}
+        >
+          Describe your idea — the agent scaffolds the project, sets up your stack,
+          and opens a chat session you'll keep coming back to.
+        </p>
+      </Stack>
+    </div>
   )
 }
 
@@ -204,12 +205,12 @@ function Composer() {
   return ({ idempotencyKey, previousPrompt }: ComposerProps) => (
     <form method="post" action="/" class="wf-composer">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-      <label for="prompt" class="sr-only">
+      <label for={PROMPT_ID} class="sr-only">
         Prompt
       </label>
       <textarea
-        id="prompt"
-        name="prompt"
+        id={PROMPT_ID}
+        name={PROMPT_ID}
         rows={5}
         required
         autofocus
@@ -232,33 +233,25 @@ function Composer() {
       >
         {previousPrompt}
       </textarea>
-      <div
-        id="lives-at-wrap"
-        class="wf-livesat"
-        data-hidden=""
-      >
+      <div id={SLUG_WRAPPER_ID} class="wf-livesat" data-hidden="">
         <span class="wf-livesat-prefix">Will live at</span>
         <span class="wf-livesat-name">
-          <span id="lives-at-slug">untitled</span>.openvoid.dev
+          <span id={SLUG_ID}>untitled</span>.openvoid.dev
         </span>
       </div>
-      <DerivedSlug
-        targetId="prompt"
-        slugId="lives-at-slug"
-        wrapperId="lives-at-wrap"
-      />
+      <DerivedSlug targetId={PROMPT_ID} slugId={SLUG_ID} wrapperId={SLUG_WRAPPER_ID} />
       <div class="wf-composer-bar">
         <Cluster space="var(--sp-3)">
           <button type="button" class="wf-tool" title="Coming soon">
-            <AttachGlyph />
+            <Glyph d="M21 11.5l-8.5 8.5a5 5 0 1 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L11 17a2 2 0 1 1-3-3l7-7" />
             Attach
           </button>
           <button type="button" class="wf-tool" title="Coming soon">
-            <StackGlyph />
+            <Glyph d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 18l9 5 9-5" />
             Stack: <span class="wf-tool-key">auto</span>
           </button>
           <button type="button" class="wf-tool" title="Coming soon">
-            <DbGlyph />
+            <Glyph d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
             DB: <span class="wf-tool-key">postgres</span>
           </button>
         </Cluster>
@@ -268,10 +261,10 @@ function Composer() {
             <span class="wf-keycap">↵</span>
             <span mix={css({ marginLeft: '4px' })}>to start</span>
           </span>
-          <StartSessionButton targetId="prompt" />
+          <StartSessionButton targetId={PROMPT_ID} />
         </span>
       </div>
-      <AutoGrowTextarea targetId="prompt" maxHeight={360} />
+      <AutoGrowTextarea targetId={PROMPT_ID} maxHeight={360} />
     </form>
   )
 }
@@ -280,13 +273,8 @@ function Alts() {
   return () => (
     <Cluster space="var(--sp-3)" justify="center">
       {ALTS.map((alt) => (
-        <button
-          type="button"
-          class="wf-alt"
-          data-coming-soon=""
-          title="Coming soon"
-        >
-          <AltGlyph kind={alt.glyph} />
+        <button type="button" class="wf-alt" data-coming-soon="" title="Coming soon">
+          <Glyph d={alt.d} size={13} />
           {alt.label}
         </button>
       ))}
@@ -296,10 +284,7 @@ function Alts() {
 
 function Suggestions() {
   return () => (
-    <div
-      class="wf-row"
-      mix={css({ gap: '10px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' })}
-    >
+    <Cluster space="10px" justify="center">
       <span
         mix={css({
           fontSize: '12px',
@@ -310,8 +295,8 @@ function Suggestions() {
       >
         try
       </span>
-      <SuggestionChips targetId="prompt" suggestions={[...SUGGESTIONS]} />
-    </div>
+      <SuggestionChips targetId={PROMPT_ID} suggestions={[...SUGGESTIONS]} />
+    </Cluster>
   )
 }
 
@@ -342,63 +327,27 @@ function Footer() {
   )
 }
 
-function AttachGlyph() {
-  return () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M21 11.5l-8.5 8.5a5 5 0 1 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L11 17a2 2 0 1 1-3-3l7-7" />
+/**
+ * Single SVG glyph slot. Toolbar tools use 14px; alts row uses
+ * 13px. Path strings live next to the labels they decorate
+ * (`SUGGESTIONS` / `ALTS` arrays + the inline `<Glyph d="…" />`
+ * call sites in `Composer`), so adding a glyph is one row change
+ * instead of one row + one component + one union member.
+ */
+function Glyph() {
+  return ({ d, size = 14 }: { d: string; size?: number }) => (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d={d} />
     </svg>
   )
-}
-
-function StackGlyph() {
-  return () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 18l9 5 9-5" />
-    </svg>
-  )
-}
-
-function DbGlyph() {
-  return () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <ellipse cx="12" cy="6" rx="8" ry="3" />
-      <path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
-      <path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
-    </svg>
-  )
-}
-
-function AltGlyph() {
-  return ({ kind }: { kind: 'template' | 'github' | 'zip' | 'fork' }) => {
-    if (kind === 'template') {
-      return (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="3" y="3" width="18" height="18" rx="3" />
-          <path d="M9 9h6v6H9z" />
-        </svg>
-      )
-    }
-    if (kind === 'github') {
-      return (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M9 19c-5 1.5-5-2.5-7-3M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6C17 15.2 20 14 20 9.3a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.4 0C6.4 2.6 5.4 2.9 5.4 2.9a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.3c0 4.6 3 5.9 5.9 6.2a3.4 3.4 0 0 0-.9 2.6V22" />
-        </svg>
-      )
-    }
-    if (kind === 'zip') {
-      return (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-      )
-    }
-    return (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <path d="M3 9h18M9 21V9" />
-      </svg>
-    )
-  }
 }

@@ -1,5 +1,7 @@
 import { clientEntry, type Handle } from 'remix/ui'
 
+import { PROMPT_MIN_LENGTH } from './constants.ts'
+
 /**
  * DerivedSlug — invisible clientEntry that updates the "lives at
  * <slug>.openvoid.dev" ghost line as the user types. The page
@@ -22,7 +24,6 @@ import { clientEntry, type Handle } from 'remix/ui'
  * Cleanup: the input listener is registered with `handle.signal`.
  */
 
-const MIN_PROMPT_LENGTH = 8
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'of', 'for', 'to', 'with', 'my',
   'that', 'this', 'from', 'on', 'in', 'it',
@@ -58,13 +59,27 @@ export const DerivedSlug = clientEntry(
         slugSpan instanceof HTMLSpanElement &&
         wrapper instanceof HTMLElement
       ) {
+        // Track last-applied state so steady-state typing within
+        // a stable slug becomes a true DOM no-op. Without these
+        // guards every keystroke would tear down the slug span's
+        // text node and re-set the `data-hidden` attribute, both
+        // of which dirty layout/style on every key press.
+        let lastSlug: string | null = null
+        let lastHidden: boolean | null = null
         const update = () => {
           const value = textarea.value.trim()
-          if (value.length >= MIN_PROMPT_LENGTH) {
-            slugSpan.textContent = slugify(value)
-            wrapper.removeAttribute('data-hidden')
-          } else {
-            wrapper.setAttribute('data-hidden', '')
+          const hidden = value.length < PROMPT_MIN_LENGTH
+          if (!hidden) {
+            const next = slugify(value)
+            if (next !== lastSlug) {
+              slugSpan.textContent = next
+              lastSlug = next
+            }
+          }
+          if (hidden !== lastHidden) {
+            if (hidden) wrapper.setAttribute('data-hidden', '')
+            else wrapper.removeAttribute('data-hidden')
+            lastHidden = hidden
           }
         }
         // Run once at hydration so an SSR-rendered prompt that

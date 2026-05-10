@@ -1,5 +1,7 @@
 import { clientEntry, on, css, type Handle } from 'remix/ui'
 
+import { PROMPT_MIN_LENGTH } from './constants.ts'
+
 /**
  * StartSessionButton — replaces the original `SubmitButton` for the
  * Create-page composer. Renders a `.wf-btn-go` button with the
@@ -32,8 +34,6 @@ import { clientEntry, on, css, type Handle } from 'remix/ui'
  * unmount tears them down without manual bookkeeping.
  */
 
-const MIN_PROMPT_LENGTH = 8
-
 export const StartSessionButton = clientEntry(
   import.meta.url,
   function StartSessionButton(
@@ -59,7 +59,7 @@ export const StartSessionButton = clientEntry(
         textarea.addEventListener(
           'input',
           () => {
-            const next = textarea.value.length < MIN_PROMPT_LENGTH
+            const next = textarea.value.length < PROMPT_MIN_LENGTH
             if (next !== disabled) {
               disabled = next
               handle.update()
@@ -70,7 +70,7 @@ export const StartSessionButton = clientEntry(
         // Set the initial state from the SSR-rendered prompt — when
         // a re-render carries `previousValues.prompt`, the disabled
         // flag should match the initial value's length.
-        disabled = textarea.value.length < MIN_PROMPT_LENGTH
+        disabled = textarea.value.length < PROMPT_MIN_LENGTH
 
         document.addEventListener(
           'keydown',
@@ -83,7 +83,7 @@ export const StartSessionButton = clientEntry(
             // Read the live textarea value to avoid the keydown
             // firing before the input listener has flipped the
             // disabled flag for the boundary character.
-            if (textarea.value.length < MIN_PROMPT_LENGTH) return
+            if (textarea.value.length < PROMPT_MIN_LENGTH) return
             event.preventDefault()
             startSubmit()
             form.requestSubmit()
