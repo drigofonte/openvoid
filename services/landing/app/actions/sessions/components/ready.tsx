@@ -6,6 +6,7 @@ import { Cover } from '../../../ui/layout/cover.tsx'
 import { Stack } from '../../../ui/layout/stack.tsx'
 import { Switcher } from '../../../ui/layout/switcher.tsx'
 import { Connector } from '../../../ui/connector.tsx'
+import { ShortcutHint } from '../../../ui/client/shortcut-hint.tsx'
 import { UrlRow } from '../../../ui/url-row.tsx'
 import { CopyButton } from '../client/copy-button.tsx'
 import { OpenLinkShortcuts } from '../client/open-link-shortcuts.tsx'
@@ -30,10 +31,12 @@ import { StopButton } from '../client/stop-button.tsx'
  * that 760px width via the Stack's default cross-axis stretch.
  * No per-row max-width plumbing.
  *
- * Five primitives the doc review flagged as thin wrappers
- * (Kbd, LivePill, ReadyPill, IconMark, SplitTip) live as inline
- * class-based recipes here — composed from the `.wf-*` rules
- * added to `blocks.css` in U1.
+ * The thin-wrapper primitives (LivePill, ReadyPill, IconMark,
+ * SplitTip) live as inline class-based recipes here — composed
+ * from the `.wf-*` rules added to `blocks.css` in U1. The
+ * platform-aware Cmd/Ctrl + Shift + digit kbd group lives in
+ * `app/ui/client/shortcut-hint.tsx` as a clientEntry (it needs
+ * `navigator` to swap the modifier glyph).
  *
  * Stop is still a clientEntry-driven button; its outer JSX
  * (`stop-button.tsx`) emits the done-line prose link as the SSR
@@ -202,7 +205,7 @@ function ChatCard() {
             rel="noopener noreferrer"
           >
             Open chat
-            <Kbd>1</Kbd>
+            <ShortcutHint digit="1" />
           </a>
         </Cluster>
       </Stack>
@@ -261,7 +264,7 @@ function PreviewCard() {
             rel="noopener noreferrer"
           >
             Open preview
-            <Kbd>2</Kbd>
+            <ShortcutHint digit="2" />
           </a>
         </Cluster>
       </Stack>
@@ -279,18 +282,7 @@ function SplitTip() {
       <div class="wf-split-text">
         Drag both tabs into a split window — the agent on one side, the preview on the other.
       </div>
-      <div class="wf-split-kbd" aria-hidden="true">
-        <span class="wf-keycap">⌘</span>
-        <span class="wf-keycap">⇧</span>
-        <span class="wf-keycap">D</span>
-      </div>
     </div>
-  )
-}
-
-function Kbd() {
-  return ({ children }: { children: string }) => (
-    <span class="wf-keycap">{children}</span>
   )
 }
 

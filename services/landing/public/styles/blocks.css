@@ -277,11 +277,6 @@ textarea.wf-input {
   flex: 1;
   line-height: var(--lh-normal);
 }
-.wf-split-kbd {
-  display: inline-flex;
-  gap: var(--sp-1);
-  flex-shrink: 0;
-}
 
 /* ── connector (animated SVG between the duo) ────────────── */
 .wf-connector-host {

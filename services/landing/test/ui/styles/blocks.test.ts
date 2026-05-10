@@ -55,7 +55,6 @@ describe('blocks.css', () => {
       '.wf-split-tip',
       '.wf-split-icon',
       '.wf-split-text',
-      '.wf-split-kbd',
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
