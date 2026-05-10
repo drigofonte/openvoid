@@ -134,7 +134,12 @@ function Duo() {
   return ({ agentUrl, previewUrl }: DuoProps) => (
     <div class="wf-connector-host">
       <Connector />
-      <Switcher limit={2} space="var(--sp-9)">
+      {/* threshold=45rem (720px) — matches the Two-Links Hi-Fi
+          reference's `@media (max-width: 760px)` 1-column
+          breakpoint. Default 30rem only stacks below ~500px
+          viewport, which is too narrow for two card-shaped
+          children carrying URL rows + action buttons. */}
+      <Switcher limit={2} space="var(--sp-9)" threshold="45rem">
         <ChatCard agentUrl={agentUrl} />
         <PreviewCard previewUrl={previewUrl} />
       </Switcher>

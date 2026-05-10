@@ -302,7 +302,12 @@ textarea.wf-input {
   stroke-dasharray: 4 5;
   animation: flow 1.4s linear infinite;
 }
-@container (max-width: 30rem) {
+/*
+ * Rotate the connector 90deg when the host is below the Switcher
+ * threshold (45rem) — at that point the cards have collapsed to a
+ * single column and the arrow needs to point downward.
+ */
+@container (max-width: 45rem) {
   .wf-connector {
     width: 60px;
     height: 60px;
