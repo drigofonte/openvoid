@@ -1,7 +1,7 @@
 ---
 title: "feat: Redesign Ready view; restructure CSS into strict CUBE layers"
 type: feat
-status: active
+status: completed
 date: 2026-05-09
 ---
 
