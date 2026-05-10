@@ -56,6 +56,8 @@ server-side. No CORS in the loop.
 | `OPENVOID_API_URL` | Yes (in production) | unset | Base URL for the Session API. Server-side controllers will fail if unset. |
 | `PORT` | No | `3000` | Port the Node server listens on. |
 | `LANDING_SKIP_INGRESS_PROBE` | No | unset | Set to `"true"` in K8s to bypass the per-render HEAD probe of the agent URL. The probe's host (`<sid>.agent.127.0.0.1.nip.io`) resolves to the pod's own loopback in-cluster, so the gate always fails there; trust the API's `Running` + populated URLs instead. Local dev (`pnpm dev` on host) leaves this unset — `127.0.0.1.nip.io` resolves correctly via the host. See [`app/utils/ingress.ts`](app/utils/ingress.ts) for full context. |
+| `OPENVOID_DEFAULT_REPO` | No | `https://github.com/drigofonte/openvoid-test.git` | Repo URL the home controller injects into every `POST /` so the user-facing form can omit the repo input. The Session API attempts to clone this on session creation — production should override with a maintained empty starter repo the API has access to. |
+| `OPENVOID_DEFAULT_BRANCH` | No | `main` | Branch the home controller pairs with `OPENVOID_DEFAULT_REPO`. Override only if the default repo's primary branch isn't `main`. |
 
 ## Stack
 

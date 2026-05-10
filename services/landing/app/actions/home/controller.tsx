@@ -40,14 +40,16 @@ const CreateSchema = f.object({
  * v1 defaults injected server-side so the form can drop the
  * repo/branch advanced expander while `CreateSchema` validation
  * stays unchanged. The Session API still expects a repo URL it
- * can clone — pick a placeholder it accepts (e.g., a maintained
- * empty starter repo). Replace with per-environment env-var
- * resolution if dev/staging/prod need different repos. Repo
+ * can clone — env vars let dev/staging/prod point at different
+ * repos without a code change. The hardcoded fallback is the
+ * dev-time default; production should set OPENVOID_DEFAULT_REPO
+ * (and optionally OPENVOID_DEFAULT_BRANCH) explicitly. Repo
  * selection at the user-facing layer is deferred to a separate
  * plan.
  */
-const DEFAULT_REPO = 'https://github.com/drigofonte/openvoid-test.git'
-const DEFAULT_BRANCH = 'main'
+const DEFAULT_REPO =
+  process.env.OPENVOID_DEFAULT_REPO ?? 'https://github.com/drigofonte/openvoid-test.git'
+const DEFAULT_BRANCH = process.env.OPENVOID_DEFAULT_BRANCH ?? 'main'
 
 function asString(value: FormDataEntryValue | null): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
