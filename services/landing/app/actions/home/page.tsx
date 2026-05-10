@@ -5,20 +5,32 @@ import { Eyebrow } from '../../ui/eyebrow.tsx'
 import { Input } from '../../ui/input.tsx'
 import { Layout } from '../../ui/layout.tsx'
 import { Textarea } from '../../ui/textarea.tsx'
-import { SubmitButton } from './client/submit-button.tsx'
+import { StartSessionButton } from './client/start-session-button.tsx'
 import { SuggestionChips } from './client/suggestion-chips.tsx'
 import { DoneBanner, type DoneParams } from './done-banner.tsx'
 
 /**
- * Short chip labels matching the wireframe's "Try:" row. Clicking
- * a chip drops the label text into the prompt textarea as a starter;
- * the user is expected to flesh it out before submitting.
+ * Suggestion chips for the "try" row. Each entry has a short
+ * `label` (the chip's visible text) and a longer `fill` (the
+ * full prompt that replaces the textarea content on click).
  */
 const SUGGESTIONS = [
-  'Notion clone',
-  'URL shortener',
-  'Habit tracker',
-  'Internal admin panel',
+  {
+    label: 'Notion-style notes',
+    fill: 'A Notion-style note app with markdown, slash commands, and per-page sharing.',
+  },
+  {
+    label: 'URL shortener',
+    fill: 'A URL shortener with custom slugs, click analytics, and a dashboard.',
+  },
+  {
+    label: 'Habit tracker',
+    fill: 'A daily habit tracker with streaks, weekly emails, and a public profile.',
+  },
+  {
+    label: 'Internal admin panel',
+    fill: 'An internal admin panel for our Postgres database with role-based auth.',
+  },
 ] as const
 
 export interface PreviousValues {
@@ -180,7 +192,7 @@ export function HomePage() {
                   to start
                 </span>
               </span>
-              <SubmitButton label="Start session" />
+              <StartSessionButton targetId="prompt" />
             </div>
           </div>
         </Card>
