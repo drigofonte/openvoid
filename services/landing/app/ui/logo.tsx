@@ -1,7 +1,14 @@
 import { css } from 'remix/ui'
 
 export interface LogoProps {
+  /** Wordmark font-size in px (defaults to 13). Ignored when `tall` is set. */
   size?: number
+  /**
+   * Tall variant — 22px mark + 15px wordmark, matching the
+   * canonical Tokens 56px header recipe. Used by the Ready
+   * chrome (`TopBar` crumbs mode).
+   */
+  tall?: boolean
 }
 
 /**
@@ -10,9 +17,10 @@ export interface LogoProps {
  * sized so it sits cleanly in the toolbar.
  */
 export function Logo() {
-  return ({ size = 13 }: LogoProps) => {
-    let mark = size + 3
-    let inner = mark * 0.42
+  return ({ size = 13, tall = false }: LogoProps) => {
+    const wordSize = tall ? 15 : size
+    const mark = tall ? 22 : size + 3
+    const inner = mark * 0.42
 
     return (
       <div class="wf-row" mix={css({ gap: '7px' })}>
@@ -20,7 +28,7 @@ export function Logo() {
           mix={css({
             width: `${mark}px`,
             height: `${mark}px`,
-            borderRadius: '4px',
+            borderRadius: tall ? '6px' : '4px',
             background: 'var(--wf-fg)',
             display: 'grid',
             placeItems: 'center',
@@ -35,7 +43,7 @@ export function Logo() {
             })}
           />
         </div>
-        <span mix={css({ fontWeight: 600, fontSize: `${size}px`, letterSpacing: '-0.01em' })}>
+        <span mix={css({ fontWeight: 600, fontSize: `${wordSize}px`, letterSpacing: '-0.01em' })}>
           openvoid
         </span>
       </div>

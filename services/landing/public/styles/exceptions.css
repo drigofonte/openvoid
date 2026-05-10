@@ -1,0 +1,25 @@
+/*
+ * openvoid landing — CUBE Exception Layer.
+ *
+ * Data-attribute variants on Block-layer components. The convention
+ * is to toggle behavior via `[data-*]` attributes rather than adding
+ * an extra class — keeps consumers declarative ("this card has an
+ * accent top") and lets the Block rule stay a clean default shape.
+ *
+ * Loaded last in the cascade (after blocks.css) so attribute-keyed
+ * overrides win on specificity ties.
+ *
+ * @link https://cube.fyi/exception.html
+ */
+
+.wf-card-elev[data-accent-top]::before {
+  content: "";
+  position: absolute;
+  left: var(--sp-9);
+  right: var(--sp-9);
+  top: 0;
+  height: 2px;
+  border-radius: 2px;
+  opacity: 0.5;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}

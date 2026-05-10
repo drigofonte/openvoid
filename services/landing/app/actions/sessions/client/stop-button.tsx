@@ -2,9 +2,11 @@ import { clientEntry, on, css, type Handle } from 'remix/ui'
 
 /**
  * StopButton — replaces the SSR-only `?confirm=stop` navigation
- * with an in-page confirm dialog. On click, opens a small modal
- * card with two CTAs: "Keep working" closes; "Yes, stop & save"
- * submits a hidden form with `intent=stop` to the same route.
+ * with an in-page confirm dialog. The visible affordance IS the
+ * done-line prose link at the bottom of the Ready stage; on click
+ * it opens a small modal card with two CTAs ("Keep working"
+ * closes; "Yes, stop & save" submits a hidden form with
+ * `intent=stop` to the same route).
  *
  * Server-rendered fallback (when JS is disabled or not yet
  * hydrated): the underlying `<a href="?confirm=stop">` link
@@ -27,8 +29,6 @@ export const StopButton = clientEntry(
       triggerEl = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
       dialogOpen = true
       handle.update()
-      // Move focus into the dialog after the next paint so screen
-      // readers and keyboard users land on the confirm CTA.
       handle.queueTask(() => {
         document.querySelector<HTMLButtonElement>('[data-stop-confirm]')?.focus()
       })
@@ -38,18 +38,11 @@ export const StopButton = clientEntry(
       if (submitting) return
       dialogOpen = false
       handle.update()
-      // Return focus to the trigger so keyboard navigation
-      // continues from where it was.
       handle.queueTask(() => {
         triggerEl?.focus()
       })
     }
 
-    // Esc closes the dialog (when open + not submitting). The
-    // setup function runs on both the server (SSR) and the client
-    // (hydration) — guard for `document` so SSR doesn't crash.
-    // Listener is bound for the lifetime of the component;
-    // handle.signal tears it down on unmount.
     if (typeof document !== 'undefined') {
       document.addEventListener(
         'keydown',
@@ -64,10 +57,6 @@ export const StopButton = clientEntry(
     }
 
     function startSubmit() {
-      // Defer the visual flip via queueTask for the same reason
-      // submit-button.tsx does — synchronous handle.update() inside
-      // a submit-side handler can race with the browser's native
-      // submit dispatch and short-circuit the navigation.
       handle.queueTask(() => {
         submitting = true
         handle.update()
@@ -76,13 +65,34 @@ export const StopButton = clientEntry(
 
     return () => (
       <>
-        <a
-          class="wf-btn wf-btn-danger"
-          href={`/sessions/${handle.props.sessionId}?confirm=stop`}
-          mix={[css({ textDecoration: 'none' }), on<HTMLElement>('click', openDialog)]}
+        <div
+          mix={css({
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 'var(--sp-2)',
+            color: 'var(--ink-3)',
+            fontSize: 'var(--fs-meta)',
+            flexWrap: 'wrap',
+          })}
         >
-          Stop & save
-        </a>
+          <span>Done for the day?</span>
+          <a
+            href={`/sessions/${handle.props.sessionId}?confirm=stop`}
+            mix={[
+              css({
+                color: 'var(--ink-2)',
+                textDecoration: 'underline',
+                textUnderlineOffset: '2px',
+                textDecorationThickness: '1px',
+              }),
+              on<HTMLElement>('click', openDialog),
+            ]}
+          >
+            Come back here and end the session
+          </a>
+          <span>— we'll commit your work to Git.</span>
+        </div>
         {dialogOpen ? (
           <div
             mix={[

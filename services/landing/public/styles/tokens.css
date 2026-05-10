@@ -1,0 +1,154 @@
+/*
+ * openvoid landing — design tokens (CUBE Substrate Layer).
+ *
+ * Sits outside any `@layer` declaration so the cascade-layer files
+ * (composition.css, blocks.css, exceptions.css) consume these as
+ * inherited custom-property values.
+ *
+ * Type and spacing tokens reference Utopia steps (`utopia.css`)
+ * where the design value matches Utopia's fluid scale; otherwise
+ * they resolve to a static value at the design's specified size.
+ *
+ * `--wf-*` variables at the bottom are backwards-compatibility
+ * aliases for the existing component code; `--wf-warn-*` and
+ * `--wf-danger-*` keep their literal values (no canonical
+ * Tokens equivalent).
+ *
+ * @link https://cube.fyi/ — substrate vs. layered styles
+ * @link https://utopia.fyi/  — fluid type and space
+ * @link docs/designs/OpenVoid Tokens.html — canonical reference
+ */
+
+:root {
+  /* ── Surfaces ─────────────────────────────────────────── */
+  --paper:        oklch(0.972 0.006 75);   /* page background — warm off-white */
+  --paper-2:      oklch(0.955 0.006 75);   /* sunken / inset (toolbars, fields) */
+  --paper-3:      oklch(0.935 0.006 75);   /* hover for paper-2 surfaces */
+  --card:         #ffffff;                 /* elevated surface */
+  --terminal:     #0E0E0E;                 /* terminal/log background */
+
+  /* ── Ink (text + iconography) ────────────────────────── */
+  --ink:          oklch(0.18 0.005 60);    /* primary text, body & headlines */
+  --ink-2:        oklch(0.42 0.005 60);    /* secondary text */
+  --ink-3:        oklch(0.62 0.005 60);    /* tertiary / hints */
+  --ink-4:        oklch(0.78 0.005 60);    /* quaternary / disabled / placeholders */
+
+  /* ── Lines ───────────────────────────────────────────── */
+  --line:         oklch(0.91 0.004 75);    /* default hairline */
+  --line-2:       oklch(0.95 0.004 75);    /* softer hairline (inside cards) */
+
+  /* ── Accent (reserved for LIVE / ACTIVE states only) ─── */
+  --accent:       oklch(0.68 0.18 50);     /* warm orange */
+  --accent-soft:  oklch(0.94 0.04 60);     /* tinted background */
+
+  /* ── Semantic ────────────────────────────────────────── */
+  --ok:           oklch(0.55 0.10 155);    /* success / production */
+  --ok-soft:      oklch(0.94 0.04 155);
+
+  /* ── Fonts ───────────────────────────────────────────── */
+  --font-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  /* ── Type sizes ───────────────────────────────────────
+     Mostly static at design values. `--fs-h1` aliases Utopia
+     `--step-3` (28→39px ≈ design 38px). `--fs-display` is a
+     custom clamp (32→44px) — Utopia step-4 max (49px) overshoots.
+     ─────────────────────────────────────────────────── */
+  --fs-display:   clamp(2rem, 1.6932rem + 1.3636vw, 2.75rem);  /* 32→44px */
+  --fs-h1:        var(--step-3);   /* 28→39px ≈ design 38 */
+  --fs-h2:        1.125rem;        /* 18px */
+  --fs-h3:        0.969rem;        /* 15.5px */
+  --fs-body:      0.875rem;        /* 14px */
+  --fs-small:     0.844rem;        /* 13.5px */
+  --fs-meta:      0.781rem;        /* 12.5px */
+  --fs-eyebrow:   0.719rem;        /* 11.5px */
+  --fs-mono-sm:   0.688rem;        /* 11px */
+
+  /* ── Line heights ────────────────────────────────────── */
+  --lh-tight:     1.05;
+  --lh-snug:      1.15;
+  --lh-normal:    1.5;
+  --lh-loose:     1.7;
+
+  /* ── Tracking ────────────────────────────────────────── */
+  --ls-display:  -0.025em;
+  --ls-heading: -0.015em;
+  --ls-body:    -0.005em;
+  --ls-eyebrow:  0.04em;
+
+  /* ── Weights ─────────────────────────────────────────── */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semi:     600;
+  --fw-bold:     700;
+
+  /* ── Spacing ──────────────────────────────────────────
+     `sp-1`..`sp-9` are static at OpenVoid values; `sp-10/11/12`
+     alias Utopia space steps (max-aligned at 40/60/80px).
+     ─────────────────────────────────────────────────── */
+  --sp-1:   0.25rem;            /* 4px */
+  --sp-2:   0.375rem;           /* 6px */
+  --sp-3:   0.5rem;             /* 8px */
+  --sp-4:   0.625rem;           /* 10px */
+  --sp-5:   0.75rem;            /* 12px */
+  --sp-6:   0.875rem;           /* 14px */
+  --sp-7:   1.125rem;           /* 18px */
+  --sp-8:   1.375rem;           /* 22px */
+  --sp-9:   1.75rem;            /* 28px */
+  --sp-10:  var(--space-l);     /* 32→40px (Utopia max-aligned) */
+  --sp-11:  var(--space-xl);    /* 48→60px (Utopia max-aligned) */
+  --sp-12:  var(--space-2xl);   /* 64→80px (Utopia max-aligned) */
+
+  /* ── Radii ───────────────────────────────────────────── */
+  --r-xs:   4px;
+  --r-sm:   7px;
+  --r-md:   10px;
+  --r-lg:   14px;
+  --r-pill: 999px;
+
+  /* ── Elevation ───────────────────────────────────────── */
+  --shadow-1: 0 1px 0 rgba(20, 18, 14, 0.04), 0 1px 2px rgba(20, 18, 14, 0.04);
+  --shadow-2: 0 1px 0 rgba(20, 18, 14, 0.04), 0 4px 14px rgba(20, 18, 14, 0.06);
+  --shadow-3: 0 1px 0 rgba(20, 18, 14, 0.04), 0 12px 32px rgba(20, 18, 14, 0.08);
+  --focus-ring: 0 0 0 4px var(--accent-soft);
+
+  /* ── Motion ──────────────────────────────────────────── */
+  --dur-fast:    120ms;
+  --dur-base:    200ms;
+  --dur-slow:    600ms;
+  --dur-breathe: 1800ms;
+  --ease-std:    cubic-bezier(.2, .7, .3, 1);
+
+  /* ── Layout ──────────────────────────────────────────── */
+  --w-prose:    520px;
+  --w-card:     560px;
+  --w-stage:    760px;
+  --w-page:     1080px;
+  --h-header:   56px;
+
+  /* ── Backwards-compat aliases ─────────────────────────
+     Existing components reference `--wf-*` names. These resolve
+     to canonical tokens via `var()` so call sites keep working
+     without per-component edits.
+     ─────────────────────────────────────────────────── */
+  --wf-bg:        var(--paper);
+  --wf-bg-alt:    var(--paper-2);
+  --wf-page-bg:   var(--paper);
+  --wf-fg:        var(--ink);
+  --wf-fg-muted:  var(--ink-2);
+  --wf-fg-faint:  var(--ink-3);
+  --wf-line:      var(--line);
+  --wf-line-soft: var(--line-2);
+  --wf-accent:      var(--accent);
+  --wf-accent-soft: var(--accent-soft);
+  --wf-ok:        var(--ok);
+  --wf-ok-soft:   var(--ok-soft);
+  --wf-font:      var(--font-sans);
+  --wf-mono:      var(--font-mono);
+
+  /* ── Kept (no canonical Tokens equivalent) ──────────── */
+  --wf-warn:        #9F5A00;
+  --wf-warn-soft:   #FAE9CC;
+  --wf-danger:      #B42318;
+  --wf-danger-soft: #F8E1DD;
+}

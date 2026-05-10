@@ -58,7 +58,7 @@ export function HomePage() {
   }: HomePageProps) => (
     <Layout
       title="openvoid — start a session"
-      topBarPath="/new"
+      topBarChrome={{ mode: 'path', path: '/new' }}
       topBarRight={
         <a
           href="/"

@@ -81,9 +81,13 @@ services/landing/
 │   ├── render.tsx             # renderToStream → HTMLResponse helper
 │   ├── routes.ts              # typed route table
 │   └── router.ts              # createRouter() + middleware
-├── public/styles/
-│   ├── theme.css              # design tokens + .wf-* component classes
-│   └── base.css               # element resets, body bg, typography
+├── public/styles/             # CUBE-layered CSS (utopia → tokens → base → composition → blocks → exceptions)
+│   ├── utopia.css             # substrate — Utopia fluid type/space scales
+│   ├── tokens.css             # substrate — OpenVoid semantic tokens + wf-* aliases
+│   ├── base.css               # element resets, body bg, typography
+│   ├── composition.css        # CUBE Composition layer (Every Layout primitives)
+│   ├── blocks.css             # CUBE Block layer (.wf-* component classes + animations)
+│   └── exceptions.css         # CUBE Exception layer (data-attribute variants)
 ├── server.ts                  # http server bootstrap
 ├── package.json
 └── tsconfig.json

@@ -123,6 +123,11 @@
 .switcher > * {
   flex-grow: 1;
   flex-basis: calc((var(--threshold, 30rem) - 100%) * 999);
+  /* Allow children to shrink below their min-content size.
+     Without this, the default `min-width: auto` keeps each child
+     at min-content (a wide unbroken URL inside, a long button
+     label) and the row wraps even when the calc above says split. */
+  min-inline-size: 0;
 }
 
 /* --- Cover --- */

@@ -43,28 +43,55 @@ export interface SessionPageProps {
 }
 
 export function SessionPage() {
-  return ({ view, confirmStop = false, actionError = null }: SessionPageProps) => (
-    <Layout
-      title={pageTitle(view)}
-      topBarPath={`/sessions/${view.sessionId}`}
-      topBarRight={<Avatar />}
-    >
-      <FocusH1 />
-      <div role="status" aria-live="polite" class="sr-only">
-        {phaseAnnouncement(view, confirmStop)}
-      </div>
-      {actionError ? <ActionErrorBanner error={actionError} /> : null}
-      {renderView(view, confirmStop)}
-      {isTerminal(view) ? null : (
-        <StatusPoller
-          sessionId={view.sessionId}
-          initialKind={view.kind}
-          initialPendingPhase={view.kind === 'provisioning' ? (view.pendingPhase ?? null) : null}
-          initialAgentUrl={view.kind === 'ready' ? view.agentUrl : null}
-          initialPreviewUrl={view.kind === 'ready' ? view.previewUrl : null}
-        />
-      )}
-    </Layout>
+  return ({ view, confirmStop = false, actionError = null }: SessionPageProps) => {
+    const isReady = view.kind === 'ready'
+    const chrome = isReady
+      ? ({ mode: 'crumbs' as const, here: view.sessionId.slice(0, 8) })
+      : ({ mode: 'path' as const, path: `/sessions/${view.sessionId}` })
+    const mainKind = isReady ? ('full' as const) : ('narrow' as const)
+    const headerRight = isReady ? <HeaderSlot /> : <Avatar />
+    return (
+      <Layout
+        title={pageTitle(view)}
+        topBarChrome={chrome}
+        topBarRight={headerRight}
+        mainKind={mainKind}
+      >
+        <FocusH1 />
+        <div role="status" aria-live="polite" class="sr-only">
+          {phaseAnnouncement(view, confirmStop)}
+        </div>
+        {actionError ? <ActionErrorBanner error={actionError} /> : null}
+        {renderView(view, confirmStop)}
+        {isTerminal(view) ? null : (
+          <StatusPoller
+            sessionId={view.sessionId}
+            initialKind={view.kind}
+            initialPendingPhase={view.kind === 'provisioning' ? (view.pendingPhase ?? null) : null}
+            initialAgentUrl={view.kind === 'ready' ? view.agentUrl : null}
+            initialPreviewUrl={view.kind === 'ready' ? view.previewUrl : null}
+          />
+        )}
+      </Layout>
+    )
+  }
+}
+
+/**
+ * Right-aligned header content for the Ready chrome — the live-
+ * session pill (with breathing accent dot) plus the avatar. v1
+ * ships without a numeric duration; the breathing dot is the
+ * only liveness signal.
+ */
+function HeaderSlot() {
+  return () => (
+    <div class="wf-row" mix={css({ gap: 'var(--sp-5)' })}>
+      <span class="wf-pill-live">
+        <span class="wf-pill-dot wf-pill-dot-breathe" />
+        Session live
+      </span>
+      <Avatar />
+    </div>
   )
 }
 
@@ -160,7 +187,7 @@ function pageTitle(view: View): string {
  */
 export function SessionNotFoundPage() {
   return ({ sessionId }: { sessionId: string }) => (
-    <Layout title="openvoid — session not found" topBarPath="/sessions/not-found">
+    <Layout title="openvoid — session not found" topBarChrome={{ mode: 'path', path: '/sessions/not-found' }}>
       <FocusH1 />
       <Card padding="32px">
         <div class="wf-col" mix={css({ gap: '20px' })}>
