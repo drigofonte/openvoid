@@ -90,10 +90,62 @@ describe('GET /sessions/:id', () => {
     const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
 
     const html = await response.text()
-    assert.match(html, /Session ready/)
+    // Hero copy + Ready pill
+    assert.match(html, /Sandbox ready/)
+    assert.match(html, /Two tabs, and you're building/)
+    // Both URLs render in their UrlRow components
     assert.match(html, new RegExp(AGENT_URL.replace(/[/.]/g, '\\$&')))
     assert.match(html, new RegExp(PREVIEW_URL.replace(/[/.]/g, '\\$&')))
-    assert.match(html, /Stop &amp; save/)
+    // Each card carries an "Open …" CTA
+    assert.match(html, /Open chat/)
+    assert.match(html, /Open preview/)
+    // Split-window tip
+    assert.match(html, /Drag both tabs into a split window/)
+    // Done-line is now the prose link, not a separate "Stop & save" button
+    assert.match(html, /Come back here and end the session/)
+    assert.doesNotMatch(html, /Stop &amp; save/)
+  })
+
+  it('renders Ready chrome — wf-toolbar-tall, single-segment crumb (8-char id-prefix), Session live pill', async (t) => {
+    const session: SessionShape = {
+      sessionId: SID,
+      status: 'Running',
+      agentUrl: AGENT_URL,
+      previewUrl: PREVIEW_URL,
+    }
+    t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
+
+    const router = createLandingRouter()
+    const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
+    const html = await response.text()
+
+    // 56px toolbar variant present.
+    assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+    // 8-char session-id prefix renders in the breadcrumb (single-segment).
+    assert.match(html, new RegExp(`>${SID.slice(0, 8)}<`))
+    // No 'maria' workspace segment in v1 — the auth layer plumbs a
+    // real workspace later.
+    assert.doesNotMatch(html, />maria</)
+    // LivePill text — no numeric duration after it (deferred until
+    // createdAt is plumbed through the View).
+    assert.match(html, /Session live/)
+    assert.doesNotMatch(html, /Session live\s*[·]/)
+  })
+
+  it('renders the existing 44px chrome on non-Ready states (Provisioning)', async (t) => {
+    const session: SessionShape = { sessionId: SID, status: 'Pending' }
+    t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
+
+    const router = createLandingRouter()
+    const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
+    const html = await response.text()
+
+    assert.match(html, /class="wf-toolbar"/)
+    assert.doesNotMatch(html, /wf-toolbar-tall/)
+    // Decorative slug visible.
+    assert.match(html, new RegExp(`/sessions/${SID}`))
+    // No LivePill on non-Ready chrome.
+    assert.doesNotMatch(html, /Session live/)
   })
 
   it('downgrades Ready→Provisioning when ingress probe fails', async (t) => {
