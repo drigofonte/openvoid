@@ -35,7 +35,7 @@ function extractIdempotencyKey(html: string): string {
 // what the form posts (the form no longer renders those inputs;
 // the controller overwrites them via `formData.set` even if a
 // rogue request includes them).
-const DEFAULT_REPO = 'https://github.com/openvoid/scratch'
+const DEFAULT_REPO = 'https://github.com/drigofonte/openvoid-test.git'
 const DEFAULT_BRANCH = 'main'
 
 function validForm(): URLSearchParams {
@@ -60,10 +60,24 @@ describe('home / index', () => {
 
     assert.equal(response.status, 200)
     const html = await response.text()
-    assert.match(html, /What should we build today\?/)
+    // New Hi-Fi headline + composer shape.
+    assert.match(html, /Let's make something\./)
     assert.match(html, /name="prompt"/)
-    assert.match(html, /name="repo"/)
-    assert.match(html, /name="branch"/)
+    // Crumbs chrome with "new app" segment + Back-to-apps link.
+    assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+    assert.match(html, />new app</)
+    assert.match(html, /Back to apps/)
+    // Composer is rendered as a single elevated form with the
+    // .wf-composer recipe.
+    assert.match(html, /<form\b[^>]*\bclass="[^"]*\bwf-composer\b[^"]*"/)
+    // Repo/branch inputs are gone — controller defaults them.
+    assert.doesNotMatch(html, /name="repo"/)
+    assert.doesNotMatch(html, /name="branch"/)
+    // The advanced expander is gone too.
+    assert.doesNotMatch(html, /<details\b/)
+    // Old wireframe copy no longer renders.
+    assert.doesNotMatch(html, /What should we build today/)
+    assert.doesNotMatch(html, /Step 1 of 1/)
   })
 
   it('renders a fresh idempotencyKey on every GET render', async () => {

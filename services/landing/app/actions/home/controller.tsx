@@ -46,7 +46,7 @@ const CreateSchema = f.object({
  * selection at the user-facing layer is deferred to a separate
  * plan.
  */
-const DEFAULT_REPO = 'https://github.com/openvoid/scratch'
+const DEFAULT_REPO = 'https://github.com/drigofonte/openvoid-test.git'
 const DEFAULT_BRANCH = 'main'
 
 function asString(value: FormDataEntryValue | null): string | undefined {
