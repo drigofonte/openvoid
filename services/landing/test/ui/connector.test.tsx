@@ -27,7 +27,7 @@ describe('Connector', () => {
 
   it('emits an arrowhead path stroked in the accent token', async () => {
     const html = await renderToString(<Connector />)
-    assert.match(html, /M 110 24 L 120 30 L 110 36/)
+    assert.match(html, /M 109 25 L 116 30 L 109 35/)
     assert.match(html, /stroke="var\(--accent\)"/)
   })
 })

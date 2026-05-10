@@ -53,9 +53,13 @@ export function Ready() {
       minHeight="calc(100vh - var(--h-header))"
       space="var(--sp-10)"
       centered={
+        // 920px matches the Two-Links Hi-Fi reference's stage width.
+        // Wider than --w-stage (760, the canonical composer width)
+        // because the Ready hero is an editorial stage, not a
+        // composer surface.
         <div
           mix={css({
-            maxWidth: 'var(--w-stage)',
+            maxWidth: '920px',
             marginLeft: 'auto',
             marginRight: 'auto',
             width: '100%',

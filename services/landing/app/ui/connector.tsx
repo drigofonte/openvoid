@@ -27,14 +27,15 @@ export function Connector() {
       >
         <path
           class="wf-connector-flow"
-          d="M 0 30 C 30 30, 60 10, 90 30 S 150 50, 120 30"
-          fill="none"
+          d="M 6 30 Q 60 -10 114 30"
         />
         <path
-          d="M 110 24 L 120 30 L 110 36"
+          d="M 109 25 L 116 30 L 109 35"
           stroke="var(--accent)"
           stroke-width="1.5"
           fill="none"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         />
       </svg>
     </div>

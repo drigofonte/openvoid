@@ -284,7 +284,10 @@ textarea.wf-input {
   width: 120px;
   height: 60px;
   pointer-events: none;
-  z-index: 1;
+  /* z-index: 0 keeps the connector behind the elevated cards.
+     Their opaque white background hides the connector's tails;
+     only the segment crossing the gap between cards is visible. */
+  z-index: 0;
 }
 .wf-connector svg {
   width: 100%;
