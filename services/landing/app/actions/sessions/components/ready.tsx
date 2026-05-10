@@ -18,11 +18,17 @@ import { StopButton } from '../client/stop-button.tsx'
  * Composition:
  *
  *   Cover (centered)
- *     └── Stack
- *           ├── Hero (ReadyPill + h1 + subtitle)
- *           ├── Duo  (.wf-connector-host wrapping Connector + Switcher[Chat, Preview])
- *           ├── SplitTip
- *           └── DoneLine (StopButton's prose-link SSR fallback)
+ *     └── stage (max-width: var(--w-stage), centered)
+ *           └── Stack
+ *                 ├── Hero      (visually narrower via inner var(--w-prose) wrapper)
+ *                 ├── Duo       (.wf-connector-host wrapping Connector + Switcher)
+ *                 ├── SplitTip
+ *                 └── DoneLine  (StopButton's prose-link SSR fallback)
+ *
+ * The single outer max-width wrapper around the Stack is the
+ * one place width is constrained — every Stack child then fills
+ * that 760px width via the Stack's default cross-axis stretch.
+ * No per-row max-width plumbing.
  *
  * Five primitives the doc review flagged as thin wrappers
  * (Kbd, LivePill, ReadyPill, IconMark, SplitTip) live as inline
@@ -47,13 +53,22 @@ export function Ready() {
       minHeight="calc(100vh - var(--h-header))"
       space="var(--sp-10)"
       centered={
-        <Stack space="var(--sp-10)">
-          <Hero />
-          <Duo agentUrl={agentUrl} previewUrl={previewUrl} />
-          <SplitTip />
-          <StopButton sessionId={sessionId} />
-          <OpenLinkShortcuts chatHref={agentUrl} previewHref={previewUrl} />
-        </Stack>
+        <div
+          mix={css({
+            maxWidth: 'var(--w-stage)',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            width: '100%',
+          })}
+        >
+          <Stack space="var(--sp-10)">
+            <Hero />
+            <Duo agentUrl={agentUrl} previewUrl={previewUrl} />
+            <SplitTip />
+            <StopButton sessionId={sessionId} />
+            <OpenLinkShortcuts chatHref={agentUrl} previewHref={previewUrl} />
+          </Stack>
+        </div>
       }
     />
   )
@@ -67,6 +82,7 @@ function Hero() {
         maxWidth: 'var(--w-prose)',
         marginLeft: 'auto',
         marginRight: 'auto',
+        width: '100%',
       })}
     >
       <Stack space="var(--sp-6)">
@@ -94,9 +110,6 @@ function Hero() {
             fontSize: '15.5px',
             color: 'var(--ink)',
             margin: 0,
-            maxWidth: 'var(--w-card)',
-            marginLeft: 'auto',
-            marginRight: 'auto',
             lineHeight: 'var(--lh-normal)',
           })}
         >
@@ -115,15 +128,7 @@ interface DuoProps {
 
 function Duo() {
   return ({ agentUrl, previewUrl }: DuoProps) => (
-    <div
-      class="wf-connector-host"
-      mix={css({
-        maxWidth: 'var(--w-stage)',
-        width: '100%',
-        marginLeft: 'auto',
-        marginRight: 'auto',
-      })}
-    >
+    <div class="wf-connector-host">
       <Connector />
       <Switcher limit={2} space="var(--sp-9)">
         <ChatCard agentUrl={agentUrl} />
@@ -249,14 +254,7 @@ function PreviewCard() {
 
 function SplitTip() {
   return () => (
-    <div
-      class="wf-split-tip"
-      mix={css({
-        maxWidth: 'var(--w-stage)',
-        marginLeft: 'auto',
-        marginRight: 'auto',
-      })}
-    >
+    <div class="wf-split-tip">
       <div class="wf-split-icon" aria-hidden="true">
         <span />
         <span />

@@ -306,11 +306,20 @@ textarea.wf-input {
     transform: translate(-50%, -50%) rotate(90deg);
   }
 }
-@media (max-width: 760px) {
-  .wf-connector {
-    width: 60px;
-    height: 60px;
-    transform: translate(-50%, -50%) rotate(90deg);
+/*
+ * Viewport-width fallback for browsers without @container support
+ * (Chromium <105, Firefox <110, Safari <16). On modern browsers
+ * the @container rule above governs rotation; we don't want the
+ * @media rule to fire and rotate the connector while the cards
+ * are still side-by-side at 720-ish viewports.
+ */
+@supports not (container-type: inline-size) {
+  @media (max-width: 760px) {
+    .wf-connector {
+      width: 60px;
+      height: 60px;
+      transform: translate(-50%, -50%) rotate(90deg);
+    }
   }
 }
 
