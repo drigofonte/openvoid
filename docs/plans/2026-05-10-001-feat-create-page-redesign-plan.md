@@ -1,7 +1,7 @@
 ---
 title: "feat: Redesign Create page to match Create-Prompt Hi-Fi; remove repo/branch UI"
 type: feat
-status: active
+status: completed
 date: 2026-05-10
 ---
 
