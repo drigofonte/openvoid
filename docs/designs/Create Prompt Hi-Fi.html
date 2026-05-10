@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OpenVoid — new app</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper: oklch(0.972 0.006 75);
+    --paper-2: oklch(0.955 0.006 75);
+    --paper-3: oklch(0.935 0.006 75);
+    --ink: oklch(0.18 0.005 60);
+    --ink-2: oklch(0.42 0.005 60);
+    --ink-3: oklch(0.62 0.005 60);
+    --ink-4: oklch(0.78 0.005 60);
+    --line: oklch(0.91 0.004 75);
+    --line-2: oklch(0.95 0.004 75);
+    --card: #ffffff;
+    --accent: oklch(0.68 0.18 50);
+    --accent-soft: oklch(0.94 0.04 60);
+    --shadow-1: 0 1px 0 rgba(20,18,14,.04), 0 1px 2px rgba(20,18,14,.04);
+    --shadow-2: 0 1px 0 rgba(20,18,14,.04), 0 4px 14px rgba(20,18,14,.06);
+    --shadow-3: 0 1px 0 rgba(20,18,14,.05), 0 18px 50px rgba(20,18,14,.10);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 18px;
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:var(--font-sans);font-size:14px;line-height:1.5;
+    letter-spacing:-0.005em;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+  /* ── Header ───────────────────────────────────────────── */
+  header{
+    height:56px;display:flex;align-items:center;gap:14px;padding:0 24px;
+    border-bottom:1px solid var(--line);background:var(--paper);
+    position:sticky;top:0;z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-0.01em;
+    font-size:15px;color:var(--ink)}
+  .brand-mark{
+    width:22px;height:22px;border-radius:6px;background:var(--ink);
+    display:grid;place-items:center;
+  }
+  .brand-mark::before{content:"";width:9px;height:9px;border-radius:50%;
+    border:1.5px solid var(--paper);}
+  .crumbs{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:13.5px}
+  .crumbs .sep{color:var(--ink-4)}
+  .crumbs .here{color:var(--ink);font-weight:500}
+  .grow{flex:1}
+  .ghost-link{font-size:12.5px;color:var(--ink-3);text-decoration:none;
+    padding:6px 10px;border-radius:6px;transition:background .12s, color .12s}
+  .ghost-link:hover{color:var(--ink);background:var(--paper-2)}
+  .avatar{
+    width:28px;height:28px;border-radius:50%;background:var(--accent-soft);
+    color:var(--accent);font-size:12px;font-weight:600;display:grid;place-items:center;
+  }
+
+  /* ── Stage ────────────────────────────────────────────── */
+  .stage{
+    min-height:calc(100vh - 56px);
+    display:flex;flex-direction:column;align-items:center;
+    padding:80px 24px 80px;gap:28px;position:relative;
+  }
+  /* removed top radial highlight — was making the headline read uneven */
+
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;
+    border-radius:999px;background:var(--accent-soft);color:var(--accent);
+    font-size:12px;font-weight:600;letter-spacing:0.02em;
+  }
+  .eyebrow .dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+  .headline{
+    font-family:'Inter', sans-serif;
+    font-size:44px;line-height:1.05;letter-spacing:-0.028em;font-weight:600;
+    margin:0;color:var(--ink);text-align:left;
+    max-width:760px;
+  }
+  .sub{
+    font-size:15.5px;color:var(--ink);max-width:560px;margin:14px 0 22px;text-align:left;line-height:1.5;
+    font-weight:400;
+  }
+  .sub b{color:var(--ink);font-weight:600}
+
+  /* ── Composer (the hero) ─────────────────────────────── */
+  .composer{
+    width:100%;max-width:760px;background:var(--card);border-radius:var(--r-lg);
+    box-shadow:var(--shadow-2);
+    display:flex;flex-direction:column;gap:0;
+    overflow:hidden;position:relative;z-index:1;
+  }
+  .composer:focus-within{
+    box-shadow:var(--shadow-2), 0 0 0 4px var(--accent-soft);
+  }
+  .composer.dragging{
+    box-shadow:var(--shadow-2), 0 0 0 4px var(--accent-soft);
+  }
+  .composer.dragging .drop-overlay{display:flex}
+  .drop-overlay{
+    display:none;position:absolute;inset:6px;z-index:5;
+    border-radius:14px;
+    background:color-mix(in oklab, var(--accent-soft) 92%, white);
+    border:1.5px dashed var(--accent);
+    align-items:center;justify-content:center;flex-direction:column;gap:8px;
+    pointer-events:none;
+  }
+  .drop-overlay .ic{
+    width:36px;height:36px;border-radius:10px;background:var(--card);
+    display:grid;place-items:center;color:var(--accent);
+    box-shadow:0 1px 0 rgba(20,18,14,.04), 0 6px 18px rgba(20,18,14,.07);
+  }
+  .drop-overlay .ic svg{width:18px;height:18px}
+  .drop-overlay .lbl{
+    color:var(--accent);font-weight:600;font-size:13.5px;letter-spacing:-0.005em;
+  }
+  .drop-overlay .hint{color:var(--ink-3);font-size:11.5px}
+
+  /* Attached codebase card */
+  .attached{
+    margin:18px 24px 4px;display:none;
+    border:1px solid var(--line);border-radius:10px;background:var(--paper);
+    padding:10px 12px;align-items:center;gap:12px;
+    animation:attached-in .22s ease-out;
+  }
+  .attached.visible{display:flex}
+  @keyframes attached-in{
+    from{opacity:0;transform:translateY(-4px)}
+    to{opacity:1;transform:none}
+  }
+  .attached .zip-ic{
+    width:34px;height:34px;border-radius:8px;flex-shrink:0;
+    background:var(--ink);color:var(--paper);
+    display:grid;place-items:center;
+  }
+  .attached .zip-ic svg{width:16px;height:16px}
+  .attached .zip-meta{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+  .attached .zip-name{
+    font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .attached .zip-sub{
+    font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px;
+    flex-wrap:wrap;
+  }
+  .attached .zip-sub .dot{width:2px;height:2px;border-radius:50%;background:var(--ink-4)}
+  .attached .stack-chip{
+    display:inline-flex;align-items:center;gap:5px;
+    height:18px;padding:0 7px;border-radius:4px;
+    background:var(--paper-2);color:var(--ink-2);
+    font-size:11px;font-weight:500;
+    box-shadow:inset 0 0 0 1px var(--line);
+  }
+  .attached .stack-chip .pip{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .attached .zip-clear{
+    width:26px;height:26px;border-radius:6px;background:transparent;border:0;
+    color:var(--ink-3);cursor:pointer;display:grid;place-items:center;flex-shrink:0;
+    transition:background .12s, color .12s;
+  }
+  .attached .zip-clear:hover{background:var(--paper-2);color:var(--ink)}
+  .attached .zip-clear svg{width:14px;height:14px}
+
+  .composer-body{
+    padding:22px 24px 8px;display:flex;flex-direction:column;gap:6px;
+  }
+  .composer.has-attachment .composer-body{padding-top:6px}
+  .composer-textarea{
+    width:100%;border:0;outline:0;resize:none;background:transparent;
+    font-family:var(--font-sans);font-size:18px;line-height:1.55;color:var(--ink);
+    letter-spacing:-0.005em;min-height:118px;font-weight:400;
+  }
+  .composer-textarea::placeholder{color:var(--ink-4)}
+
+  /* derived-name ghost line */
+  .derived{
+    display:flex;align-items:center;gap:8px;
+    padding:0 24px 14px;font-size:12.5px;color:var(--ink-3);
+    transition:opacity .25s ease;
+  }
+  .derived.hidden{opacity:0;pointer-events:none}
+  .derived .lives-at{color:var(--ink-4)}
+  .derived .name{
+    font-family:var(--font-mono);font-size:12.5px;color:var(--ink);
+    background:var(--paper-2);padding:2px 7px;border-radius:5px;
+  }
+  .derived .name-edit{
+    color:var(--ink-3);font-size:11.5px;cursor:pointer;
+    padding:2px 7px;border-radius:5px;transition:background .12s, color .12s;
+  }
+  .derived .name-edit:hover{background:var(--paper-2);color:var(--ink-2)}
+
+  /* toolbar inside composer */
+  .composer-bar{
+    display:flex;align-items:center;gap:8px;padding:12px 14px 14px 18px;
+    border-top:1px solid var(--line-2);background:var(--paper-2);
+  }
+  .tool{
+    display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px;
+    border-radius:7px;background:transparent;color:var(--ink-3);
+    font:500 12.5px/1 var(--font-sans);border:0;
+    cursor:pointer;transition:color .12s;
+  }
+  .tool:hover{color:var(--ink)}
+  .tool .lbl-key{color:var(--ink-4);font-family:var(--font-mono);font-size:11px}
+  .tool svg{width:14px;height:14px;color:var(--ink-3)}
+
+  .submit-area{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .submit-hint{font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:5px}
+  .kbd-static{
+    display:inline-flex;align-items:center;justify-content:center;
+    height:18px;min-width:18px;padding:0 5px;border-radius:4px;
+    font:500 10.5px/1 var(--font-mono);
+    background:transparent;color:var(--ink-3);
+    box-shadow:inset 0 0 0 1px var(--line);
+  }
+  .btn-go{
+    display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;
+    border:0;border-radius:9px;background:var(--ink);color:var(--paper);
+    font:600 13px/1 var(--font-sans);cursor:pointer;
+    transition:background .12s, opacity .15s;
+  }
+  .btn-go:hover{background:oklch(0.10 0.004 60)}
+  .btn-go[disabled]{opacity:.45;cursor:not-allowed}
+  .btn-go .kbd{
+    display:inline-flex;align-items:center;justify-content:center;
+    height:18px;min-width:18px;padding:0 5px;border-radius:4px;
+    font:500 10.5px/1 var(--font-mono);
+    background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);margin-left:2px;
+  }
+
+  /* ── Starting points (alt entry, low-key) ────────────── */
+  .alts{
+    display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;
+  }
+  .alt{
+    display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 13px;
+    border-radius:999px;background:var(--paper-2);border:0;
+    color:var(--ink-2);font-size:12.5px;font-weight:500;cursor:pointer;
+    transition:background .12s, color .12s;
+  }
+  .alt:hover{background:var(--paper-3);color:var(--ink)}
+  .alt svg{width:13px;height:13px;color:var(--ink-3)}
+  .alt:hover svg{color:var(--ink-2)}
+  .alt svg{width:13px;height:13px}
+  .alts-sep{display:none}
+
+  /* ── Suggested prompts ───────────────────────────────── */
+  .suggested{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;
+    max-width:760px;margin-top:18px;
+  }
+  .sug-label{
+    font-size:12px;color:var(--ink-3);font-weight:500;letter-spacing:0.02em;
+  }
+  .sug{
+    display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px 0 10px;
+    border-radius:999px;background:var(--paper-2);border:0;
+    color:var(--ink-2);font-size:12.5px;font-weight:500;cursor:pointer;
+    transition:background .12s, color .12s;
+  }
+  .sug:hover{background:var(--paper-3);color:var(--ink)}
+  .sug::before{
+    content:"";width:14px;height:14px;flex-shrink:0;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23898581' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 19V5M5 12l7-7 7 7'/></svg>");
+    background-size:contain;background-repeat:no-repeat;background-position:center;
+    opacity:.7;
+  }
+  .sug:hover::before{opacity:1}
+
+  /* ── Footer line ─────────────────────────────────────── */
+  .foot{
+    display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:12.5px;
+    margin-top:auto;padding-top:40px;
+  }
+  .foot a{color:var(--ink-2);text-decoration:none;font-weight:500;
+    border-bottom:1px solid var(--line);padding-bottom:1px}
+  .foot a:hover{color:var(--ink);border-bottom-color:var(--ink-3)}
+
+  @media (max-width: 720px){
+    .headline{font-size:32px}
+    .composer-bar{flex-wrap:wrap}
+    .submit-area{margin-left:0;width:100%;justify-content:flex-end}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark"></div>
+    openvoid
+  </div>
+  <div class="crumbs">
+    <span>maria</span>
+    <span class="sep">/</span>
+    <span class="here">new app</span>
+  </div>
+  <div class="grow"></div>
+  <a href="#" class="ghost-link">← Back to apps</a>
+  <div class="avatar">M</div>
+</header>
+
+<main class="stage">
+
+  <h1 class="headline" id="headline">Let's make something.</h1>
+  <p class="sub" id="sub">Describe your idea — the agent scaffolds the project, sets up your stack, and opens a chat session you'll keep coming back to.</p>
+
+  <form class="composer" id="composer" onsubmit="return false">
+    <div class="drop-overlay">
+      <div class="ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="lbl">Drop your .zip to continue from this codebase</div>
+      <div class="hint">We unpack it inside a fresh sandbox — your local files stay put.</div>
+    </div>
+
+    <div class="attached" id="attached">
+      <div class="zip-ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M10 6h2M10 9h2M10 12h2M10 15h2"/></svg>
+      </div>
+      <div class="zip-meta">
+        <span class="zip-name" id="zip-name">recipe-jar.zip</span>
+        <span class="zip-sub" id="zip-sub">
+          <span id="zip-files">— files</span>
+          <span class="dot"></span>
+          <span id="zip-size">— MB</span>
+          <span class="dot"></span>
+          <span class="stack-chip" id="stack-chip"><span class="pip"></span><span id="stack-name">detecting…</span></span>
+        </span>
+      </div>
+      <button type="button" class="zip-clear" id="zip-clear" aria-label="Remove codebase">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="composer-body">
+      <textarea class="composer-textarea" id="prompt" rows="5"
+        placeholder="A weekend planner that pulls events from my Google calendar, lets me drag them onto a 2-day grid, and emails me a summary every Friday at 5pm."></textarea>
+    </div>
+
+    <input type="file" id="zip-input" accept=".zip,application/zip,application/x-zip-compressed" style="display:none" />
+
+    <div class="derived hidden" id="derived">
+      <span class="lives-at">Will live at</span>
+      <span class="name" id="derived-name">weekend-planner.openvoid.dev</span>
+      <span class="name-edit">edit name</span>
+    </div>
+
+    <div class="composer-bar">
+      <button type="button" class="tool" title="Attach files or images">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 11.5l-8.5 8.5a5 5 0 1 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L11 17a2 2 0 1 1-3-3l7-7"/>
+        </svg>
+        Attach
+      </button>
+      <button type="button" class="tool" title="Choose stack">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 18l9 5 9-5"/>
+        </svg>
+        Stack: <span class="lbl-key">auto</span>
+      </button>
+      <button type="button" class="tool" title="Database">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>
+        </svg>
+        DB: <span class="lbl-key">postgres</span>
+      </button>
+
+      <div class="submit-area">
+        <span class="submit-hint">
+          <span class="kbd-static">⌘</span><span class="kbd-static">↵</span> to start
+        </span>
+        <button type="submit" class="btn-go" id="go" disabled>
+          <span id="go-label">Start session</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14M13 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div class="alts">
+    <button class="alt">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6v6H9z"/></svg>
+      Start from a template
+    </button>
+    <span class="alts-sep">·</span>
+    <button class="alt">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6C17 15.2 20 14 20 9.3a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.4 0C6.4 2.6 5.4 2.9 5.4 2.9a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.3c0 4.6 3 5.9 5.9 6.2a3.4 3.4 0 0 0-.9 2.6V22"/></svg>
+      Import GitHub repo
+    </button>
+    <span class="alts-sep">·</span>
+    <button class="alt" id="alt-zip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload codebase (.zip)
+    </button>
+    <span class="alts-sep">·</span>
+    <button class="alt">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Fork an example
+    </button>
+  </div>
+
+  <div class="suggested" id="suggested">
+    <span class="sug-label">try</span>
+    <button class="sug" data-fill="A Notion-style note app with markdown, slash commands, and per-page sharing.">Notion-style notes</button>
+    <button class="sug" data-fill="A URL shortener with custom slugs, click analytics, and a dashboard.">URL shortener</button>
+    <button class="sug" data-fill="A daily habit tracker with streaks, weekly emails, and a public profile.">Habit tracker</button>
+    <button class="sug" data-fill="An internal admin panel for our Postgres database with role-based auth.">Internal admin panel</button>
+  </div>
+
+  <div class="suggested" id="suggested-resume" style="display:none">
+    <span class="sug-label">try</span>
+    <button class="sug" data-fill="Audit the codebase and list the top 5 issues you'd fix first.">Audit & fix top issues</button>
+    <button class="sug" data-fill="Add Stripe billing with monthly + annual plans and a customer portal.">Add Stripe billing</button>
+    <button class="sug" data-fill="Write tests for the API routes that don't have any yet.">Backfill missing tests</button>
+    <button class="sug" data-fill="Migrate from Pages Router to App Router and update affected routes.">Migrate to App Router</button>
+  </div>
+
+  <div class="foot">
+    Provisioning a fresh sandbox usually takes 10–25 seconds. <a href="#">What runs in there?</a>
+  </div>
+
+</main>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const ta = $('#prompt');
+  const go = $('#go');
+  const goLabel = $('#go-label');
+  const derived = $('#derived');
+  const dname = $('#derived-name');
+  const composer = $('#composer');
+  const attached = $('#attached');
+  const zipName = $('#zip-name');
+  const zipFiles = $('#zip-files');
+  const zipSize = $('#zip-size');
+  const stackName = $('#stack-name');
+  const headline = $('#headline');
+  const sub = $('#sub');
+  const suggested = $('#suggested');
+  const suggestedResume = $('#suggested-resume');
+  const zipInput = $('#zip-input');
+  const altZip = $('#alt-zip');
+  const zipClear = $('#zip-clear');
+
+  let codebase = null; // { name, slug, files, sizeMB, stack }
+
+  function slugify(s){
+    if(!s) return '';
+    const stop = new Set(['a','an','the','and','or','of','for','to','with','my','that','this','from','on','in','it']);
+    const words = s.toLowerCase()
+      .replace(/[^a-z0-9\s-]/g,'')
+      .split(/\s+/).filter(Boolean)
+      .filter(w => !stop.has(w))
+      .slice(0, 3);
+    return words.join('-') || 'untitled';
+  }
+
+  function zipBaseSlug(filename){
+    const base = filename.replace(/\.zip$/i, '');
+    return base.toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0, 32) || 'imported';
+  }
+
+  function detectStack(filename){
+    // Demo heuristic — in real product this'd be done after unzip on server.
+    const stacks = ['Next.js · Postgres', 'Vite + React', 'SvelteKit', 'Rails 7', 'Django + Postgres'];
+    let h = 0; for(const c of filename) h = (h*31 + c.charCodeAt(0)) >>> 0;
+    return stacks[h % stacks.length];
+  }
+
+  function fakeMeta(file){
+    // Plausible numbers without actually unpacking
+    const sizeMB = Math.max(0.2, file.size / (1024*1024));
+    const files = Math.max(8, Math.round(sizeMB * 60 + (file.name.length % 30)));
+    return { sizeMB, files };
+  }
+
+  function applyState(){
+    const hasCode = !!codebase;
+    composer.classList.toggle('has-attachment', hasCode);
+    attached.classList.toggle('visible', hasCode);
+
+    if(hasCode){
+      headline.textContent = 'Pick up where you left off.';
+      sub.innerHTML = 'We\u2019ll spin up a sandbox with <b>' + codebase.name + '</b> unpacked, install dependencies, and hand the agent a working tree.';
+      ta.placeholder = 'What do you want the agent to work on first? e.g. \u201cAdd auth with magic links and a /settings page.\u201d';
+      goLabel.textContent = 'Continue session';
+      suggested.style.display = 'none';
+      suggestedResume.style.display = '';
+      altZip.innerHTML = '<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><polyline points=\"17 8 12 3 7 8\"/><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"15\"/></svg> Replace zip\u2026';
+    } else {
+      headline.textContent = 'Let\u2019s make something.';
+      sub.textContent = 'Describe your idea \u2014 the agent scaffolds the project, sets up your stack, and opens a chat session you\u2019ll keep coming back to.';
+      ta.placeholder = 'A weekend planner that pulls events from my Google calendar, lets me drag them onto a 2-day grid, and emails me a summary every Friday at 5pm.';
+      goLabel.textContent = 'Start session';
+      suggested.style.display = '';
+      suggestedResume.style.display = 'none';
+      altZip.innerHTML = '<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><polyline points=\"17 8 12 3 7 8\"/><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"15\"/></svg> Upload codebase (.zip)';
+    }
+    update();
+  }
+
+  function update(){
+    const v = ta.value.trim();
+    if(codebase){
+      go.disabled = false; // codebase alone is enough to continue
+      dname.textContent = codebase.slug + '.openvoid.dev';
+      derived.classList.remove('hidden');
+    } else {
+      go.disabled = v.length < 8;
+      if(v.length >= 8){
+        dname.textContent = slugify(v) + '.openvoid.dev';
+        derived.classList.remove('hidden');
+      } else {
+        derived.classList.add('hidden');
+      }
+    }
+  }
+  ta.addEventListener('input', update);
+
+  // Auto-grow
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 360) + 'px';
+  });
+
+  // Zip selection / drop
+  function attachZip(file){
+    if(!file) return;
+    const meta = fakeMeta(file);
+    codebase = {
+      name: file.name,
+      slug: zipBaseSlug(file.name),
+      files: meta.files,
+      sizeMB: meta.sizeMB,
+      stack: detectStack(file.name),
+    };
+    zipName.textContent = codebase.name;
+    zipFiles.textContent = codebase.files.toLocaleString() + ' files';
+    zipSize.textContent = (codebase.sizeMB < 1 ? codebase.sizeMB.toFixed(2) : codebase.sizeMB.toFixed(1)) + ' MB';
+    stackName.textContent = codebase.stack;
+    applyState();
+  }
+
+  altZip.addEventListener('click', () => zipInput.click());
+  zipInput.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if(f) attachZip(f);
+    zipInput.value = '';
+  });
+  zipClear.addEventListener('click', () => { codebase = null; applyState(); });
+
+  // Drag & drop on the composer
+  let dragDepth = 0;
+  function isZip(e){
+    if(!e.dataTransfer) return false;
+    const items = e.dataTransfer.items;
+    if(items && items.length){
+      for(const it of items){
+        if(it.kind === 'file') return true;
+      }
+    }
+    return (e.dataTransfer.types || []).includes('Files');
+  }
+  window.addEventListener('dragenter', (e) => {
+    if(!isZip(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    composer.classList.add('dragging');
+  });
+  window.addEventListener('dragover', (e) => {
+    if(!isZip(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  window.addEventListener('dragleave', (e) => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if(dragDepth === 0) composer.classList.remove('dragging');
+  });
+  window.addEventListener('drop', (e) => {
+    if(!isZip(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    composer.classList.remove('dragging');
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f && /\.zip$/i.test(f.name)) attachZip(f);
+  });
+
+  // ⌘↵ to submit
+  document.addEventListener('keydown', (e) => {
+    if((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !go.disabled){
+      e.preventDefault();
+      goLabel.textContent = codebase ? 'Unpacking & starting…' : 'Starting session…';
+    }
+  });
+
+  // Suggested → fill (works for both lists)
+  document.querySelectorAll('.sug').forEach(b => {
+    b.addEventListener('click', (e) => {
+      ta.value = e.currentTarget.dataset.fill;
+      ta.dispatchEvent(new Event('input'));
+      ta.focus();
+    });
+  });
+
+  // Auto-focus
+  setTimeout(() => ta.focus(), 60);
+  applyState();
+</script>
+</body>
+</html>

@@ -29,10 +29,17 @@ function extractIdempotencyKey(html: string): string {
   return match[1]!
 }
 
+// Default repo/branch the controller injects server-side. Mirrors
+// the constants in `app/actions/home/controller.tsx`. Tests assert
+// the upstream `createSession` body carries these regardless of
+// what the form posts (the form no longer renders those inputs;
+// the controller overwrites them via `formData.set` even if a
+// rogue request includes them).
+const DEFAULT_REPO = 'https://github.com/drigofonte/openvoid-test.git'
+const DEFAULT_BRANCH = 'main'
+
 function validForm(): URLSearchParams {
   return new URLSearchParams({
-    repo: 'https://github.com/example/x',
-    branch: 'main',
     idempotencyKey: 'idem-test-1',
     prompt: 'Add a /health endpoint',
   })
@@ -53,10 +60,24 @@ describe('home / index', () => {
 
     assert.equal(response.status, 200)
     const html = await response.text()
-    assert.match(html, /What should we build today\?/)
+    // New Hi-Fi headline + composer shape.
+    assert.match(html, /Let's make something\./)
     assert.match(html, /name="prompt"/)
-    assert.match(html, /name="repo"/)
-    assert.match(html, /name="branch"/)
+    // Crumbs chrome with "new app" segment + Back-to-apps link.
+    assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+    assert.match(html, />new app</)
+    assert.match(html, /Back to apps/)
+    // Composer is rendered as a single elevated form with the
+    // .wf-composer recipe.
+    assert.match(html, /<form\b[^>]*\bclass="[^"]*\bwf-composer\b[^"]*"/)
+    // Repo/branch inputs are gone — controller defaults them.
+    assert.doesNotMatch(html, /name="repo"/)
+    assert.doesNotMatch(html, /name="branch"/)
+    // The advanced expander is gone too.
+    assert.doesNotMatch(html, /<details\b/)
+    // Old wireframe copy no longer renders.
+    assert.doesNotMatch(html, /What should we build today/)
+    assert.doesNotMatch(html, /Step 1 of 1/)
   })
 
   it('renders a fresh idempotencyKey on every GET render', async () => {
@@ -104,13 +125,38 @@ describe('home / create', () => {
     const headers = init.headers as Record<string, string>
     assert.equal(headers['Idempotency-Key'], 'idem-test-1')
     const body = JSON.parse(init.body as string)
-    assert.equal(body.repo, 'https://github.com/example/x')
-    assert.equal(body.branch, 'main')
+    // Controller injects DEFAULT_REPO / DEFAULT_BRANCH via
+    // formData.set — repo/branch never come from user input in v1.
+    assert.equal(body.repo, DEFAULT_REPO)
+    assert.equal(body.branch, DEFAULT_BRANCH)
   })
 
-  it('re-renders with status 400 when fields are empty', async () => {
+  it('overrides any user-submitted repo/branch with the server-side defaults', async (t) => {
+    // Belt-and-suspenders: even if a rogue form posts repo/branch,
+    // the controller's formData.set wins. The form no longer
+    // renders these inputs (U4), so this is purely defensive.
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
+      jsonResponse({ sessionId: SID, status: 'Pending' as const }, { status: 201 }),
+    )
+
     const router = createLandingRouter()
-    const empty = new URLSearchParams({ repo: '', branch: '', idempotencyKey: '', prompt: '' })
+    const body = new URLSearchParams({
+      repo: 'https://github.com/rogue/repo',
+      branch: 'rogue-branch',
+      idempotencyKey: 'idem-test-rogue',
+      prompt: 'Make something',
+    })
+    await router.fetch(postForm(body))
+
+    const init = fetchMock.mock.calls[0]!.arguments[1] as RequestInit
+    const upstreamBody = JSON.parse(init.body as string)
+    assert.equal(upstreamBody.repo, DEFAULT_REPO)
+    assert.equal(upstreamBody.branch, DEFAULT_BRANCH)
+  })
+
+  it('re-renders with status 400 when prompt is empty', async () => {
+    const router = createLandingRouter()
+    const empty = new URLSearchParams({ idempotencyKey: '', prompt: '' })
     const response = await router.fetch(postForm(empty))
 
     assert.equal(response.status, 400)
@@ -118,35 +164,34 @@ describe('home / create', () => {
     assert.match(html, /Couldn't start/)
   })
 
-  it('re-renders with status 400 when fields are missing entirely', async () => {
+  it('re-renders with status 400 when prompt is missing entirely', async () => {
     const router = createLandingRouter()
-    const missing = new URLSearchParams({ repo: 'https://github.com/example/x', branch: 'main' })
+    const missing = new URLSearchParams({ idempotencyKey: 'idem-x' })
     const response = await router.fetch(postForm(missing))
 
     assert.equal(response.status, 400)
   })
 
   it('surfaces upstream invalid_request as 400 with an inline error', async (t) => {
+    // The upstream Session API can still reject for reasons
+    // unrelated to repo/branch (rate limits, malformed prompt,
+    // etc.) — the controller's error-handling path stays under
+    // test even though the user can't trigger an upstream
+    // repo-validation error from the UI anymore.
     t.mock.method(globalThis, 'fetch', async () =>
       jsonResponse(
-        { code: 'invalid_request', message: 'repo must be HTTPS' },
+        { code: 'invalid_request', message: 'something else went wrong' },
         { status: 400 },
       ),
     )
 
     const router = createLandingRouter()
-    const body = new URLSearchParams({
-      repo: 'git@github.com:example/x',
-      branch: 'main',
-      idempotencyKey: 'idem-test-2',
-      prompt: 'Build a thing',
-    })
-    const response = await router.fetch(postForm(body))
+    const response = await router.fetch(postForm(validForm()))
 
     assert.equal(response.status, 400)
     const html = await response.text()
     assert.match(html, /Couldn't start/)
-    assert.match(html, /repo must be HTTPS/)
+    assert.match(html, /something else went wrong/)
   })
 
   it('surfaces upstream 503 (k8s_unavailable) as 503 with an inline error', async (t) => {
@@ -163,23 +208,21 @@ describe('home / create', () => {
     assert.match(html, /cluster down/)
   })
 
-  it('preserves the submitted repo / branch / prompt when re-rendering on error', async (t) => {
+  it('preserves the submitted prompt when re-rendering on error', async (t) => {
     t.mock.method(globalThis, 'fetch', async () =>
       jsonResponse({ code: 'invalid_request', message: 'bad' }, { status: 400 }),
     )
 
     const router = createLandingRouter()
     const body = new URLSearchParams({
-      repo: 'https://github.com/example/keep-me',
-      branch: 'develop',
       idempotencyKey: 'idem-test-3',
       prompt: 'Keep this prompt across error renders',
     })
     const response = await router.fetch(postForm(body))
 
     const html = await response.text()
-    assert.match(html, /value="https:\/\/github\.com\/example\/keep-me"/)
-    assert.match(html, /value="develop"/)
+    // repo/branch are not user-supplied in v1; only the prompt
+    // round-trips through previousValues.
     assert.match(html, /Keep this prompt across error renders/)
   })
 
@@ -206,8 +249,6 @@ describe('home / create', () => {
     const router = createLandingRouter()
     const submittedKey = 'idem-stable-1'
     const body = new URLSearchParams({
-      repo: 'https://github.com/example/x',
-      branch: 'main',
       idempotencyKey: submittedKey,
       prompt: 'do the thing',
     })
@@ -217,11 +258,9 @@ describe('home / create', () => {
     assert.equal(extractIdempotencyKey(html), submittedKey)
   })
 
-  it('preserves user-typed values when validation fails on a single empty field', async () => {
+  it('preserves user-typed prompt + idempotencyKey when validation fails on the prompt', async () => {
     const router = createLandingRouter()
     const body = new URLSearchParams({
-      repo: 'https://github.com/example/keep-me',
-      branch: 'develop',
       idempotencyKey: 'idem-keep',
       prompt: '', // only this fails
     })
@@ -229,8 +268,6 @@ describe('home / create', () => {
 
     assert.equal(response.status, 400)
     const html = await response.text()
-    assert.match(html, /value="https:\/\/github\.com\/example\/keep-me"/)
-    assert.match(html, /value="develop"/)
     assert.equal(extractIdempotencyKey(html), 'idem-keep')
   })
 

@@ -58,9 +58,38 @@ describe('blocks.css', () => {
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
+      '.wf-composer',
+      '.wf-composer-bar',
+      '.wf-tool',
+      '.wf-btn-go',
+      '.wf-alt',
+      '.wf-sug',
+      '.wf-livesat',
     ]) {
       assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
     }
+  })
+
+  it('wires the composer focus-within halo and the narrow-viewport bar wrap', () => {
+    const composerBlock = matchBlock(css, '.wf-composer')
+    assert.match(composerBlock, /overflow:\s*hidden/)
+    assert.match(css, /\.wf-composer:focus-within/)
+    assert.match(css, /@media \(max-width:\s*720px\)/)
+  })
+
+  it('the focus-visible composite includes the new tool/go/alt/sug selectors', () => {
+    const focusBlock = css.slice(css.search(/\.wf-btn:focus-visible/))
+    const closing = focusBlock.indexOf('}')
+    const composite = focusBlock.slice(0, closing)
+    for (const sel of ['.wf-tool', '.wf-btn-go', '.wf-alt', '.wf-sug']) {
+      assert.match(composite, new RegExp(escapeRegex(sel) + ':focus-visible'))
+    }
+  })
+
+  it('wf-livesat fades via opacity transition gated by [data-hidden]', () => {
+    const block = matchBlock(css, '.wf-livesat')
+    assert.match(block, /transition:\s*opacity/)
+    assert.match(css, /\.wf-livesat\[data-hidden\]/)
   })
 
   it('declares the breathe and flow keyframes', () => {

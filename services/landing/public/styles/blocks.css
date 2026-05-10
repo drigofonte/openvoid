@@ -137,7 +137,11 @@
 .wf-link:focus-visible,
 .wf-chip:focus-visible,
 button.wf-chip:focus-visible,
-.wf-btn-action:focus-visible {
+.wf-btn-action:focus-visible,
+.wf-tool:focus-visible,
+.wf-btn-go:focus-visible,
+.wf-alt:focus-visible,
+.wf-sug:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -477,6 +481,235 @@ textarea.wf-input {
   height: var(--h-header);
   gap: 14px;
   padding: 0 24px;
+}
+
+/* ── Create-page composer ────────────────────────────────
+ * The composer is an elevated surface that hosts the prompt
+ * textarea and a toolbar band footer. The `:focus-within` halo
+ * mirrors the canonical accent-soft focus ring; `overflow: hidden`
+ * keeps the toolbar band's `--paper-2` background within the
+ * rounded corners. The narrow-viewport rule in the bar lets the
+ * submit button stay reachable on mobile.
+ */
+.wf-composer {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow var(--dur-fast) var(--ease-std);
+}
+.wf-composer:focus-within {
+  box-shadow: var(--shadow-2), 0 0 0 4px var(--accent-soft);
+}
+
+.wf-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 12px 14px 14px 18px;
+  border-top: 1px solid var(--line-2);
+  background: var(--paper-2);
+}
+@media (max-width: 720px) {
+  .wf-composer-bar {
+    flex-wrap: wrap;
+  }
+  .wf-composer-bar .wf-submit-area {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.wf-submit-area {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.wf-submit-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* ── Borderless toolbar tool button ──────────────────────
+ * Distinct from `.wf-chip` (bordered, pill, 22px) and `.wf-btn`
+ * (bordered, 30px, ink fg). Used for the Attach / Stack / DB
+ * decorative tools inside the composer bar. Inner `.wf-tool-key`
+ * span (mono, ink-4) renders the `auto` / `postgres`-style
+ * value next to the label.
+ */
+.wf-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-std);
+}
+.wf-tool:hover {
+  color: var(--ink);
+}
+.wf-tool .wf-tool-key {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ── Submit-action button ("Start session →") ────────────
+ * Distinct from `.wf-btn-action-pri` (7px radius, 12px padding,
+ * no inner-arrow slot). The arrow SVG sits inside the button;
+ * the kbd hint (`⌘ ↵`) lives in a sibling `.wf-submit-area` span,
+ * NOT inside this button.
+ */
+.wf-btn-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--paper);
+  font: var(--fw-semi) 13px/1 var(--font-sans);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-std), opacity var(--dur-fast) var(--ease-std);
+}
+.wf-btn-go:hover {
+  background: oklch(0.10 0.004 60);
+}
+.wf-btn-go[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.wf-btn-go svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Alts row pill button ────────────────────────────────
+ * Distinct from `.wf-chip` (smaller, bordered) and `.wf-btn`
+ * (bordered, ink fg). Used for the four alternative-entry pills
+ * under the composer. v1 ships with `data-coming-soon` and a
+ * `title` tooltip — NOT `disabled`, since `disabled` defeats
+ * `:hover` and the pill row would render visually inert.
+ */
+.wf-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+}
+.wf-alt:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.wf-alt svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ink-3);
+}
+.wf-alt:hover svg {
+  color: var(--ink-2);
+}
+.wf-alt[data-coming-soon] {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* ── Suggestion chip ─────────────────────────────────────
+ * Restyled from the existing `.wf-chip` for the Create page's
+ * "try" row — flat pill on `--paper-2`, with an up-arrow `::before`
+ * glyph rendered from a data-URI SVG (matches the design). Click
+ * fills the prompt textarea via `SuggestionChips` clientEntry.
+ */
+.wf-sug {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+}
+.wf-sug:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.wf-sug::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23898581' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 19V5M5 12l7-7 7 7'/></svg>");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.7;
+}
+.wf-sug:hover::before {
+  opacity: 1;
+}
+
+/* ── Lives-at slug ghost line ────────────────────────────
+ * Inline `<span>`-style tag rendered below the composer
+ * textarea. The wrapper `<div class="wf-livesat">` carries the
+ * `data-hidden` attribute the `DerivedSlug` clientEntry toggles —
+ * the opacity transition lives here so the slug fades in / out
+ * as the user crosses the 8-char threshold.
+ */
+.wf-livesat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 24px 14px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  transition: opacity 0.25s ease;
+}
+.wf-livesat[data-hidden] {
+  opacity: 0;
+  pointer-events: none;
+}
+.wf-livesat .wf-livesat-prefix {
+  color: var(--ink-4);
+}
+.wf-livesat .wf-livesat-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--paper-2);
+  padding: 2px 7px;
+  border-radius: 5px;
 }
 
 /* ── visually hidden (a11y status regions) ──────────────── */

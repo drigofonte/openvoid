@@ -1,30 +1,35 @@
 import { clientEntry, on, css, type Handle } from 'remix/ui'
 
 /**
- * Suggestion-chips clientEntry. Renders the wireframe-faithful
- * chip buttons; on click replaces the prompt textarea's content
- * with the chip text.
+ * Suggestion-chips clientEntry. Renders the Hi-Fi-faithful
+ * suggestion pills below the composer; clicking a pill replaces
+ * the prompt textarea's content with the pill's `fill` text (the
+ * `label` is the chip's visible text — typically a shorter handle
+ * for the longer prompt).
  *
- * "Replace, not append" was the design call (plan §274 Open
- * Questions, deferred to implementation). Cleaner UX: clicking a
- * second chip discards the first, the user is never accidentally
- * stacking unrelated prompts.
+ * "Replace, not append" is the design call: clicking a second pill
+ * discards the first, so users never accidentally stack unrelated
+ * prompts.
  *
- * Targets the textarea by its known id (`#prompt`) — set in
- * `app/actions/home/page.tsx`. After replacing the value the chip
- * dispatches a synthetic `input` event so any future listeners
- * (e.g. validators) see the change.
+ * Targets the textarea by its known id (default `'prompt'`,
+ * overridable via `targetId`) — set in `app/actions/home/page.tsx`.
+ * After replacing the value the chip dispatches a synthetic `input`
+ * event so any sibling clientEntries (auto-grow, derived slug,
+ * start-session-button enable gate) see the change.
  *
- * SSR fallback: the chips are rendered as plain `<button
- * type="button">` elements. Without JS they are inert — no
- * placeholder text — which is acceptable for chips that exist to
- * speed up power users.
+ * SSR fallback: the chips render as plain `<button class="wf-sug">`
+ * elements with the design's `::before` arrow glyph supplied by
+ * the CSS recipe in `blocks.css`. Without JS the chips are inert
+ * — acceptable for chips that exist to speed up power users.
  */
 
 export const SuggestionChips = clientEntry(
   import.meta.url,
   function SuggestionChips(
-    handle: Handle<{ targetId: string; suggestions: string[] }>,
+    handle: Handle<{
+      targetId: string
+      suggestions: Array<{ label: string; fill: string }>
+    }>,
   ) {
     function pickChip(text: string) {
       const textarea = document.getElementById(handle.props.targetId)
@@ -35,18 +40,18 @@ export const SuggestionChips = clientEntry(
     }
 
     return () => (
-      <div class="wf-row" mix={css({ gap: '8px', flexWrap: 'wrap' })}>
-        {handle.props.suggestions.map((text) => (
+      <div class="wf-row" mix={css({ gap: '10px', flexWrap: 'wrap' })}>
+        {handle.props.suggestions.map(({ label, fill }) => (
           <button
             type="button"
-            class="wf-chip"
-            data-suggestion={text}
+            class="wf-sug"
+            data-suggestion={fill}
             mix={[
               css({ cursor: 'pointer' }),
-              on<HTMLButtonElement>('click', () => pickChip(text)),
+              on<HTMLButtonElement>('click', () => pickChip(fill)),
             ]}
           >
-            {text}
+            {label}
           </button>
         ))}
       </div>
