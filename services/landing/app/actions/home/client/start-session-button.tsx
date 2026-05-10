@@ -41,10 +41,15 @@ export const StartSessionButton = clientEntry(
       targetId: string
       label?: string
       pendingLabel?: string
+      initialPrompt?: string
     }>,
   ) {
     let pending = false
-    let disabled = false
+    // Compute initial disabled state from the prop so SSR and the
+    // first hydration render agree — without this, SSR emits the
+    // button enabled (initial closure default) and hydration flips
+    // it disabled, producing a visible black-to-grey flash on load.
+    let disabled = (handle.props.initialPrompt ?? '').length < PROMPT_MIN_LENGTH
 
     function startSubmit() {
       handle.queueTask(() => {
@@ -67,10 +72,6 @@ export const StartSessionButton = clientEntry(
           },
           { signal: handle.signal },
         )
-        // Set the initial state from the SSR-rendered prompt — when
-        // a re-render carries `previousValues.prompt`, the disabled
-        // flag should match the initial value's length.
-        disabled = textarea.value.length < PROMPT_MIN_LENGTH
 
         document.addEventListener(
           'keydown',

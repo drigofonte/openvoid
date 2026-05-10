@@ -3,7 +3,6 @@ import { css } from 'remix/ui'
 import { Avatar } from '../../ui/avatar.tsx'
 import { Layout } from '../../ui/layout.tsx'
 import { Cluster } from '../../ui/layout/cluster.tsx'
-import { Stack } from '../../ui/layout/stack.tsx'
 import { AutoGrowTextarea } from './client/auto-grow-textarea.tsx'
 import { DerivedSlug } from './client/derived-slug.tsx'
 import { StartSessionButton } from './client/start-session-button.tsx'
@@ -74,11 +73,12 @@ export interface HomePageProps {
  * The Create page — redesigned per
  * `docs/designs/Create Prompt Hi-Fi.html`.
  *
- * Composition (matches the layout-primitive learning at
- * `docs/solutions/design-patterns/remix-3-layout-primitive-composition-2026-05-10.md`):
- * banners above an outer max-width wrapper, then a single Stack
- * holding [Hero, Composer, Alts, Suggestions, Footer]. No per-row
- * width plumbing.
+ * Composition: a centered flex column at `var(--w-stage)` max-width
+ * with `align-items: center`. Each child claims its own max-width
+ * (h1 → 760, sub → 560, composer → wrapper-width); per-section
+ * margin-tops compose with the 28px base gap to honor the design's
+ * non-uniform stage rhythm. (Stack's uniform-spacing default doesn't
+ * fit this surface; using flex-column directly.)
  *
  * The form posts `{ prompt, idempotencyKey }`; the controller
  * injects DEFAULT_REPO and DEFAULT_BRANCH server-side via
@@ -101,22 +101,70 @@ export function HomePage() {
     >
       <div
         mix={css({
-          maxWidth: 'var(--w-stage)',
-          marginLeft: 'auto',
-          marginRight: 'auto',
+          // Stage matches the design's `.stage` shape: full-viewport
+          // flex column with items centered horizontally and base
+          // 28px gap. Items carry their own `max-width` (h1: 760,
+          // sub: 560, composer: 760) — the stage itself spans the
+          // viewport (24px padding), so each item centers as a
+          // block within that wider canvas. Capping the stage at
+          // var(--w-stage) here would defeat the per-item
+          // centering: items would simply fill the wrapper instead
+          // of centering within it.
           width: '100%',
           padding: '80px 24px 80px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '28px',
         })}
       >
-        <Stack space="var(--sp-9)">
-          {done ? <DoneBanner done={done} /> : null}
-          {error ? <ActionErrorBanner error={error} /> : null}
-          <Hero />
-          <Composer idempotencyKey={idempotencyKey} previousPrompt={previousValues.prompt} />
+        {done ? <DoneBanner done={done} /> : null}
+        {error ? <ActionErrorBanner error={error} /> : null}
+        <h1
+          mix={css({
+            fontSize: 'var(--fs-display)',
+            lineHeight: 'var(--lh-tight)',
+            letterSpacing: 'var(--ls-display)',
+            fontWeight: 'var(--fw-semi)',
+            margin: 0,
+            color: 'var(--ink)',
+            maxWidth: '760px',
+            // No `width: 100%` on purpose: the block sizes to its
+            // text content (capped by max-width) so the parent's
+            // `align-items: center` actually centers it. Forcing
+            // width: 100% with text-align: left would left-anchor
+            // a short headline like this one inside a 760px block
+            // that fills the page.
+            textAlign: 'left',
+          })}
+        >
+          Let's make something.
+        </h1>
+        <p
+          mix={css({
+            fontSize: '15.5px',
+            color: 'var(--ink)',
+            // margin-top: 14, margin-bottom: 22 per the design's
+            // `.sub` spec; both compose with the parent's 28px gap
+            // (flexbox additive), giving 42px above sub and 50px
+            // below before the composer.
+            margin: '14px 0 22px',
+            maxWidth: '560px',
+            lineHeight: 'var(--lh-normal)',
+            textAlign: 'left',
+          })}
+        >
+          Describe your idea — the agent scaffolds the project, sets up your stack,
+          and opens a chat session you'll keep coming back to.
+        </p>
+        <Composer idempotencyKey={idempotencyKey} previousPrompt={previousValues.prompt} />
+        <div mix={css({ marginTop: '6px' })}>
           <Alts />
+        </div>
+        <div mix={css({ marginTop: '18px' })}>
           <Suggestions />
-          <Footer />
-        </Stack>
+        </div>
+        <Footer />
       </div>
     </Layout>
   )
@@ -160,38 +208,6 @@ function ActionErrorBanner() {
         Couldn't start
       </span>
       <span mix={css({ fontSize: '14px' })}>{error.message}</span>
-    </div>
-  )
-}
-
-function Hero() {
-  return () => (
-    <div mix={css({ maxWidth: 'var(--w-card)', textAlign: 'left' })}>
-      <Stack space="var(--sp-3)">
-        <h1
-          mix={css({
-            fontSize: 'var(--fs-display)',
-            lineHeight: 'var(--lh-tight)',
-            letterSpacing: 'var(--ls-display)',
-            fontWeight: 'var(--fw-semi)',
-            margin: 0,
-            color: 'var(--ink)',
-          })}
-        >
-          Let's make something.
-        </h1>
-        <p
-          mix={css({
-            fontSize: '15.5px',
-            color: 'var(--ink)',
-            margin: 0,
-            lineHeight: 'var(--lh-normal)',
-          })}
-        >
-          Describe your idea — the agent scaffolds the project, sets up your stack,
-          and opens a chat session you'll keep coming back to.
-        </p>
-      </Stack>
     </div>
   )
 }
@@ -261,7 +277,7 @@ function Composer() {
             <span class="wf-keycap">↵</span>
             <span mix={css({ marginLeft: '4px' })}>to start</span>
           </span>
-          <StartSessionButton targetId={PROMPT_ID} />
+          <StartSessionButton targetId={PROMPT_ID} initialPrompt={previousPrompt} />
         </span>
       </div>
       <AutoGrowTextarea targetId={PROMPT_ID} maxHeight={360} />

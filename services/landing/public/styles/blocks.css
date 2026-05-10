@@ -493,6 +493,8 @@ textarea.wf-input {
  */
 .wf-composer {
   position: relative;
+  width: 100%;
+  max-width: var(--w-stage);
   background: var(--card);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);

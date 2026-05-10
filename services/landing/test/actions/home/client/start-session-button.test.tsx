@@ -21,10 +21,22 @@ describe('StartSessionButton (SSR fallback)', () => {
     assert.doesNotMatch(html, /<button[^>]*>[\s\S]*wf-keycap/)
   })
 
-  it('SSR fallback ships the button enabled — no-JS users can submit', async () => {
+  it('SSR with no initialPrompt ships the button disabled — matches the hydrated state to avoid a black-to-grey flash', async () => {
     const html = await renderToString(<StartSessionButton targetId="prompt" />)
-    // No `disabled` attribute on the button at SSR time. Hydration
-    // adds the disable-until-prompt-≥8-chars gate.
+    // SSR's disabled state is computed from initialPrompt length so
+    // first paint matches what hydration would render — no flash.
+    // No-JS users can't submit a too-short prompt anyway; the
+    // server-side CreateSchema validates length.
+    assert.match(html, /<button\b[^>]*\bdisabled\b[^>]*>/)
+  })
+
+  it('SSR with a long-enough initialPrompt ships the button enabled', async () => {
+    const html = await renderToString(
+      <StartSessionButton targetId="prompt" initialPrompt="A weekend planner that pulls events" />,
+    )
+    // After a controller validation re-render with a substantial
+    // previousValues.prompt, the button should be enabled on first
+    // paint (the user already typed enough).
     assert.doesNotMatch(html, /<button\b[^>]*\bdisabled\b[^>]*>/)
   })
 
