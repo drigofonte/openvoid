@@ -200,7 +200,7 @@ function ChatCard() {
         </UrlRow>
         <Cluster justify="flex-start">
           <a
-            class="wf-btn-action wf-btn-action-pri"
+            class="btn-pri"
             href={agentUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -259,7 +259,7 @@ function PreviewCard() {
         </UrlRow>
         <Cluster justify="flex-start">
           <a
-            class="wf-btn-action wf-btn-action-sec"
+            class="btn-sec"
             href={previewUrl}
             target="_blank"
             rel="noopener noreferrer"

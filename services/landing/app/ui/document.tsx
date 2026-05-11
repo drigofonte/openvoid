@@ -37,7 +37,6 @@ const BLOCK_FILES = [
   'animations',
   'app-icon',
   'button',
-  'chip',
   'dot',
   'icon-mark',
   'input',
@@ -48,7 +47,6 @@ const BLOCK_FILES = [
   'skeleton',
   'spinner',
   'surface',
-  'tool',
   'typography',
   'visually-hidden',
   // focus-ring is intentionally last — it depends on selectors

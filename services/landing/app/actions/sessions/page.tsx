@@ -200,7 +200,7 @@ export function SessionNotFoundPage() {
             </p>
           </div>
           <div class="wf-row" mix={css({ gap: '12px', justifyContent: 'flex-end' })}>
-            <a class="wf-btn wf-btn-pri" href="/" mix={css({ textDecoration: 'none' })}>
+            <a class="btn-pri" href="/" mix={css({ textDecoration: 'none' })}>
               Back to start
             </a>
           </div>

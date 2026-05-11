@@ -39,7 +39,7 @@ export function KillConfirm() {
           mix={css({ gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' })}
         >
           <a
-            class="wf-btn wf-btn-ghost"
+            class="btn-ghost"
             href={`/sessions/${sessionId}`}
             mix={css({ textDecoration: 'none' })}
           >
@@ -47,7 +47,7 @@ export function KillConfirm() {
           </a>
           <form method="post" action={`/sessions/${sessionId}`}>
             <input type="hidden" name="intent" value="stop" />
-            <button type="submit" class="wf-btn wf-btn-danger">
+            <button type="submit" class="btn-sec danger">
               Yes, stop & save
             </button>
           </form>

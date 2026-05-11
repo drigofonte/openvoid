@@ -1,58 +1,20 @@
-.wf-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 7px;
-  border: 1px solid var(--wf-line);
-  background: #fff;
-  color: var(--wf-fg);
-  font: 500 12.5px/1 var(--wf-font);
-  cursor: pointer;
-}
-.wf-btn-pri { background: var(--wf-fg); color: #fff; border-color: var(--wf-fg); }
-.wf-btn-acc { background: var(--wf-accent); color: #fff; border-color: var(--wf-accent); }
-.wf-btn-ghost { background: transparent; border-color: transparent; color: var(--wf-fg-muted); }
-.wf-btn-danger { background: #fff; color: var(--wf-danger); border-color: var(--wf-line); }
-.wf-btn:disabled { opacity: 0.6; cursor: default; }
-
 /*
- * Action button — 36px tall, semibold 13px label. Used next to
- * the elevated card variant; primary/secondary partition follows
- * the canonical Tokens recipe (one ink-filled CTA per screen).
+ * Canonical button taxonomy per `docs/designs/OpenVoid Blocks.html`
+ * entries 09–11: three shapes, one purpose each.
+ *
+ *   .btn-pri    36h, ink fill, paper text, br 9. The CTA — one per screen.
+ *   .btn-sec    36h, card fill, inset 1px line, br 9. Pairs with .btn-pri.
+ *   .btn-ghost  30h, transparent, ink-3 text, br --r-sm. Low-priority
+ *               actions; carries the `.tool` semantic alias (the
+ *               canonical doc names this block ".btn-ghost / .tool").
+ *
+ * Paint modifiers:
+ *   .btn-sec.danger    Red text + red border on white card. Used for
+ *                      destructive confirmations (kill-confirm submit).
+ *   .btn-ghost.bd      Bordered ghost — used for inline file-strip
+ *                      "Replace" actions per the canonical recipe.
  */
-.wf-btn-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  height: 36px;
-  padding: 0 var(--sp-5);
-  border-radius: var(--r-sm);
-  font: var(--fw-semi) 13px/1 var(--font-sans);
-  letter-spacing: var(--ls-body);
-  cursor: pointer;
-  border: 1px solid transparent;
-  text-decoration: none;
-}
-.wf-btn-action-pri {
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
-}
-.wf-btn-action-sec {
-  background: var(--card);
-  color: var(--ink);
-  border-color: var(--line);
-}
-
-/* ── Submit-action button ("Start session →") ────────────
- * Distinct from `.wf-btn-action-pri` (7px radius, 12px padding,
- * no inner-arrow slot). The arrow SVG sits inside the button;
- * the kbd hint (`⌘ ↵`) lives in a sibling `.composer-submit-area` span,
- * NOT inside this button.
- */
-.wf-btn-go {
+.btn-pri {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
@@ -65,16 +27,90 @@
   font: var(--fw-semi) 13px/1 var(--font-sans);
   cursor: pointer;
   text-decoration: none;
-  transition: background var(--dur-fast) var(--ease-std), opacity var(--dur-fast) var(--ease-std);
+  transition: background var(--dur-fast) var(--ease-std),
+              opacity var(--dur-fast) var(--ease-std);
 }
-.wf-btn-go:hover {
+.btn-pri:hover {
   background: oklch(0.10 0.004 60);
 }
-.wf-btn-go[disabled] {
+.btn-pri[disabled],
+.btn-pri:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.wf-btn-go svg {
+.btn-pri svg {
   width: 14px;
   height: 14px;
+}
+
+.btn-sec {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: var(--fw-semi) 13px/1 var(--font-sans);
+  cursor: pointer;
+  text-decoration: none;
+  transition: box-shadow var(--dur-fast) var(--ease-std);
+}
+.btn-sec:hover {
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+.btn-sec.danger {
+  color: var(--wf-danger);
+  box-shadow: inset 0 0 0 1px var(--wf-danger);
+}
+.btn-sec.danger:hover {
+  box-shadow: inset 0 0 0 1px var(--wf-danger);
+  background: var(--wf-danger-soft);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-3);
+  font: var(--fw-medium) 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-std),
+              color var(--dur-fast) var(--ease-std);
+}
+.btn-ghost:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.btn-ghost.bd {
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.btn-ghost.bd:hover {
+  background: var(--paper-2);
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+.btn-ghost svg {
+  width: 13px;
+  height: 13px;
+}
+/*
+ * `.tool-key` is the inline mono value next to a label inside a
+ * `.btn-ghost` (e.g., "Stack: auto"). Lives as a descendant rather
+ * than its own block — it has no independent meaning.
+ */
+.btn-ghost .tool-key {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }

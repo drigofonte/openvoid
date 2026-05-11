@@ -1,5 +1,5 @@
 /* ── Alts row pill button ────────────────────────────────
- * Distinct from `.wf-chip` (smaller, bordered) and `.wf-btn`
+ * Distinct from `.btn-pri` / `.btn-sec` / `.btn-ghost`
  * (bordered, ink fg). Used for the four alternative-entry pills
  * under the composer. v1 ships with `data-coming-soon` and a
  * `title` tooltip — NOT `disabled`, since `disabled` defeats

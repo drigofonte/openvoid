@@ -1,8 +1,14 @@
-/* ── Suggestion chip ─────────────────────────────────────
- * Restyled from the existing `.wf-chip` for the Create page's
- * "try" row — flat pill on `--paper-2`, with an up-arrow `::before`
- * glyph rendered from a data-URI SVG (matches the design). Click
- * fills the prompt textarea via `SuggestionChips` clientEntry.
+/*
+ * Suggestion chip — the leaf "chip" inside the canonical Suggested
+ * Prompts Row composition (entry 17 in `docs/designs/OpenVoid
+ * Compositions.html`). Flat pill on `--paper-2`, with an up-arrow
+ * `::before` glyph rendered from a data-URI SVG. Click fills the
+ * prompt textarea via `SuggestionChips` clientEntry.
+ *
+ * Kept under the `wf-` prefix for now — the canonical Compositions
+ * doc names the Row but not its chip leaf. Renaming awaits a
+ * canonical name for the chip itself (or a decision that the Row
+ * composition owns it inline).
  */
 .wf-sug {
   display: inline-flex;

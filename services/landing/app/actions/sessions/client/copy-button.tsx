@@ -3,7 +3,7 @@ import { clientEntry, on, type Handle } from 'remix/ui'
 /**
  * CopyButton — clientEntry that copies a string to the clipboard
  * and briefly flips its label to confirm. Renders as a semantic
- * `<button class="wf-chip">`; without JS the button is focusable
+ * `<button class="btn-ghost">`; without JS the button is focusable
  * but inert (clipboard requires the JS API).
  *
  * Behavior contract:
@@ -58,7 +58,7 @@ export const CopyButton = clientEntry(
       return (
         <button
           type="button"
-          class="wf-chip"
+          class="btn-ghost"
           mix={on<HTMLButtonElement>('click', onCopy)}
         >
           {copied ? copiedLabel : label}

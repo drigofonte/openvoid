@@ -36,28 +36,21 @@ describe('blocks/ + compositions/', () => {
     }
   })
 
-  it('contains the existing wf-* component rules', () => {
+  it('contains the canonical and non-canonical component rules', () => {
     for (const sel of [
+      // Canonical block selectors
+      '.btn-pri',
+      '.btn-sec',
+      '.btn-ghost',
+      '.card-shell',
+      '.composer',
+      '.composer-bar',
+      '.composer-derived',
+      // Non-canonical product extensions (still wf- prefixed)
       '.wf-card',
-      '.wf-btn',
-      '.wf-chip',
       '.wf-keycap',
       '.wf-toolbar',
-      '.kicker',
-      '.wf-mono',
-      '.wf-link',
-    ]) {
-      assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
-    }
-  })
-
-  it('contains the new component recipes the redesign introduces', () => {
-    for (const sel of [
       '.wf-toolbar-tall',
-      '.card-shell',
-      '.wf-btn-action',
-      '.wf-btn-action-pri',
-      '.wf-btn-action-sec',
       '.wf-pill-live',
       '.wf-pill-ready',
       '.wf-pill-dot',
@@ -74,13 +67,12 @@ describe('blocks/ + compositions/', () => {
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
-      '.composer',
-      '.composer-bar',
-      '.wf-tool',
-      '.wf-btn-go',
       '.wf-alt',
       '.wf-sug',
-      '.composer-derived',
+      // Typography utilities
+      '.kicker',
+      '.wf-mono',
+      '.wf-link',
     ]) {
       assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
     }
@@ -94,9 +86,9 @@ describe('blocks/ + compositions/', () => {
     assert.match(composer, /@media \(max-width:\s*720px\)/)
   })
 
-  it('the focus-visible composite includes the new tool/go/alt/sug selectors', () => {
+  it('the focus-visible composite covers canonical buttons and product-extension pills', () => {
     const focusRing = fs.readFileSync(path.join(BLOCKS_DIR, 'focus-ring.css'), 'utf-8')
-    for (const sel of ['.wf-tool', '.wf-btn-go', '.wf-alt', '.wf-sug']) {
+    for (const sel of ['.btn-pri', '.btn-sec', '.btn-ghost', '.wf-alt', '.wf-sug']) {
       assert.match(focusRing, new RegExp(escapeRegex(sel) + ':focus-visible'))
     }
   })
@@ -122,9 +114,9 @@ describe('blocks/ + compositions/', () => {
     assert.match(block, /box-shadow:\s*inset 0 0 0 1px var\(--line\)/)
   })
 
-  it('updates wf-btn:focus-visible to the --focus-ring halo (no 2px outline)', () => {
+  it('the focus-ring composite uses the --focus-ring halo (no 2px outline)', () => {
     const focusRing = fs.readFileSync(path.join(BLOCKS_DIR, 'focus-ring.css'), 'utf-8')
-    const idx = focusRing.search(/\.wf-btn:focus-visible/)
+    const idx = focusRing.search(/\.btn-pri:focus-visible/)
     assert.notEqual(idx, -1)
     const block = focusRing.slice(idx).match(/\{[^}]*\}/)?.[0] ?? ''
     assert.match(block, /box-shadow:\s*var\(--focus-ring\)/)
