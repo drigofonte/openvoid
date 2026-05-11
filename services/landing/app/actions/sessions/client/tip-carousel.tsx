@@ -65,7 +65,7 @@ export const TipCarousel = clientEntry(
         })}
       >
         <div class="wf-col" mix={css({ gap: '8px' })}>
-          <span class="wf-eyebrow">While you wait</span>
+          <span class="kicker">While you wait</span>
           <p mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             {TIPS[index]}
           </p>

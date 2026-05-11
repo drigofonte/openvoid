@@ -1,7 +1,7 @@
 import { css } from 'remix/ui'
 
 import { Card } from '../../../ui/card.tsx'
-import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { Kicker } from '../../../ui/kicker.tsx'
 
 /**
  * Stopping view — wireframe variant 06-B (kill-in-flight)
@@ -22,7 +22,7 @@ export function Stopping() {
     <Card padding="32px">
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
-          <Eyebrow>Stopping</Eyebrow>
+          <Kicker>Stopping</Kicker>
           <h1 tabindex={-1}>Saving and shutting down…</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             Committing the agent's edits to a fresh{' '}

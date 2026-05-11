@@ -166,7 +166,7 @@ function ChatCard() {
             </span>
             <div mix={css({ flex: '1', minWidth: 0 })}>
               <Stack space="var(--sp-2)">
-                <span class="wf-eyebrow" mix={css({ color: 'var(--accent)' })}>
+                <span class="kicker" mix={css({ color: 'var(--accent)' })}>
                   01 · drive
                 </span>
                 <h2
@@ -225,7 +225,7 @@ function PreviewCard() {
             </span>
             <div mix={css({ flex: '1', minWidth: 0 })}>
               <Stack space="var(--sp-2)">
-                <span class="wf-eyebrow" mix={css({ color: 'var(--ink-3)' })}>
+                <span class="kicker" mix={css({ color: 'var(--ink-3)' })}>
                   02 · watch
                 </span>
                 <h2

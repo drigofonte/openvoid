@@ -1,7 +1,7 @@
 import { css } from 'remix/ui'
 
 import { Card } from '../../../ui/card.tsx'
-import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { Kicker } from '../../../ui/kicker.tsx'
 
 /**
  * Failed view — composed from primitives (no dedicated wireframe).
@@ -24,7 +24,7 @@ export function Failed() {
     <Card padding="32px">
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
-          <Eyebrow tone="danger">Provisioning failed</Eyebrow>
+          <Kicker tone="danger">Provisioning failed</Kicker>
           <h1 tabindex={-1}>Couldn't bring up the session</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             {reason

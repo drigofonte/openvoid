@@ -1,7 +1,7 @@
 import { css } from 'remix/ui'
 
 import { Card } from '../../../ui/card.tsx'
-import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { Kicker } from '../../../ui/kicker.tsx'
 
 /**
  * Done (Stopped) view — rendered when the user deep-links to
@@ -22,7 +22,7 @@ export function Done() {
     <Card padding="32px">
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
-          <Eyebrow tone="ok">Saved</Eyebrow>
+          <Kicker tone="ok">Saved</Kicker>
           <h1 tabindex={-1}>This session has been stopped</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             The agent's edits have been pushed to{' '}

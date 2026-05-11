@@ -43,7 +43,7 @@ describe('blocks/ + compositions/', () => {
       '.wf-chip',
       '.wf-keycap',
       '.wf-toolbar',
-      '.wf-eyebrow',
+      '.kicker',
       '.wf-mono',
       '.wf-link',
     ]) {

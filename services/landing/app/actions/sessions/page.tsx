@@ -1,7 +1,7 @@
 import { css } from 'remix/ui'
 
 import { Card } from '../../ui/card.tsx'
-import { Eyebrow } from '../../ui/eyebrow.tsx'
+import { Kicker } from '../../ui/kicker.tsx'
 import { Avatar } from '../../ui/avatar.tsx'
 import { Layout } from '../../ui/layout.tsx'
 import { isTerminal } from '../../utils/poll.ts'
@@ -128,7 +128,7 @@ function ActionErrorBanner() {
         alignItems: 'center',
       })}
     >
-      <span class="wf-eyebrow" mix={css({ color: 'var(--wf-danger)' })}>
+      <span class="kicker" mix={css({ color: 'var(--wf-danger)' })}>
         Couldn't stop
       </span>
       <span mix={css({ fontSize: '14px' })}>{error.message}</span>
@@ -192,7 +192,7 @@ export function SessionNotFoundPage() {
       <Card padding="32px">
         <div class="wf-col" mix={css({ gap: '20px' })}>
           <div class="wf-col" mix={css({ gap: '6px' })}>
-            <Eyebrow tone="danger">Not found</Eyebrow>
+            <Kicker tone="danger">Not found</Kicker>
             <h1 tabindex={-1}>No session with that ID</h1>
             <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
               The session <span class="wf-mono">{sessionId}</span> doesn't

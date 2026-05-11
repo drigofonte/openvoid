@@ -120,7 +120,7 @@ export const StopButton = clientEntry(
             >
               <div class="wf-col" mix={css({ gap: '20px' })}>
                 <div class="wf-col" mix={css({ gap: '6px' })}>
-                  <span class="wf-eyebrow" mix={css({ color: 'var(--wf-danger)' })}>
+                  <span class="kicker" mix={css({ color: 'var(--wf-danger)' })}>
                     Stop session
                   </span>
                   <h2 id="stop-dialog-title">

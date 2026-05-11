@@ -5,7 +5,19 @@
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
-.wf-eyebrow {
+/*
+ * Kicker — a short label that sits above a heading. "Kicker" is
+ * the established journalism / editorial-typography term for this
+ * shape: flat (no background, no padding), uppercase, semi-bold,
+ * letter-spaced, mono-toned. NOT the canonical `.eyebrow` block
+ * (Eyebrow Pill — 24h pill with accent paint and optional dot);
+ * `.eyebrow` is reserved for that canonical recipe.
+ *
+ * Use this for unobtrusive section labels where a pill would feel
+ * heavy or where a custom paint override is needed (danger, muted,
+ * ok) that the canonical pill's two paint variants don't cover.
+ */
+.kicker {
   font: 600 10.5px/1 var(--wf-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;

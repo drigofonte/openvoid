@@ -1,7 +1,7 @@
 import { css } from 'remix/ui'
 
 import { Card } from '../../../ui/card.tsx'
-import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { Kicker } from '../../../ui/kicker.tsx'
 
 /**
  * Kill-confirm view (wireframe variant 06-A simplified).
@@ -24,7 +24,7 @@ export function KillConfirm() {
     <Card padding="32px">
       <div class="wf-col" mix={css({ gap: '20px' })}>
         <div class="wf-col" mix={css({ gap: '6px' })}>
-          <Eyebrow tone="danger">Stop session</Eyebrow>
+          <Kicker tone="danger">Stop session</Kicker>
           <h1 tabindex={-1}>Save your work and shut down?</h1>
           <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
             We'll commit any edits the agent made to a fresh

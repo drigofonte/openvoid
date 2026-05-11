@@ -1,6 +1,6 @@
 import { css } from 'remix/ui'
 
-import { Eyebrow } from '../../../ui/eyebrow.tsx'
+import { Kicker } from '../../../ui/kicker.tsx'
 import { CancelButton } from '../client/cancel-button.tsx'
 import { TipCarousel } from '../client/tip-carousel.tsx'
 
@@ -42,7 +42,7 @@ export function Provisioning() {
         </div>
 
         <div class="wf-col" mix={css({ gap: '12px', alignItems: 'center', maxWidth: '520px' })}>
-          <Eyebrow>Spinning up</Eyebrow>
+          <Kicker>Spinning up</Kicker>
           <h1
             class="wf-mono"
             tabindex={-1}
