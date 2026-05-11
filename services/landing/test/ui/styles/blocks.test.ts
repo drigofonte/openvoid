@@ -48,7 +48,7 @@ describe('blocks/ + compositions/', () => {
       '.composer-derived',
       // Non-canonical product extensions (still wf- prefixed)
       '.wf-card',
-      '.wf-keycap',
+      '.kbd',
       '.wf-toolbar',
       '.wf-toolbar-tall',
       '.wf-pill-live',
@@ -105,13 +105,18 @@ describe('blocks/ + compositions/', () => {
     assert.match(css, /@keyframes\s+flow\s*\{/)
   })
 
-  it('updates wf-keycap to the canonical Tokens .kbd recipe (20px tall, --r-xs, paper-2 bg)', () => {
-    const keycap = fs.readFileSync(path.join(BLOCKS_DIR, 'keycap.css'), 'utf-8')
-    const block = matchBlock(keycap, '.wf-keycap')
+  it('the canonical .kbd recipe is 20px tall on --paper-2 with an inset line', () => {
+    const kbd = fs.readFileSync(path.join(BLOCKS_DIR, 'kbd.css'), 'utf-8')
+    const block = matchBlock(kbd, '.kbd')
     assert.match(block, /height:\s*20px/)
     assert.match(block, /border-radius:\s*var\(--r-xs\)/)
     assert.match(block, /background:\s*var\(--paper-2\)/)
     assert.match(block, /box-shadow:\s*inset 0 0 0 1px var\(--line\)/)
+  })
+
+  it('.kbd.dark is for ink-background nesting (translucent white-on-ink)', () => {
+    const kbd = fs.readFileSync(path.join(BLOCKS_DIR, 'kbd.css'), 'utf-8')
+    assert.match(kbd, /\.kbd\.dark\s*\{/)
   })
 
   it('the focus-ring composite uses the --focus-ring halo (no 2px outline)', () => {

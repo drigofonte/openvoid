@@ -18,7 +18,7 @@ describe('StartSessionButton (SSR fallback)', () => {
     const html = await renderToString(<StartSessionButton targetId="prompt" />)
     // No <kbd> children, no keycap inside
     assert.doesNotMatch(html, /<button[^>]*>[\s\S]*<kbd/)
-    assert.doesNotMatch(html, /<button[^>]*>[\s\S]*wf-keycap/)
+    assert.doesNotMatch(html, /<button[^>]*>[\s\S]*\bkbd\b/)
   })
 
   it('SSR with no initialPrompt ships the button disabled — matches the hydrated state to avoid a black-to-grey flash', async () => {

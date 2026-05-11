@@ -25,9 +25,9 @@ export const ShortcutHint = clientEntry(
     }
     return () => (
       <span class="wf-row" mix={css({ gap: '2px' })}>
-        <span class="wf-keycap">{isMac ? '⌘' : 'Ctrl'}</span>
-        <span class="wf-keycap">⇧</span>
-        <span class="wf-keycap">{handle.props.digit}</span>
+        <span class="kbd">{isMac ? '⌘' : 'Ctrl'}</span>
+        <span class="kbd">⇧</span>
+        <span class="kbd">{handle.props.digit}</span>
       </span>
     )
   },

@@ -273,8 +273,8 @@ function Composer() {
         </Cluster>
         <span class="composer-submit-area">
           <span class="composer-submit-hint">
-            <span class="wf-keycap">⌘</span>
-            <span class="wf-keycap">↵</span>
+            <span class="kbd">⌘</span>
+            <span class="kbd">↵</span>
             <span mix={css({ marginLeft: '4px' })}>to start</span>
           </span>
           <StartSessionButton targetId={PROMPT_ID} initialPrompt={previousPrompt} />

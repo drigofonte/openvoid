@@ -40,7 +40,7 @@ const BLOCK_FILES = [
   'dot',
   'field',
   'icon-mark',
-  'keycap',
+  'kbd',
   'layout',
   'pill',
   'progress',
