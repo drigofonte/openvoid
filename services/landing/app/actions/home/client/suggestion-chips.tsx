@@ -19,7 +19,7 @@ import { clientEntry, on, css, type Handle } from 'remix/ui'
  *
  * SSR fallback: the chips render as plain `<button class="wf-sug">`
  * elements with the design's `::before` arrow glyph supplied by
- * the CSS recipe in `blocks/suggestion.css`. Without JS the chips are inert
+ * the CSS recipe in `compositions/suggestion.css`. Without JS the chips are inert
  * — acceptable for chips that exist to speed up power users.
  */
 

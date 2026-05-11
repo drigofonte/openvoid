@@ -11,6 +11,7 @@ const STYLE_LINK_ORDER = [
   '/styles/composition.css',
   '/styles/blocks/layout.css',
   '/styles/blocks/focus-ring.css',
+  '/styles/compositions/composer.css',
   '/styles/exceptions.css',
 ] as const
 
@@ -46,6 +47,40 @@ describe('Document', () => {
         `block file ${m[1]} should load before focus-ring`,
       )
     }
+  })
+
+  it('loads every compositions/*.css after the last blocks/*.css and before exceptions.css', async () => {
+    // The OpenVoid composition tier (Composer, Cards, Connector, etc.)
+    // assembles blocks. Loading after blocks lets a composition override
+    // a block default without `!important`. Loading before exceptions
+    // preserves the data-attribute variant layer's last-word.
+    const html = await renderToString(<Document title="x">hi</Document>)
+    const exceptions = html.indexOf('href="/styles/exceptions.css"')
+    assert.ok(exceptions > 0, 'expected exceptions.css link')
+
+    const blocksRe = /href="\/styles\/blocks\/([^"]+)\.css"/g
+    let lastBlock = -1
+    let bm: RegExpExecArray | null
+    while ((bm = blocksRe.exec(html)) !== null) {
+      lastBlock = bm.index
+    }
+    assert.ok(lastBlock > 0, 'expected at least one blocks/*.css link')
+
+    const compsRe = /href="\/styles\/compositions\/([^"]+)\.css"/g
+    let firstComp = -1
+    let cm: RegExpExecArray | null
+    while ((cm = compsRe.exec(html)) !== null) {
+      if (firstComp === -1) firstComp = cm.index
+      assert.ok(
+        cm.index > lastBlock,
+        `composition file ${cm[1]} must load after the last blocks/*.css`,
+      )
+      assert.ok(
+        cm.index < exceptions,
+        `composition file ${cm[1]} must load before exceptions.css`,
+      )
+    }
+    assert.ok(firstComp > 0, 'expected at least one compositions/*.css link')
   })
 
   it('does not inline composition CSS — composition.css is now a static <link>', async () => {

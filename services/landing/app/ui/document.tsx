@@ -8,12 +8,17 @@ export interface DocumentProps {
 /**
  * The HTML shell. Loads CSS in CUBE-canonical cascade order:
  *
- *   1. utopia.css      — substrate (Utopia fluid type/space scales)
- *   2. tokens.css      — substrate (OpenVoid semantic tokens + wf-* aliases)
- *   3. global.css      — reset / globals
- *   4. composition.css — CUBE Composition layer (Every Layout primitives)
- *   5. blocks/*.css    — CUBE Block layer, one file per component
- *   6. exceptions.css  — CUBE Exception layer (data-attribute variants)
+ *   1. utopia.css       — substrate (Utopia fluid type/space scales)
+ *   2. tokens.css       — substrate (OpenVoid semantic tokens + wf-* aliases)
+ *   3. global.css       — reset / globals
+ *   4. composition.css  — CUBE Composition layer (Every Layout primitives)
+ *   5. blocks/*.css     — CUBE Block layer, one file per component
+ *   6. compositions/*.css — OpenVoid composition tier (assemblies of blocks:
+ *                         Composer, Cards, Connector, etc.). Loaded after
+ *                         blocks so a composition can override a block
+ *                         default without `!important`. NOT the same as
+ *                         the singular `composition.css` above.
+ *   7. exceptions.css   — CUBE Exception layer (data-attribute variants)
  *
  * File-import order is the cascade-control mechanism (no
  * `@layer` directives required) — see Andy Bell's CUBE
@@ -30,32 +35,35 @@ export interface DocumentProps {
 const BLOCK_FILES = [
   'alt',
   'animations',
-  'app-icon',
   'button',
   'chip',
-  'composer',
-  'connector',
   'dot',
-  'icon-mark',
   'input',
   'keycap',
   'layout',
-  'livesat',
   'pill',
+  'tool',
+  'typography',
+  'visually-hidden',
+  // focus-ring is intentionally last — it depends on selectors
+  // declared in many of the files above.
+  'focus-ring',
+] as const
+
+const COMPOSITION_FILES = [
+  'app-icon',
+  'composer',
+  'connector',
+  'icon-mark',
+  'livesat',
   'progress',
   'skeleton',
   'spinner',
   'split-tip',
   'suggestion',
   'surface',
-  'tool',
   'toolbar',
-  'typography',
   'url-row',
-  'visually-hidden',
-  // focus-ring is intentionally last — it depends on selectors
-  // declared in many of the files above.
-  'focus-ring',
 ] as const
 
 export function Document() {
@@ -77,6 +85,9 @@ export function Document() {
         <link rel="stylesheet" href="/styles/composition.css" />
         {BLOCK_FILES.map((name) => (
           <link key={name} rel="stylesheet" href={`/styles/blocks/${name}.css`} />
+        ))}
+        {COMPOSITION_FILES.map((name) => (
+          <link key={name} rel="stylesheet" href={`/styles/compositions/${name}.css`} />
         ))}
         <link rel="stylesheet" href="/styles/exceptions.css" />
         <script type="module" src="/_rmx/app/assets/run.ts" />

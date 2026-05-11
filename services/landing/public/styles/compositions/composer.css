@@ -1,4 +1,11 @@
 /*
+ * NOTE on naming: this file lives in `public/styles/compositions/`
+ * (plural — OpenVoid composition tier: assemblies of blocks like the
+ * Composer, Cards, Connector). Its sibling `public/styles/composition.css`
+ * (singular — CUBE Composition layer: layout primitives like .stack,
+ * .cluster, .grid) is a different concept loaded earlier in the cascade.
+ * See README's styles tree for the load order.
+ *
  * The composer is an elevated surface that hosts the prompt
  * textarea and a toolbar band footer. The `:focus-within` halo
  * mirrors the canonical accent-soft focus ring; `overflow: hidden`

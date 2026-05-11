@@ -83,14 +83,18 @@ services/landing/
 │   ├── render.tsx             # renderToStream → HTMLResponse helper
 │   ├── routes.ts              # typed route table
 │   └── router.ts              # createRouter() + middleware
-├── public/styles/             # CUBE-layered CSS (utopia → tokens → global → composition → blocks → exceptions)
+├── public/styles/             # CUBE-layered CSS (utopia → tokens → global → composition → blocks → compositions → exceptions)
 │   ├── utopia.css             # substrate — Utopia fluid type/space scales
 │   ├── tokens.css             # substrate — OpenVoid semantic tokens + wf-* aliases
 │   ├── global.css             # element resets, body bg, typography
-│   ├── composition.css        # CUBE Composition layer (Every Layout primitives)
+│   ├── composition.css        # CUBE Composition layer — singular (Every Layout primitives: stack, cluster, grid)
 │   ├── blocks/                # CUBE Block layer — one .wf-* component per file
 │   │   ├── button.css         # (focus-ring.css loads last so its
 │   │   ├── chip.css           #  :focus-visible composite wins)
+│   │   └── …
+│   ├── compositions/          # OpenVoid composition tier — plural (assemblies of blocks: Composer, Cards, Connector)
+│   │   ├── composer.css       # loaded after blocks/ so a composition can override
+│   │   ├── connector.css      # a block default without `!important`
 │   │   └── …
 │   └── exceptions.css         # CUBE Exception layer (data-attribute variants)
 ├── server.ts                  # http server bootstrap

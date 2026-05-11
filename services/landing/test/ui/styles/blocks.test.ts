@@ -9,26 +9,30 @@ const STYLES_DIR = path.resolve(
   '../../../public/styles',
 )
 const BLOCKS_DIR = path.join(STYLES_DIR, 'blocks')
+const COMPOSITIONS_DIR = path.join(STYLES_DIR, 'compositions')
 
-// Selectors now live across many files under blocks/. For
-// content-level assertions we read the directory and concatenate.
-const blockFiles = fs
-  .readdirSync(BLOCKS_DIR)
-  .filter((f) => f.endsWith('.css'))
-  .sort()
-const css = blockFiles
-  .map((f) => fs.readFileSync(path.join(BLOCKS_DIR, f), 'utf-8'))
-  .join('\n')
+// Selectors live across many files under blocks/ AND compositions/.
+// For content-level assertions we read both directories and concatenate.
+function readDir(dir: string): { name: string; body: string }[] {
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.css'))
+    .sort()
+    .map((f) => ({ name: f, body: fs.readFileSync(path.join(dir, f), 'utf-8') }))
+}
 
-describe('blocks/', () => {
+const blockFiles = readDir(BLOCKS_DIR)
+const compositionFiles = readDir(COMPOSITIONS_DIR)
+const css = [...blockFiles, ...compositionFiles].map((f) => f.body).join('\n')
+
+describe('blocks/ + compositions/', () => {
   it('the legacy single-file blocks.css is gone', () => {
     assert.equal(fs.existsSync(path.join(STYLES_DIR, 'blocks.css')), false)
   })
 
-  it('no block file declares a :root token block (tokens belong in tokens.css)', () => {
-    for (const f of blockFiles) {
-      const body = fs.readFileSync(path.join(BLOCKS_DIR, f), 'utf-8')
-      assert.doesNotMatch(body, /:root\s*\{/, `${f} must not declare :root`)
+  it('no block or composition file declares a :root token block (tokens belong in tokens.css)', () => {
+    for (const { name, body } of [...blockFiles, ...compositionFiles]) {
+      assert.doesNotMatch(body, /:root\s*\{/, `${name} must not declare :root`)
     }
   })
 
@@ -83,7 +87,7 @@ describe('blocks/', () => {
   })
 
   it('wires the composer focus-within halo and the narrow-viewport bar wrap', () => {
-    const composer = fs.readFileSync(path.join(BLOCKS_DIR, 'composer.css'), 'utf-8')
+    const composer = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'composer.css'), 'utf-8')
     const composerBlock = matchBlock(composer, '.wf-composer')
     assert.match(composerBlock, /overflow:\s*hidden/)
     assert.match(composer, /\.wf-composer:focus-within/)
@@ -98,7 +102,7 @@ describe('blocks/', () => {
   })
 
   it('wf-livesat fades via opacity transition gated by [data-hidden]', () => {
-    const livesat = fs.readFileSync(path.join(BLOCKS_DIR, 'livesat.css'), 'utf-8')
+    const livesat = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'livesat.css'), 'utf-8')
     const block = matchBlock(livesat, '.wf-livesat')
     assert.match(block, /transition:\s*opacity/)
     assert.match(livesat, /\.wf-livesat\[data-hidden\]/)
@@ -125,6 +129,51 @@ describe('blocks/', () => {
     const block = focusRing.slice(idx).match(/\{[^}]*\}/)?.[0] ?? ''
     assert.match(block, /box-shadow:\s*var\(--focus-ring\)/)
     assert.doesNotMatch(block, /outline:\s*2px solid/)
+  })
+
+  it('compositions/ holds the 13 composition-shaped files split out from blocks/', () => {
+    const expected = [
+      'app-icon.css',
+      'composer.css',
+      'connector.css',
+      'icon-mark.css',
+      'livesat.css',
+      'progress.css',
+      'skeleton.css',
+      'spinner.css',
+      'split-tip.css',
+      'suggestion.css',
+      'surface.css',
+      'toolbar.css',
+      'url-row.css',
+    ]
+    const actual = compositionFiles.map((f) => f.name)
+    assert.deepEqual(actual, expected)
+  })
+
+  it('blocks/ no longer holds files that belong in compositions/', () => {
+    const blockNames = blockFiles.map((f) => f.name)
+    for (const moved of [
+      'app-icon.css',
+      'composer.css',
+      'connector.css',
+      'icon-mark.css',
+      'livesat.css',
+      'progress.css',
+      'skeleton.css',
+      'spinner.css',
+      'split-tip.css',
+      'suggestion.css',
+      'surface.css',
+      'toolbar.css',
+      'url-row.css',
+    ]) {
+      assert.equal(
+        blockNames.includes(moved),
+        false,
+        `${moved} should have moved to compositions/`,
+      )
+    }
   })
 })
 
