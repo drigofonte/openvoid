@@ -95,8 +95,8 @@ function Hero() {
     >
       <Stack space="var(--sp-6)">
         <div mix={css({ display: 'flex', justifyContent: 'center' })}>
-          <span class="wf-pill-ready">
-            <span class="wf-pill-dot" />
+          <span class="pill live">
+            <span class="d" />
             Sandbox ready
           </span>
         </div>
@@ -200,7 +200,7 @@ function ChatCard() {
         </UrlRow>
         <Cluster justify="flex-start">
           <a
-            class="wf-btn-action wf-btn-action-pri"
+            class="btn-pri"
             href={agentUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -259,7 +259,7 @@ function PreviewCard() {
         </UrlRow>
         <Cluster justify="flex-start">
           <a
-            class="wf-btn-action wf-btn-action-sec"
+            class="btn-sec"
             href={previewUrl}
             target="_blank"
             rel="noopener noreferrer"

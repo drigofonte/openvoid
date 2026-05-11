@@ -86,8 +86,8 @@ export function SessionPage() {
 function HeaderSlot() {
   return () => (
     <div class="wf-row" mix={css({ gap: 'var(--sp-5)' })}>
-      <span class="wf-pill-live">
-        <span class="wf-pill-dot wf-pill-dot-breathe" />
+      <span class="pill live">
+        <span class="d pulse" />
         Session live
       </span>
       <Avatar />
@@ -200,7 +200,7 @@ export function SessionNotFoundPage() {
             </p>
           </div>
           <div class="wf-row" mix={css({ gap: '12px', justifyContent: 'flex-end' })}>
-            <a class="wf-btn wf-btn-pri" href="/" mix={css({ textDecoration: 'none' })}>
+            <a class="btn-pri" href="/" mix={css({ textDecoration: 'none' })}>
               Back to start
             </a>
           </div>

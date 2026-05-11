@@ -88,13 +88,17 @@ services/landing/
 │   ├── tokens.css             # substrate — OpenVoid semantic tokens + wf-* aliases
 │   ├── global.css             # element resets, body bg, typography
 │   ├── composition.css        # CUBE Composition layer — singular (Every Layout primitives: stack, cluster, grid)
-│   ├── blocks/                # CUBE Block layer — leaf components and display primitives
-│   │   ├── button.css         # (focus-ring.css loads last so its
-│   │   ├── chip.css           #  :focus-visible composite wins)
-│   │   ├── app-icon.css       # leaf display primitives reclassified
-│   │   ├── icon-mark.css      # back from compositions/ in PR alignment cycle 2
+│   ├── blocks/                # CUBE Block layer — canonical blocks + leaf primitives
+│   │   ├── button.css         # canonical .btn-pri / .btn-sec / .btn-ghost (entries 09–11)
+│   │   ├── field.css          # canonical .field (entry 13)
+│   │   ├── kbd.css            # canonical .kbd + .kbd.dark (entry 14)
+│   │   ├── pill.css           # canonical .pill / .pill.live / .pill.prod (entry 12)
+│   │   ├── alt.css            # canonical .alt / .alt.on (entry 11)
+│   │   ├── app-icon.css       # leaf display primitives (still wf-* —
+│   │   ├── icon-mark.css      #  no canonical Blocks-doc counterparts)
 │   │   ├── spinner.css
 │   │   ├── …
+│   │   ├── typography.css     # .kicker (canonical typography helper) + .wf-mono, .wf-link, …
 │   │   └── focus-ring.css     # cross-cutting :focus-visible composite (loads last)
 │   ├── compositions/          # OpenVoid composition tier — assemblies of blocks
 │   │   ├── card-shell.css     # canonical Card Shell (entry 07)

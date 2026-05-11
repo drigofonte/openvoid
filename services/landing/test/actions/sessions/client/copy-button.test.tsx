@@ -5,10 +5,10 @@ import { renderToString } from 'remix/ui/server'
 import { CopyButton } from '../../../../app/actions/sessions/client/copy-button.tsx'
 
 describe('CopyButton (SSR fallback)', () => {
-  it('renders a focusable wf-chip button with the default "Copy" label', async () => {
+  it('renders a focusable btn-ghost button with the default "Copy" label', async () => {
     const html = await renderToString(<CopyButton value="https://x" />)
     assert.match(html, /<button\b[^>]*\btype="button"[^>]*>/)
-    assert.match(html, /<button\b[^>]*\bclass="wf-chip"[^>]*>/)
+    assert.match(html, /<button\b[^>]*\bclass="btn-ghost"[^>]*>/)
     assert.match(html, />Copy</)
   })
 

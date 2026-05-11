@@ -36,31 +36,24 @@ describe('blocks/ + compositions/', () => {
     }
   })
 
-  it('contains the existing wf-* component rules', () => {
+  it('contains the canonical and non-canonical component rules', () => {
     for (const sel of [
-      '.wf-card',
-      '.wf-btn',
-      '.wf-chip',
-      '.wf-keycap',
-      '.wf-toolbar',
-      '.kicker',
-      '.wf-mono',
-      '.wf-link',
-    ]) {
-      assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
-    }
-  })
-
-  it('contains the new component recipes the redesign introduces', () => {
-    for (const sel of [
-      '.wf-toolbar-tall',
+      // Canonical block selectors
+      '.btn-pri',
+      '.btn-sec',
+      '.btn-ghost',
       '.card-shell',
-      '.wf-btn-action',
-      '.wf-btn-action-pri',
-      '.wf-btn-action-sec',
-      '.wf-pill-live',
-      '.wf-pill-ready',
-      '.wf-pill-dot',
+      '.composer',
+      '.composer-bar',
+      '.composer-derived',
+      // Non-canonical product extensions (still wf- prefixed)
+      '.wf-card',
+      '.kbd',
+      '.wf-toolbar',
+      '.wf-toolbar-tall',
+      '.pill',
+      '.pill.live',
+      '.pill.prod',
       '.wf-icon-mark',
       '.wf-icon-mark-dark',
       '.wf-icon-mark-line',
@@ -74,13 +67,13 @@ describe('blocks/ + compositions/', () => {
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
-      '.composer',
-      '.composer-bar',
-      '.wf-tool',
-      '.wf-btn-go',
-      '.wf-alt',
+      '.alt',
+      '.alt.on',
       '.wf-sug',
-      '.composer-derived',
+      // Typography utilities
+      '.kicker',
+      '.wf-mono',
+      '.wf-link',
     ]) {
       assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
     }
@@ -94,9 +87,9 @@ describe('blocks/ + compositions/', () => {
     assert.match(composer, /@media \(max-width:\s*720px\)/)
   })
 
-  it('the focus-visible composite includes the new tool/go/alt/sug selectors', () => {
+  it('the focus-visible composite covers canonical buttons and product-extension pills', () => {
     const focusRing = fs.readFileSync(path.join(BLOCKS_DIR, 'focus-ring.css'), 'utf-8')
-    for (const sel of ['.wf-tool', '.wf-btn-go', '.wf-alt', '.wf-sug']) {
+    for (const sel of ['.btn-pri', '.btn-sec', '.btn-ghost', '.alt', '.wf-sug']) {
       assert.match(focusRing, new RegExp(escapeRegex(sel) + ':focus-visible'))
     }
   })
@@ -113,18 +106,23 @@ describe('blocks/ + compositions/', () => {
     assert.match(css, /@keyframes\s+flow\s*\{/)
   })
 
-  it('updates wf-keycap to the canonical Tokens .kbd recipe (20px tall, --r-xs, paper-2 bg)', () => {
-    const keycap = fs.readFileSync(path.join(BLOCKS_DIR, 'keycap.css'), 'utf-8')
-    const block = matchBlock(keycap, '.wf-keycap')
+  it('the canonical .kbd recipe is 20px tall on --paper-2 with an inset line', () => {
+    const kbd = fs.readFileSync(path.join(BLOCKS_DIR, 'kbd.css'), 'utf-8')
+    const block = matchBlock(kbd, '.kbd')
     assert.match(block, /height:\s*20px/)
     assert.match(block, /border-radius:\s*var\(--r-xs\)/)
     assert.match(block, /background:\s*var\(--paper-2\)/)
     assert.match(block, /box-shadow:\s*inset 0 0 0 1px var\(--line\)/)
   })
 
-  it('updates wf-btn:focus-visible to the --focus-ring halo (no 2px outline)', () => {
+  it('.kbd.dark is for ink-background nesting (translucent white-on-ink)', () => {
+    const kbd = fs.readFileSync(path.join(BLOCKS_DIR, 'kbd.css'), 'utf-8')
+    assert.match(kbd, /\.kbd\.dark\s*\{/)
+  })
+
+  it('the focus-ring composite uses the --focus-ring halo (no 2px outline)', () => {
     const focusRing = fs.readFileSync(path.join(BLOCKS_DIR, 'focus-ring.css'), 'utf-8')
-    const idx = focusRing.search(/\.wf-btn:focus-visible/)
+    const idx = focusRing.search(/\.btn-pri:focus-visible/)
     assert.notEqual(idx, -1)
     const block = focusRing.slice(idx).match(/\{[^}]*\}/)?.[0] ?? ''
     assert.match(block, /box-shadow:\s*var\(--focus-ring\)/)

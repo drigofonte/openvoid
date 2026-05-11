@@ -142,7 +142,7 @@ export const StopButton = clientEntry(
                 >
                   <button
                     type="button"
-                    class="wf-btn wf-btn-ghost"
+                    class="btn-ghost"
                     disabled={submitting || undefined}
                     mix={on<HTMLElement>('click', closeDialog)}
                   >
@@ -156,7 +156,7 @@ export const StopButton = clientEntry(
                     <input type="hidden" name="intent" value="stop" />
                     <button
                       type="submit"
-                      class="wf-btn wf-btn-danger"
+                      class="btn-sec danger"
                       disabled={submitting || undefined}
                       data-stop-confirm
                     >

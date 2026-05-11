@@ -32,7 +32,7 @@ export function Done() {
         </div>
 
         <div class="wf-row" mix={css({ gap: '12px', justifyContent: 'flex-end' })}>
-          <a class="wf-btn wf-btn-pri" href="/" mix={css({ textDecoration: 'none' })}>
+          <a class="btn-pri" href="/" mix={css({ textDecoration: 'none' })}>
             Start another
           </a>
         </div>

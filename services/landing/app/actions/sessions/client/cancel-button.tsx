@@ -39,7 +39,7 @@ export const CancelButton = clientEntry(
         <input type="hidden" name="intent" value="cancel" />
         <button
           type="submit"
-          class="wf-btn wf-btn-ghost"
+          class="btn-ghost"
           disabled={submitting || undefined}
         >
           {submitting ? 'Cancelling…' : 'Cancel'}

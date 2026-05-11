@@ -5,10 +5,10 @@ import { renderToString } from 'remix/ui/server'
 import { StartSessionButton } from '../../../../app/actions/home/client/start-session-button.tsx'
 
 describe('StartSessionButton (SSR fallback)', () => {
-  it('renders <button class="wf-btn-go" type="submit"> with the default label and arrow SVG', async () => {
+  it('renders <button class="btn-pri" type="submit"> with the default label and arrow SVG', async () => {
     const html = await renderToString(<StartSessionButton targetId="prompt" />)
     assert.match(html, /<button\b[^>]*\btype="submit"[^>]*>/)
-    assert.match(html, /<button\b[^>]*\bclass="[^"]*\bwf-btn-go\b[^"]*"[^>]*>/)
+    assert.match(html, /<button\b[^>]*\bclass="[^"]*\bbtn-pri\b[^"]*"[^>]*>/)
     assert.match(html, />Start session</)
     // Arrow SVG sits inside the button
     assert.match(html, /M5 12h14M13 5l7 7-7 7/)
@@ -16,9 +16,9 @@ describe('StartSessionButton (SSR fallback)', () => {
 
   it('does not emit kbd glyphs inside the button — kbd lives in the sibling submit-area', async () => {
     const html = await renderToString(<StartSessionButton targetId="prompt" />)
-    // No <kbd> children, no .wf-keycap inside
+    // No <kbd> children, no keycap inside
     assert.doesNotMatch(html, /<button[^>]*>[\s\S]*<kbd/)
-    assert.doesNotMatch(html, /<button[^>]*>[\s\S]*wf-keycap/)
+    assert.doesNotMatch(html, /<button[^>]*>[\s\S]*\bkbd\b/)
   })
 
   it('SSR with no initialPrompt ships the button disabled — matches the hydrated state to avoid a black-to-grey flash', async () => {

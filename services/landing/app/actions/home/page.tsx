@@ -258,23 +258,23 @@ function Composer() {
       <DerivedSlug targetId={PROMPT_ID} slugId={SLUG_ID} wrapperId={SLUG_WRAPPER_ID} />
       <div class="composer-bar">
         <Cluster space="var(--sp-3)">
-          <button type="button" class="wf-tool" title="Coming soon">
+          <button type="button" class="btn-ghost" title="Coming soon">
             <Glyph d="M21 11.5l-8.5 8.5a5 5 0 1 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L11 17a2 2 0 1 1-3-3l7-7" />
             Attach
           </button>
-          <button type="button" class="wf-tool" title="Coming soon">
+          <button type="button" class="btn-ghost" title="Coming soon">
             <Glyph d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 18l9 5 9-5" />
-            Stack: <span class="wf-tool-key">auto</span>
+            Stack: <span class="tool-key">auto</span>
           </button>
-          <button type="button" class="wf-tool" title="Coming soon">
+          <button type="button" class="btn-ghost" title="Coming soon">
             <Glyph d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
-            DB: <span class="wf-tool-key">postgres</span>
+            DB: <span class="tool-key">postgres</span>
           </button>
         </Cluster>
         <span class="composer-submit-area">
           <span class="composer-submit-hint">
-            <span class="wf-keycap">⌘</span>
-            <span class="wf-keycap">↵</span>
+            <span class="kbd">⌘</span>
+            <span class="kbd">↵</span>
             <span mix={css({ marginLeft: '4px' })}>to start</span>
           </span>
           <StartSessionButton targetId={PROMPT_ID} initialPrompt={previousPrompt} />
@@ -289,7 +289,7 @@ function Alts() {
   return () => (
     <Cluster space="var(--sp-3)" justify="center">
       {ALTS.map((alt) => (
-        <button type="button" class="wf-alt" data-coming-soon="" title="Coming soon">
+        <button type="button" class="alt" data-coming-soon="" title="Coming soon">
           <Glyph d={alt.d} size={13} />
           {alt.label}
         </button>

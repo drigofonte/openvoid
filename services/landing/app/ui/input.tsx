@@ -16,7 +16,7 @@ export interface InputProps {
 
 /**
  * Text input — renders the canonical `.field` shape via the
- * `.wf-input` block (36h, --r-sm radius, --card bg, inset 1px
+ * `.field` block (36h, --r-sm radius, --card bg, inset 1px
  * line, accent halo on focus).
  *
  * `defaultValue` becomes the `value=` HTML attribute (the
@@ -37,7 +37,7 @@ export function Input() {
     if (type === 'url') {
       return (
         <input
-          class="wf-input"
+          class="field"
           id={id}
           name={name}
           type="url"
@@ -51,7 +51,7 @@ export function Input() {
     if (type === 'email') {
       return (
         <input
-          class="wf-input"
+          class="field"
           id={id}
           name={name}
           type="email"
@@ -64,7 +64,7 @@ export function Input() {
     }
     return (
       <input
-        class="wf-input"
+        class="field"
         id={id}
         name={name}
         type="text"

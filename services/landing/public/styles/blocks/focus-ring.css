@@ -4,19 +4,21 @@
  * so mouse-down on a button doesn't draw the ring; only keyboard /
  * programmatic focus does.
  *
- * Cross-cutting: targets selectors defined in button.css, chip.css,
- * tool.css, alt.css, suggestion.css, and typography.css. Loaded
- * last among blocks/ so its specificity wins regardless of source
- * file order.
+ * Cross-cutting: targets canonical button selectors (.btn-pri,
+ * .btn-sec, .btn-ghost), canonical .alt, typography links, and
+ * the non-canonical .wf-sug (leaf of the canonical Suggested
+ * Prompts Row composition — stays wf-prefixed until that
+ * composition lands). Loaded last among blocks/ so its specificity
+ * wins regardless of source file order.
+ *
+ * `.field:focus` is handled in field.css itself (not :focus-visible)
+ * so mouse users get an always-on focus indicator on text inputs.
  */
-.wf-btn:focus-visible,
+.btn-pri:focus-visible,
+.btn-sec:focus-visible,
+.btn-ghost:focus-visible,
 .wf-link:focus-visible,
-.wf-chip:focus-visible,
-button.wf-chip:focus-visible,
-.wf-btn-action:focus-visible,
-.wf-tool:focus-visible,
-.wf-btn-go:focus-visible,
-.wf-alt:focus-visible,
+.alt:focus-visible,
 .wf-sug:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
