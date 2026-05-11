@@ -204,7 +204,7 @@ function ActionErrorBanner() {
         alignItems: 'center',
       })}
     >
-      <span class="wf-eyebrow" mix={css({ color: 'var(--wf-danger)' })}>
+      <span class="kicker" mix={css({ color: 'var(--wf-danger)' })}>
         Couldn't start
       </span>
       <span mix={css({ fontSize: '14px' })}>{error.message}</span>

@@ -56,7 +56,7 @@ export function DoneBanner() {
           flexWrap: 'wrap',
         })}
       >
-        <span class="wf-eyebrow" mix={css({ color: 'var(--wf-ok)' })}>
+        <span class="kicker" mix={css({ color: 'var(--wf-ok)' })}>
           Saved
         </span>
         <span mix={css({ fontSize: '14px' })}>
