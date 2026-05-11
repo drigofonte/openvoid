@@ -1,3 +1,15 @@
+/*
+ * URL Row — NON-CANONICAL product extension. The canonical
+ * `docs/designs/OpenVoid Compositions.html` does not define this
+ * composition; it's a Ready-page-specific paper-2 sunken pill that
+ * displays a session URL with the scheme greyed and the rest
+ * ellipsised, plus a trailing copy-button slot.
+ *
+ * Kept under the `wf-` prefix until the canonical doc either (a)
+ * absorbs the pattern (it could plausibly be derived from the
+ * Domain Chip block + a custom layout), or (b) declares it
+ * out-of-scope.
+ */
 .wf-url-row {
   display: flex;
   align-items: center;

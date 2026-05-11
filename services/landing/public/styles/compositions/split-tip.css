@@ -1,3 +1,13 @@
+/*
+ * Split Tip — NON-CANONICAL product extension. The canonical
+ * `docs/designs/OpenVoid Compositions.html` does not define this
+ * composition; it's a Ready-page-specific hint that explains how
+ * to split the browser window (icon + kbd row + copy).
+ *
+ * Kept under the `wf-` prefix until the canonical doc either (a)
+ * absorbs the pattern with a proper name, or (b) declares it
+ * out-of-scope.
+ */
 .wf-split-tip {
   display: flex;
   align-items: center;

@@ -1,3 +1,21 @@
+/*
+ * App-shell chrome toolbar — the sticky page-header bar. Two
+ * variants: `.wf-toolbar` (44px, used on Provisioning / Ready
+ * crumbs mode) and `.wf-toolbar-tall` (56px, matches the canonical
+ * `--h-header` token).
+ *
+ * NOT the canonical "Toolbar Row" composition (entry 06 in
+ * `docs/designs/OpenVoid Compositions.html`) — that name belongs
+ * to the Composer's submit bar (`.composer-bar` in composer.css),
+ * which is a horizontal flex with `margin-left:auto` for the
+ * trailing CTA. This file is a different concept: the page's
+ * top chrome bar.
+ *
+ * The canonical Compositions doc treats this as part of the
+ * App Shell composition (entry 01) — folding `.wf-toolbar*` into
+ * a future `.app-shell header` rule is deferred to a future PR
+ * once an App Shell composition is scaffolded.
+ */
 .wf-toolbar {
   display: flex;
   align-items: center;
