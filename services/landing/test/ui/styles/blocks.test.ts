@@ -131,16 +131,11 @@ describe('blocks/ + compositions/', () => {
     assert.doesNotMatch(block, /outline:\s*2px solid/)
   })
 
-  it('compositions/ holds the 13 composition-shaped files split out from blocks/', () => {
+  it('compositions/ holds only composition-shaped files', () => {
     const expected = [
-      'app-icon.css',
       'composer.css',
       'connector.css',
-      'icon-mark.css',
       'livesat.css',
-      'progress.css',
-      'skeleton.css',
-      'spinner.css',
       'split-tip.css',
       'suggestion.css',
       'surface.css',
@@ -151,17 +146,29 @@ describe('blocks/ + compositions/', () => {
     assert.deepEqual(actual, expected)
   })
 
-  it('blocks/ no longer holds files that belong in compositions/', () => {
+  it('blocks/ holds leaf display primitives, including those reclassified from compositions/', () => {
     const blockNames = blockFiles.map((f) => f.name)
-    for (const moved of [
+    for (const leaf of [
       'app-icon.css',
-      'composer.css',
-      'connector.css',
       'icon-mark.css',
-      'livesat.css',
       'progress.css',
       'skeleton.css',
       'spinner.css',
+    ]) {
+      assert.equal(
+        blockNames.includes(leaf),
+        true,
+        `${leaf} should live in blocks/ (leaf display primitive)`,
+      )
+    }
+  })
+
+  it('blocks/ does not hold composition-shaped files', () => {
+    const blockNames = blockFiles.map((f) => f.name)
+    for (const composition of [
+      'composer.css',
+      'connector.css',
+      'livesat.css',
       'split-tip.css',
       'suggestion.css',
       'surface.css',
@@ -169,9 +176,9 @@ describe('blocks/ + compositions/', () => {
       'url-row.css',
     ]) {
       assert.equal(
-        blockNames.includes(moved),
+        blockNames.includes(composition),
         false,
-        `${moved} should have moved to compositions/`,
+        `${composition} should live in compositions/`,
       )
     }
   })
