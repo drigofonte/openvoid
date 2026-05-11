@@ -1,0 +1,25 @@
+/*
+ * Grid — auto-fill responsive grid via `repeat(auto-fill,
+ * minmax(min(--grid-min, 100%), 1fr))`. Every Layout primitive.
+ * `--grid-min` sets the smallest column width before columns
+ * wrap; `--space` sets the gap.
+ *
+ * The `@supports` guard ensures the `min()` call only applies
+ * where it's supported — older browsers fall back to the plain
+ * `display: grid; gap: …` rule without the auto-fill columns.
+ *
+ * @link https://every-layout.dev/layouts/grid/
+ */
+.grid {
+  display: grid;
+  gap: var(--space, 1rem);
+}
+
+@supports (width: min(var(--grid-min, 250px), 100%)) {
+  .grid {
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(var(--grid-min, 250px), 100%), 1fr)
+    );
+  }
+}

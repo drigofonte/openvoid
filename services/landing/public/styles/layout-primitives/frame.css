@@ -1,0 +1,23 @@
+/*
+ * Frame — fixed-aspect-ratio container that crops oversized
+ * children. Every Layout primitive. `--ratio` sets the
+ * aspect ratio (defaults to 16/9). Children render via
+ * object-fit: cover, so images and videos fill the frame without
+ * distortion.
+ *
+ * @link https://every-layout.dev/layouts/frame/
+ */
+.frame {
+  aspect-ratio: var(--ratio, 16 / 9);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.frame > img,
+.frame > video {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}

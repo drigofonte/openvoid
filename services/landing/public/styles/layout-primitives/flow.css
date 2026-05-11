@@ -1,0 +1,16 @@
+/*
+ * Flow — applies a margin-block-start to every adjacent-sibling
+ * pair via `* + *`. Every Layout primitive. Use as a global
+ * typographic flow rule on prose containers; `--flow-space`
+ * controls the inter-item space (defaults to 1em, so it scales
+ * with the current font size).
+ *
+ * Distinct from `.stack`: Flow is sibling-relative (works on
+ * any block element with content children), Stack is flex-based
+ * (only works inside a flex column).
+ *
+ * @link https://every-layout.dev/rudiments/axioms/#owl-selector
+ */
+.flow > * + * {
+  margin-block-start: var(--flow-space, 1em);
+}

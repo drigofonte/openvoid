@@ -11,10 +11,10 @@
  * lets the submit button stay reachable on mobile.
  *
  * NOTE on naming: this file lives in `public/styles/compositions/`
- * (plural — OpenVoid composition tier). Its sibling
- * `public/styles/composition.css` (singular — CUBE Composition
- * layer of layout primitives) is a different concept loaded earlier
- * in the cascade. See README's styles tree.
+ * (plural — OpenVoid composition tier). The CUBE Composition layer
+ * (Every Layout primitives: stack, cluster, …) lives in
+ * `public/styles/layout-primitives/` and loads earlier in the
+ * cascade. See README's styles tree.
  */
 .composer {
   position: relative;

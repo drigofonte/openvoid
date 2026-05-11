@@ -1,0 +1,15 @@
+/*
+ * Cluster — wrapping flex row with a single gap. Every Layout
+ * primitive. Use for inline chip rows, action button rows, tag
+ * lists. `--space` sets the gap; `--justify` and `--align`
+ * adjust axis alignment.
+ *
+ * @link https://every-layout.dev/layouts/cluster/
+ */
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space, 1rem);
+  justify-content: var(--justify, flex-start);
+  align-items: var(--align, center);
+}

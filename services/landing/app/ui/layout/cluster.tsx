@@ -16,7 +16,7 @@ export interface ClusterProps {
  * Every Layout Cluster — wraps inline-block-style children with a
  * uniform gap, wrapping onto new lines when they exceed the
  * container's inline-size. Layout mechanics live in
- * `composition.css`'s `.cluster` rule; this component sets the
+ * `layout-primitives/cluster.css`'s `.cluster` rule; this component sets the
  * `--space`, `--justify`, `--align` custom properties.
  */
 export function Cluster() {

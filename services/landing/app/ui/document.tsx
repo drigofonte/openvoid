@@ -8,17 +8,18 @@ export interface DocumentProps {
 /**
  * The HTML shell. Loads CSS in CUBE-canonical cascade order:
  *
- *   1. utopia.css       — substrate (Utopia fluid type/space scales)
- *   2. tokens.css       — substrate (OpenVoid semantic tokens + wf-* aliases)
- *   3. global.css       — reset / globals
- *   4. composition.css  — CUBE Composition layer (Every Layout primitives)
- *   5. blocks/*.css     — CUBE Block layer, one file per component
- *   6. compositions/*.css — OpenVoid composition tier (assemblies of blocks:
- *                         Composer, Cards, Connector, etc.). Loaded after
- *                         blocks so a composition can override a block
- *                         default without `!important`. NOT the same as
- *                         the singular `composition.css` above.
- *   7. exceptions.css   — CUBE Exception layer (data-attribute variants)
+ *   1. utopia.css            — substrate (Utopia fluid type/space scales)
+ *   2. tokens.css            — substrate (OpenVoid semantic tokens + wf-* aliases)
+ *   3. global.css            — reset / globals
+ *   4. layout-primitives/*.css — CUBE Composition layer (Every Layout
+ *                              primitives: stack, cluster, grid, …).
+ *                              One file per primitive.
+ *   5. blocks/*.css          — CUBE Block layer, one file per component
+ *   6. compositions/*.css    — OpenVoid composition tier (assemblies of
+ *                              blocks: App Shell, Card Shell, Composer, …).
+ *                              Loaded after blocks so a composition can
+ *                              override a block default without `!important`.
+ *   7. exceptions.css        — CUBE Exception layer (data-attribute variants)
  *
  * File-import order is the cascade-control mechanism (no
  * `@layer` directives required) — see Andy Bell's CUBE
@@ -30,8 +31,23 @@ export interface DocumentProps {
  * of which component file defined the underlying selector.
  *
  * @link https://cube.fyi/
+ * @link https://every-layout.dev/
  * @link https://utopia.fyi/
  */
+const LAYOUT_PRIMITIVE_FILES = [
+  'box',
+  'center',
+  'cluster',
+  'cover',
+  'flow',
+  'frame',
+  'grid',
+  'reel',
+  'sidebar',
+  'stack',
+  'switcher',
+] as const
+
 const BLOCK_FILES = [
   'alt',
   'animations',
@@ -80,7 +96,9 @@ export function Document() {
         <link rel="stylesheet" href="/styles/utopia.css" />
         <link rel="stylesheet" href="/styles/tokens.css" />
         <link rel="stylesheet" href="/styles/global.css" />
-        <link rel="stylesheet" href="/styles/composition.css" />
+        {LAYOUT_PRIMITIVE_FILES.map((name) => (
+          <link key={name} rel="stylesheet" href={`/styles/layout-primitives/${name}.css`} />
+        ))}
         {BLOCK_FILES.map((name) => (
           <link key={name} rel="stylesheet" href={`/styles/blocks/${name}.css`} />
         ))}

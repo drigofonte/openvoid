@@ -8,7 +8,7 @@ const STYLE_LINK_ORDER = [
   '/styles/utopia.css',
   '/styles/tokens.css',
   '/styles/global.css',
-  '/styles/composition.css',
+  '/styles/layout-primitives/stack.css',
   '/styles/blocks/layout.css',
   '/styles/blocks/focus-ring.css',
   '/styles/compositions/composer.css',
@@ -83,11 +83,34 @@ describe('Document', () => {
     assert.ok(firstComp > 0, 'expected at least one compositions/*.css link')
   })
 
-  it('does not inline composition CSS — composition.css is now a static <link>', async () => {
+  it('does not inline layout-primitive CSS — each primitive is a static <link>', async () => {
     const html = await renderToString(<Document title="x">hi</Document>)
-    // No <style>...</style> block carrying composition rules.
+    // No <style>...</style> block carrying primitive rules.
     assert.doesNotMatch(html, /<style[^>]*>[\s\S]*\.stack\s*\{/)
     assert.doesNotMatch(html, /<style[^>]*>[\s\S]*\.cluster\s*\{/)
+  })
+
+  it('loads every layout-primitives/*.css after global.css and before the first blocks/*.css', async () => {
+    // The Every Layout primitives form the CUBE Composition layer
+    // and must sit between global resets and the Block layer.
+    const html = await renderToString(<Document title="x">hi</Document>)
+    const global = html.indexOf('href="/styles/global.css"')
+    assert.ok(global > 0, 'expected global.css link')
+
+    const blocksRe = /href="\/styles\/blocks\/([^"]+)\.css"/g
+    const firstBlockMatch = blocksRe.exec(html)
+    assert.notEqual(firstBlockMatch, null, 'expected at least one blocks/*.css link')
+    const firstBlock = firstBlockMatch!.index
+
+    const primsRe = /href="\/styles\/layout-primitives\/([^"]+)\.css"/g
+    let primCount = 0
+    let pm: RegExpExecArray | null
+    while ((pm = primsRe.exec(html)) !== null) {
+      primCount += 1
+      assert.ok(pm.index > global, `primitive ${pm[1]} must load after global.css`)
+      assert.ok(pm.index < firstBlock, `primitive ${pm[1]} must load before blocks/*.css`)
+    }
+    assert.ok(primCount >= 1, 'expected at least one layout-primitives/*.css link')
   })
 
   it('loads utopia.css before tokens.css so --fs-h1: var(--step-3) resolves', async () => {

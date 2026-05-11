@@ -1,0 +1,29 @@
+/*
+ * Center — horizontally centers content with a max-inline-size
+ * cap. Every Layout primitive. `--max-width` controls the cap;
+ * `--gutters` adds breathing room on narrow viewports (via the
+ * `.center-gutters` modifier). `.center-text` centers the text
+ * inside; `.center-intrinsic` centers the element's children
+ * along the cross-axis (column flexbox).
+ *
+ * @link https://every-layout.dev/layouts/center/
+ */
+.center {
+  box-sizing: content-box;
+  margin-inline: auto;
+  max-inline-size: var(--max-width, 60ch);
+}
+
+.center-text {
+  text-align: center;
+}
+
+.center-gutters {
+  padding-inline: var(--gutters, 0);
+}
+
+.center-intrinsic {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}

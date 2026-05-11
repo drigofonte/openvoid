@@ -1,0 +1,29 @@
+/*
+ * Switcher — children sit side-by-side until the available width
+ * drops below `--threshold`, at which point they stack. Every
+ * Layout primitive. The `calc((threshold - 100%) * 999)` trick
+ * uses arithmetic on the children's flex-basis to flip between
+ * the two layouts at the breakpoint.
+ *
+ * `min-inline-size: 0` on children is required: without it the
+ * default `min-width: auto` keeps each child at min-content (a
+ * wide unbroken URL inside, a long button label) and the row
+ * wraps even when the calc above says split.
+ *
+ * @link https://every-layout.dev/layouts/switcher/
+ */
+.switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space, 1rem);
+}
+
+.switcher > * {
+  flex-grow: 1;
+  flex-basis: calc((var(--threshold, 30rem) - 100%) * 999);
+  /* Allow children to shrink below their min-content size.
+     Without this, the default `min-width: auto` keeps each child
+     at min-content (a wide unbroken URL inside, a long button
+     label) and the row wraps even when the calc above says split. */
+  min-inline-size: 0;
+}

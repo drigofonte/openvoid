@@ -1,0 +1,36 @@
+/*
+ * Stack — vertical sequencing with a single configurable gap.
+ * Every Layout primitive. Children stack column-wise; `--space`
+ * sets the inter-item margin. `.stack-recursive` applies the rule
+ * to all descendants (not just direct children). `.stack-split`
+ * pushes a child to the bottom of the column (margin-block-end:
+ * auto on the split target — combine with `.stack` on the parent
+ * and a `flex-direction: column` ancestor that provides height).
+ *
+ * @link https://every-layout.dev/layouts/stack/
+ */
+.stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.stack > * {
+  margin-block: 0;
+}
+
+.stack > * + * {
+  margin-block-start: var(--space, 1rem);
+}
+
+.stack-recursive * + * {
+  margin-block-start: var(--space, 1rem);
+}
+
+.stack-split > * {
+  margin-block: 0;
+}
+
+.stack-split {
+  margin-block-end: auto;
+}

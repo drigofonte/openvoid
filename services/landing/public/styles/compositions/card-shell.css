@@ -6,8 +6,8 @@
  * File Header Strip, and the Ready-page artifact cards.
  *
  * Structure: a flex column so an inner Stack (CUBE composition
- * primitive in `composition.css`) can grow to fill the card's
- * height. Combined with `.stack-split { margin-block-end: auto }`,
+ * primitive in `layout-primitives/stack.css`) can grow to fill
+ * the card's height. Combined with `.stack-split { margin-block-end: auto }`,
  * this lets a card's bottom-row content (URL row + action button)
  * anchor to the card's bottom edge — so two side-by-side cards
  * with different middle-content heights still align their bottom

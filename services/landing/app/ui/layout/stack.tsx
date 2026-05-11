@@ -13,7 +13,7 @@ export interface StackProps {
 /**
  * Every Layout Stack — vertical flow with consistent spacing between
  * direct children (or all descendants when `recursive` is set).
- * Layout mechanics live in `composition.css`'s `.stack` /
+ * Layout mechanics live in `layout-primitives/stack.css`'s `.stack` /
  * `.stack-recursive` rules; this component sets the `--space` custom
  * property.
  *
@@ -29,7 +29,7 @@ export interface StackProps {
  *     <footer>…</footer>
  *   </Stack>
  *
- * `composition.css`'s `.stack-split { margin-block-end: auto }` rule
+ * `layout-primitives/stack.css`'s `.stack-split { margin-block-end: auto }` rule
  * does the rest. This makes the split boundary visible at the call
  * site and removes a layer of indirection.
  */

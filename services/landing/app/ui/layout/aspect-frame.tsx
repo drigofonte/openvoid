@@ -12,9 +12,9 @@ export interface AspectFrameProps {
  * Every Layout Frame — locks its content to a fixed aspect ratio,
  * cropping overflow. Renamed from `Frame` to avoid colliding with
  * `remix/ui`'s exported `Frame` (a streaming-content primitive).
- * The CSS class stays `.frame` because `composition.css` already
+ * The CSS class stays `.frame` because `layout-primitives/frame.css` already
  * targets that selector. This component sets the `--ratio` custom
- * property; `composition.css` does the rest.
+ * property; `layout-primitives/frame.css` does the rest.
  */
 export function AspectFrame() {
   return ({ ratio = '16 / 9', id, children }: AspectFrameProps) => (
