@@ -83,11 +83,15 @@ services/landing/
 │   ├── render.tsx             # renderToStream → HTMLResponse helper
 │   ├── routes.ts              # typed route table
 │   └── router.ts              # createRouter() + middleware
-├── public/styles/             # CUBE-layered CSS (utopia → tokens → global → composition → blocks → compositions → exceptions)
+├── public/styles/             # CUBE-layered CSS (utopia → tokens → global → layout-primitives → blocks → compositions → exceptions)
 │   ├── utopia.css             # substrate — Utopia fluid type/space scales
 │   ├── tokens.css             # substrate — OpenVoid semantic tokens + wf-* aliases
 │   ├── global.css             # element resets, body bg, typography
-│   ├── composition.css        # CUBE Composition layer — singular (Every Layout primitives: stack, cluster, grid)
+│   ├── layout-primitives/     # CUBE Composition layer (Every Layout primitives — one file per primitive)
+│   │   ├── stack.css          # vertical sequencing
+│   │   ├── cluster.css        # wrapping flex row
+│   │   ├── grid.css           # auto-fill responsive grid
+│   │   └── …                  # box, center, cover, flow, frame, reel, sidebar, switcher
 │   ├── blocks/                # CUBE Block layer — canonical blocks + leaf primitives
 │   │   ├── button.css         # canonical .btn-pri / .btn-sec / .btn-ghost (entries 09–11)
 │   │   ├── field.css          # canonical .field (entry 13)

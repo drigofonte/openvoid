@@ -1,0 +1,52 @@
+/*
+ * Reel — horizontally scrolling row of fixed-width children.
+ * Every Layout primitive. Use for image carousels, tip carousels,
+ * any horizontally-overflowing track. `--reel-height` caps the
+ * row height; `--item-width` sets each child's flex-basis;
+ * `--space` sets the inter-item margin. `--color-foreground` sets
+ * the scrollbar thumb tint.
+ *
+ * `.reel-no-bar` hides the scrollbar entirely (for cases where
+ * the scroll is gesture-driven on touch + arrow-key on desktop,
+ * and the visual track is distracting).
+ *
+ * @link https://every-layout.dev/layouts/reel/
+ */
+.reel {
+  display: flex;
+  block-size: var(--reel-height, auto);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-color: var(--color-foreground) transparent;
+}
+
+.reel::-webkit-scrollbar {
+  block-size: 0.75rem;
+}
+
+.reel::-webkit-scrollbar-thumb {
+  background-color: var(--color-foreground);
+  border-radius: 0.75rem;
+}
+
+.reel > * {
+  flex: 0 0 var(--item-width, auto);
+}
+
+.reel > * + * {
+  margin-inline-start: var(--space, 1rem);
+}
+
+.reel > img {
+  block-size: 100%;
+  flex-basis: auto;
+  width: auto;
+}
+
+.reel-no-bar {
+  scrollbar-width: none;
+}
+
+.reel-no-bar::-webkit-scrollbar {
+  display: none;
+}

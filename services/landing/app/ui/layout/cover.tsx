@@ -10,7 +10,7 @@ export interface CoverProps {
   noPad?: boolean
   /**
    * The centered content. Wrapped server-side in `<div class="cover-centered">`
-   * so `composition.css`'s `.cover > .cover-centered { margin-block: auto }`
+   * so `layout-primitives/cover.css`'s `.cover > .cover-centered { margin-block: auto }`
    * pushes it to the vertical center regardless of position.
    */
   centered: RemixNode
@@ -22,7 +22,7 @@ export interface CoverProps {
 /**
  * Every Layout Cover — a viewport-height block with one piece of
  * content vertically centered, optionally with content above or
- * below. Layout mechanics live in `composition.css`'s `.cover` /
+ * below. Layout mechanics live in `layout-primitives/cover.css`'s `.cover` /
  * `.cover-centered` rules.
  *
  * `centered` is an explicit slot prop because Remix 3 has no

@@ -1,0 +1,24 @@
+/*
+ * Box — a padded container with optional border, outline, and
+ * background paint. Every Layout primitive. Tokens drive each
+ * surface: `--padding`, `--border-width`, `--color-border`,
+ * `--outline-width`, `--color-light`, `--color-dark`.
+ *
+ * The `.box *` color reset prevents nested descendants from
+ * inheriting unrelated colors when the box paints its own
+ * foreground.
+ *
+ * @link https://every-layout.dev/layouts/box/
+ */
+.box {
+  padding: var(--padding, var(--space-s));
+  border: var(--border-width, 0) solid var(--color-border);
+  outline: var(--outline-width, 0) solid transparent;
+  outline-offset: calc(var(--outline-width, 0) * -1);
+  background-color: var(--color-light, transparent);
+  color: var(--color-dark, inherit);
+}
+
+.box * {
+  color: inherit;
+}

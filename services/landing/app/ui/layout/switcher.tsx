@@ -34,23 +34,23 @@ const DEFAULT_LIMIT = 4
  *
  * If many `<Switcher limit={...}>` instances ship and the per-instance
  * `<style>` blocks become noisy, switch to enumerated
- * `.switcher-limit-N` classes pre-baked into `composition.css`.
+ * `.switcher-limit-N` classes pre-baked into `layout-primitives/switcher.css`.
  */
 let switcherCounter = 0
 
 /**
  * Every Layout Switcher — a row of children that switches to a stack
  * when the container drops below `threshold`. Layout mechanics live
- * in `composition.css`'s `.switcher` rule; this component sets the
+ * in `layout-primitives/switcher.css`'s `.switcher` rule; this component sets the
  * `--threshold` and `--space` custom properties.
  *
  * A non-default `limit` emits a server-rendered sibling `<style>`
  * carrying the `:nth-last-child(n+limit+1)` rule, scoped to a
- * per-instance class. composition.css can't pre-bake the rule
+ * per-instance class. layout-primitives/switcher.css can't pre-bake the rule
  * because the limit is variable; Remix 3 has no client-time
  * style-injection hook, so SSR is the only place to emit it. When
  * `limit` matches the Every Layout default of 4, the rule is
- * omitted — composition.css's base `.switcher` rule covers it.
+ * omitted — layout-primitives/switcher.css's base `.switcher` rule covers it.
  */
 export function Switcher() {
   const scopedClass = `switcher-${++switcherCounter}`

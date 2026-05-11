@@ -16,7 +16,7 @@ export interface ReelProps {
 
 /**
  * Every Layout Reel — a horizontal-scrolling row of fixed-width items.
- * Layout mechanics live in `composition.css`'s `.reel` rule; this
+ * Layout mechanics live in `layout-primitives/reel.css`'s `.reel` rule; this
  * component sets `--item-width`, `--space`, `--reel-height` custom
  * properties and toggles the `.reel-no-bar` class for chrome-less
  * variants.

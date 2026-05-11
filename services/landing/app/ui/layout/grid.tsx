@@ -13,7 +13,7 @@ export interface GridProps {
 /**
  * Every Layout Grid — auto-fitting CSS grid that maintains a minimum
  * column width and reflows columns based on container size. Layout
- * mechanics live in `composition.css`'s `.grid` rule; this component
+ * mechanics live in `layout-primitives/grid.css`'s `.grid` rule; this component
  * sets the `--grid-min` and `--space` custom properties.
  */
 export function Grid() {

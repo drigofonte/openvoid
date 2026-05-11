@@ -17,7 +17,7 @@ export interface SidebarProps {
 /**
  * Every Layout Sidebar — a two-column flex layout that collapses to
  * a stack when the content column would drop below `contentMin`.
- * Layout mechanics live in `composition.css`'s `.sidebar` /
+ * Layout mechanics live in `layout-primitives/sidebar.css`'s `.sidebar` /
  * `.sidebar-right` rules; this component sets `--side-width`,
  * `--content-min`, `--space` custom properties and toggles the
  * `.sidebar-right` class for right-anchored variants.

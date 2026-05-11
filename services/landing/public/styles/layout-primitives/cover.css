@@ -1,0 +1,36 @@
+/*
+ * Cover — a min-block-size column with a centered child. Every
+ * Layout primitive. Use for hero stages and full-viewport screens
+ * where one item should center vertically with optional siblings
+ * above and below. `--min-height` controls the minimum height
+ * (defaults to 100vh); `--space` sets the inter-item margin;
+ * `--padding` adds breathing room inside the cover.
+ *
+ * The `.cover-centered` modifier marks the child that should
+ * center; first-child and last-child siblings get their outer
+ * margin zeroed to flush against the edges.
+ *
+ * @link https://every-layout.dev/layouts/cover/
+ */
+.cover {
+  display: flex;
+  flex-direction: column;
+  min-block-size: var(--min-height, 100vh);
+  padding: var(--padding, 0);
+}
+
+.cover > * {
+  margin-block: var(--space, 1rem);
+}
+
+.cover > :first-child:not(.cover-centered) {
+  margin-block-start: 0;
+}
+
+.cover > :last-child:not(.cover-centered) {
+  margin-block-end: 0;
+}
+
+.cover > .cover-centered {
+  margin-block: auto;
+}

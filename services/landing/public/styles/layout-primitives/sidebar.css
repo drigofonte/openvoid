@@ -1,0 +1,45 @@
+/*
+ * Sidebar — a two-pane row where one pane has a fixed flex-basis
+ * and the other grows to fill. Every Layout primitive. Default
+ * shape puts the sidebar on the left (`--side-width`); the
+ * `.sidebar-right` modifier swaps slot positions so the sidebar
+ * lives on the right.
+ *
+ * The `min-inline-size: auto` reset on `.sidebar-right > :last-child`
+ * is load-bearing: without it the 50% inherited from
+ * `.sidebar > :last-child` would force both children to declare a
+ * 50% minimum and the row would wrap.
+ *
+ * @link https://every-layout.dev/layouts/sidebar/
+ */
+.sidebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space, 1rem);
+}
+
+.sidebar > :first-child {
+  flex-basis: var(--side-width, 20rem);
+  flex-grow: 1;
+}
+
+.sidebar > :last-child {
+  flex-basis: 0;
+  flex-grow: 999;
+  min-inline-size: var(--content-min, 50%);
+}
+
+.sidebar-right > :first-child {
+  flex-basis: 0;
+  flex-grow: 999;
+  min-inline-size: var(--content-min, 50%);
+}
+
+.sidebar-right > :last-child {
+  flex-basis: var(--side-width, 20rem);
+  flex-grow: 1;
+  /* Reset the 50% inherited from `.sidebar > :last-child` — when the
+     sidebar slot moves to the last-child position, both children
+     would otherwise declare a 50% minimum and the row would wrap. */
+  min-inline-size: auto;
+}

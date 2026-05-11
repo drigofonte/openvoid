@@ -2,8 +2,8 @@
  * openvoid landing — design tokens (CUBE Substrate Layer).
  *
  * Sits outside any `@layer` declaration so the cascade-layer files
- * (composition.css, blocks.css, exceptions.css) consume these as
- * inherited custom-property values.
+ * (layout-primitives/*, blocks/*, compositions/*, exceptions.css)
+ * consume these as inherited custom-property values.
  *
  * Type and spacing tokens reference Utopia steps (`utopia.css`)
  * where the design value matches Utopia's fluid scale; otherwise
