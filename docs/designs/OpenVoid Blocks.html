@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OpenVoid · Blocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --paper:       oklch(0.972 0.006 75);
+  --paper-2:     oklch(0.955 0.006 75);
+  --paper-3:     oklch(0.935 0.006 75);
+  --card:        #ffffff;
+  --terminal:    #0E0E0E;
+  --ink:         oklch(0.18 0.005 60);
+  --ink-2:       oklch(0.42 0.005 60);
+  --ink-3:       oklch(0.62 0.005 60);
+  --ink-4:       oklch(0.78 0.005 60);
+  --line:        oklch(0.91 0.004 75);
+  --line-2:      oklch(0.95 0.004 75);
+  --accent:      oklch(0.68 0.18 50);
+  --accent-soft: oklch(0.94 0.04 60);
+  --ok:          oklch(0.55 0.10 155);
+  --ok-soft:     oklch(0.94 0.04 155);
+  --good:        oklch(0.62 0.14 150);
+  --shadow-1: 0 1px 0 rgba(20,18,14,.04), 0 1px 2px rgba(20,18,14,.04);
+  --shadow-2: 0 1px 0 rgba(20,18,14,.04), 0 4px 14px rgba(20,18,14,.06);
+  --r-xs:4px;--r-sm:7px;--r-md:10px;--r-lg:14px;--r-xl:18px;--r-pill:999px;
+  --font-sans:'Inter',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+  font-family:var(--font-sans);font-size:14px;line-height:1.5;letter-spacing:-0.005em;
+  -webkit-font-smoothing:antialiased}
+
+header{height:56px;display:flex;align-items:center;gap:14px;padding:0 24px;
+  border-bottom:1px solid var(--line);background:var(--paper);position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.brand-mark{width:22px;height:22px;border-radius:6px;background:var(--ink);display:grid;place-items:center}
+.brand-mark::before{content:"";width:9px;height:9px;border-radius:50%;border:1.5px solid var(--paper)}
+.crumbs{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:13.5px}
+.crumbs .sep{color:var(--ink-4)}
+.crumbs .here{color:var(--ink);font-weight:500}
+.grow{flex:1}
+.ver{font:500 11px/1 var(--font-mono);color:var(--ink-3);background:var(--paper-2);padding:4px 8px;border-radius:var(--r-xs)}
+
+main{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+.hero{margin-bottom:48px}
+.hero h1{font-size:38px;font-weight:600;letter-spacing:-0.025em;margin:0 0 8px;line-height:1.05}
+.hero p{font-size:15px;color:var(--ink-2);margin:0 0 10px;max-width:580px;line-height:1.55}
+.hero p + p{margin-top:0}
+.hero .tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 11px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:14px}
+.hero .cubelink{color:var(--ink);font-weight:500;text-underline-offset:3px}
+
+section{margin-bottom:56px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.sec-head h2{margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em}
+.sec-head .count{font:500 11px/1 var(--font-mono);color:var(--ink-4)}
+.sec-head .note{margin-left:auto;font-size:12.5px;color:var(--ink-2);max-width:420px;text-align:right}
+
+.block{display:grid;grid-template-columns:260px 1fr;gap:28px;align-items:start;
+  padding:20px 0;border-top:1px solid var(--line-2)}
+.block:first-of-type{border-top:0;padding-top:0}
+.block-meta{display:flex;flex-direction:column;gap:5px}
+.block-name{font:600 13.5px/1 var(--font-sans);color:var(--ink);letter-spacing:-0.005em}
+.block-sel{font:500 12px/1 var(--font-mono);color:var(--ink-3);background:var(--paper-2);
+  padding:2px 6px;border-radius:var(--r-xs);display:inline-block;margin-top:2px}
+.block-desc{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin-top:6px}
+.block-rule{font-size:11.5px;color:var(--ink-3);line-height:1.5;margin-top:4px}
+.block-rule b{color:var(--ink-2);font-weight:500}
+.token-refs{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.tr{font:500 11px/1 var(--font-mono);color:var(--ink-3);background:var(--paper-2);padding:2px 6px;border-radius:3px;box-shadow:inset 0 0 0 1px var(--line-2)}
+
+.preview{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:20px 22px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+  box-shadow:var(--shadow-1)}
+.preview.col{flex-direction:column;align-items:flex-start}
+.preview.dark{background:var(--terminal);border-color:transparent}
+.preview.paper{background:var(--paper-2);border-color:var(--line-2)}
+
+/* ── Block CSS ──────────────────────────────────────────── */
+
+/* Brand Mark */
+.bm{width:22px;height:22px;border-radius:6px;background:var(--ink);display:grid;place-items:center}
+.bm::before{content:"";width:9px;height:9px;border-radius:50%;border:1.5px solid var(--paper)}
+.bw{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+
+/* Avatar */
+.av{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;display:grid;place-items:center}
+
+/* Breadcrumbs */
+.bc{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-3)}
+.bc .sep{color:var(--ink-4)}
+.bc .here{color:var(--ink);font-weight:500}
+.bc a{color:var(--ink-3);text-decoration:none;padding:2px 5px;margin:-2px -5px;border-radius:5px;transition:background .12s,color .12s}
+.bc a:hover{color:var(--ink);background:var(--paper-2)}
+
+/* Eyebrow Pill */
+.ep{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 11px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase}
+.ep.ok{background:var(--ok-soft);color:var(--ok)}
+.ep .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.ep .dot.live{position:relative}
+.ep .dot.live::after{content:"";position:absolute;inset:-2px;border-radius:50%;background:currentColor;opacity:.4;animation:breathe 1.8s ease-out infinite}
+@keyframes breathe{0%{transform:scale(.7);opacity:.6}70%{transform:scale(2.4);opacity:0}100%{transform:scale(2.4);opacity:0}}
+
+/* Status Pill */
+.sp{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 11px;border-radius:var(--r-pill);font-size:12px;font-weight:500;background:var(--card);color:var(--ink-2);box-shadow:var(--shadow-1)}
+.sp.live{color:var(--accent);background:var(--accent-soft);box-shadow:none}
+.sp.prod{color:var(--ok);background:var(--ok-soft);box-shadow:none}
+.sp .d{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.sp .d.pulse{position:relative}
+.sp .d.pulse::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:currentColor;opacity:.35;animation:breathe 1.8s ease-out infinite}
+
+/* Keyboard Badge */
+.kbd{display:inline-flex;align-items:center;justify-content:center;height:20px;min-width:20px;padding:0 5px;border-radius:var(--r-xs);font:500 10.5px/1 var(--font-mono);background:var(--paper-2);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
+.kbd.dark{background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);box-shadow:none}
+
+/* Segmented Control */
+.seg{display:inline-flex;background:var(--paper-2);border-radius:8px;padding:3px;box-shadow:inset 0 0 0 1px var(--line-2)}
+.seg button{height:24px;padding:0 11px;border:0;background:transparent;border-radius:5px;color:var(--ink-3);font:500 11.5px/1 var(--font-sans);cursor:pointer}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow-1)}
+
+/* Button Primary */
+.btn-pri{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border:0;border-radius:9px;background:var(--ink);color:var(--paper);font:600 13px/1 var(--font-sans);cursor:pointer;transition:background .12s}
+.btn-pri:hover{background:oklch(0.10 0.004 60)}
+.btn-pri[disabled]{opacity:.45;cursor:not-allowed}
+
+/* Button Secondary */
+.btn-sec{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border:0;border-radius:9px;background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line);font:600 13px/1 var(--font-sans);cursor:pointer;transition:box-shadow .12s}
+.btn-sec:hover{box-shadow:inset 0 0 0 1px var(--ink-3)}
+
+/* Button Ghost */
+.btn-ghost{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px;border-radius:var(--r-sm);background:transparent;color:var(--ink-3);font:500 12.5px/1 var(--font-sans);border:0;cursor:pointer;transition:background .12s,color .12s}
+.btn-ghost:hover{color:var(--ink);background:var(--paper-2)}
+.btn-ghost.bd{border:1px solid var(--line);color:var(--ink-2)}
+.btn-ghost.bd:hover{background:var(--paper-2);border-color:var(--ink-4);color:var(--ink)}
+.btn-ghost svg{width:13px;height:13px}
+
+/* Alt Pill */
+.alt{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 13px;border-radius:var(--r-pill);background:var(--paper-2);border:0;color:var(--ink-2);font:500 12.5px/1 var(--font-sans);cursor:pointer;transition:background .12s,color .12s}
+.alt:hover{background:var(--paper-3);color:var(--ink)}
+.alt.on{background:var(--ink);color:var(--paper);box-shadow:var(--shadow-2)}
+.alt svg{width:13px;height:13px}
+.alt .x{opacity:.7;font-size:14px;line-height:1}
+
+/* Stack Tag */
+.stag{height:22px;padding:0 9px;border-radius:5px;background:var(--paper-2);color:var(--ink-2);font:500 11.5px/1 var(--font-sans);box-shadow:inset 0 0 0 1px var(--line);display:inline-flex;align-items:center;gap:5px}
+.stag .v{font-family:var(--font-mono);color:var(--ink-3);font-size:11px}
+
+/* Domain Chip */
+.dchip{font-family:var(--font-mono);font-size:12.5px;color:var(--ink);background:var(--paper-2);padding:3px 8px;border-radius:var(--r-xs);box-shadow:inset 0 0 0 1px var(--line)}
+
+/* Info Note */
+.note{padding:14px 16px;border-radius:var(--r-md);display:flex;flex-direction:column;gap:6px;border:1px solid var(--line-2)}
+.note .nt{display:flex;align-items:center;gap:8px;font:600 12.5px/1 var(--font-sans);color:var(--ink)}
+.note .nt svg{width:14px;height:14px;color:var(--ink-2)}
+.note .nb{font-size:12.5px;color:var(--ink-3);line-height:1.5}
+.note .nb code{font-family:var(--font-mono);font-size:11.5px;background:var(--paper-2);padding:1px 5px;border-radius:4px;color:var(--ink-2)}
+
+/* Drop Zone */
+.dz{width:100%;background:var(--card);border:1.5px dashed var(--line);border-radius:var(--r-xl);padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+.dz:hover{border-color:var(--ink-3)}
+.dz.drag{border-color:var(--accent);background:color-mix(in oklab,var(--accent-soft) 92%,white);box-shadow:var(--shadow-2),0 0 0 4px var(--accent-soft)}
+.dz .ic{width:48px;height:48px;border-radius:12px;background:var(--paper-2);display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line)}
+.dz.drag .ic{background:var(--card);color:var(--accent)}
+.dz .ic svg{width:20px;height:20px}
+.dz .hed{font-size:16px;font-weight:600;color:var(--ink)}
+.dz .br{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.dz .mt{font-size:12px;color:var(--ink-3)}
+
+/* Inputs */
+.inp-field{
+  appearance:none;height:36px;padding:0 12px;border:0;border-radius:var(--r-sm);
+  background:var(--card);box-shadow:inset 0 0 0 1px var(--line);
+  font:400 13px/1 var(--font-sans);color:var(--ink);letter-spacing:-0.005em;
+  outline:0;transition:box-shadow var(--dur-fast,120ms);min-width:200px;
+}
+.inp-field::placeholder{color:var(--ink-4)}
+.inp-field:focus{box-shadow:inset 0 0 0 1px var(--ink-3),0 0 0 4px var(--accent-soft)}
+.inp-field:disabled{opacity:.45;cursor:not-allowed}
+.inp-mono{
+  appearance:none;height:36px;padding:0 12px;border:0;border-radius:var(--r-sm);
+  background:var(--card);box-shadow:inset 0 0 0 1px var(--line);
+  font:500 13px/1 var(--font-mono);color:var(--ink);letter-spacing:0;
+  outline:0;transition:box-shadow var(--dur-fast,120ms);min-width:220px;
+}
+.inp-mono::placeholder{color:var(--ink-4);font-weight:400}
+.inp-mono:focus{box-shadow:inset 0 0 0 1px var(--ink-3),0 0 0 4px var(--accent-soft)}
+.inp-textarea{
+  appearance:none;padding:10px 12px;border:0;border-radius:var(--r-sm);
+  background:var(--card);box-shadow:inset 0 0 0 1px var(--line);
+  font:400 14px/1.55 var(--font-sans);color:var(--ink);letter-spacing:-0.005em;
+  outline:0;resize:none;width:100%;min-height:88px;
+  transition:box-shadow var(--dur-fast,120ms);
+}
+.inp-textarea::placeholder{color:var(--ink-4)}
+.inp-textarea:focus{box-shadow:inset 0 0 0 1px var(--ink-3),0 0 0 4px var(--accent-soft)}
+.inp-select{
+  appearance:none;height:30px;padding:0 28px 0 10px;border:0;border-radius:var(--r-sm);
+  background:var(--card);box-shadow:inset 0 0 0 1px var(--line);
+  font:500 12.5px/1 var(--font-sans);color:var(--ink-2);
+  outline:0;cursor:pointer;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='none' stroke='%23898581' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l4 4 4-4'/></svg>");
+  background-repeat:no-repeat;background-position:right 8px center;
+  transition:box-shadow var(--dur-fast,120ms);
+}
+.inp-select:focus{box-shadow:inset 0 0 0 1px var(--ink-3),0 0 0 4px var(--accent-soft);outline:0}
+
+/* Terminal */
+.term{background:var(--terminal);border-radius:var(--r-md);padding:14px 16px;font:400 12px/1.7 var(--font-mono);width:100%}
+.term .dim{color:#5a5754}
+.term .ok{color:#6ec47a}
+.term .inf{color:#c5c0bb}
+.term .acc{color:#e89a5c}
+
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12.5px;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand"><span class="brand-mark"></span>openvoid</span>
+  <div class="crumbs"><span>system</span><span class="sep">/</span><span class="here">blocks</span></div>
+  <div class="grow"></div>
+  <span class="ver">v0.1</span>
+</header>
+
+<main>
+  <div class="hero">
+    <span class="tag"><span style="width:5px;height:5px;border-radius:50%;background:currentColor;display:inline-block"></span>Blocks</span>
+    <h1>Skeletal components.</h1>
+    <p>A block is a skeletal component or organisational structure — comparable to a card element or a button element. Blocks manage their own internal context and don't know about their surroundings.</p>
+    <p>Blocks are the atoms. Things like the Composer, the Artifact Card, and the Stack Detection Card are <em>compositions of blocks</em> — you'll find those in <a href="OpenVoid Compositions.html" class="cubelink">Compositions</a>.</p>
+  </div>
+
+  <!-- ── Shell ─────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Shell</h2><span class="count">4 blocks</span><span class="note">Present on every screen. Never re-implement — copy from here.</span></div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Brand Mark</span>
+        <span class="block-sel">.brand-mark</span>
+        <p class="block-desc">22 × 22px ink square, 6px radius, negative-circle inner cut via pseudo-element. Always paired with the wordmark "openvoid" at 15px / 600 in a flex row gap-9.</p>
+        <p class="block-rule"><b>Never</b> use the mark in isolation. The wordmark is part of the block.</p>
+        <div class="token-refs"><span class="tr">--ink</span><span class="tr">--paper</span></div>
+      </div>
+      <div class="preview">
+        <span class="bw"><span class="bm"></span>openvoid</span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Breadcrumb Trail</span>
+        <span class="block-sel">.crumbs</span>
+        <p class="block-desc">Path navigation in ink-3. Intermediate nodes are <code>&lt;a&gt;</code> tags — hover adds paper-2 background pill via negative padding trick so the clickable area is generous without shifting layout. The final node <code>.here</code> is plain text, ink, 500 weight — never a link.</p>
+        <div class="token-refs"><span class="tr">--ink-3</span><span class="tr">--ink-4</span><span class="tr">--paper-2</span></div>
+      </div>
+      <div class="preview paper">
+        <nav class="bc">
+          <a href="#">maria</a><span class="sep">/</span>
+          <a href="#">new app</a><span class="sep">/</span>
+          <span class="here">from codebase</span>
+        </nav>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Avatar</span>
+        <span class="block-sel">.avatar</span>
+        <p class="block-desc">28px circle. Accent-soft background, accent text. Shows the user's initial(s) at 12px / 600. Sits at the far right of the app header. No hover state unless it opens a menu.</p>
+        <div class="token-refs"><span class="tr">--accent-soft</span><span class="tr">--accent</span></div>
+      </div>
+      <div class="preview" style="gap:8px">
+        <div class="av">M</div>
+        <div class="av" style="background:var(--paper-2);color:var(--ink-3)">JD</div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Ghost Link</span>
+        <span class="block-sel">.ghost-link</span>
+        <p class="block-desc">Subtle header navigation action — 30px, no border, no fill. Used for "← Back to apps", "Cancel", and other low-priority navigation. Hover gives paper-2 background.</p>
+        <p class="block-rule"><b>Not</b> for primary CTAs. One Ghost Link per header at most.</p>
+        <div class="token-refs"><span class="tr">--ink-3</span><span class="tr">--paper-2</span></div>
+      </div>
+      <div class="preview paper">
+        <a href="#" class="btn-ghost">← Back to apps</a>
+        <a href="#" class="btn-ghost">Cancel</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Labels & Status ───────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Labels &amp; Status</h2><span class="count">4 blocks</span><span class="note">Orange = actively running. Green = done / production. Never invert these semantics.</span></div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Eyebrow Pill</span>
+        <span class="block-sel">.eyebrow</span>
+        <p class="block-desc">Contextual label, always sits above a page title. Accent variant for active / in-progress states. OK variant for production. The leading dot optionally animates (breathe) on live sessions. 24px height, pill radius, uppercase 11px / 600.</p>
+        <p class="block-rule"><b>Breathing dot</b> only on "Spinning up" and live session states — nowhere else. The animation cost is too high for decorative use.</p>
+        <div class="token-refs"><span class="tr">--accent-soft</span><span class="tr">--accent</span><span class="tr">--ok-soft</span><span class="tr">--ok</span><span class="tr">--dur-breathe</span></div>
+      </div>
+      <div class="preview col" style="gap:10px">
+        <span class="ep"><span class="dot live"></span>Spinning up</span>
+        <span class="ep"><span class="dot"></span>Start from a codebase</span>
+        <span class="ep ok"><span class="dot"></span>Live</span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Status Pill</span>
+        <span class="block-sel">.pill / .pill.live / .pill.prod</span>
+        <p class="block-desc">Inline session-state indicator. Used in the app header during active sessions. Three variants: neutral (card bg + shadow-1, for draft), live (accent-soft, breathing dot), production (ok-soft). 26px height.</p>
+        <p class="block-rule"><b>Accent = running agent.</b> Green = deployed to production. Never use accent for anything decorative.</p>
+        <div class="token-refs"><span class="tr">--accent</span><span class="tr">--accent-soft</span><span class="tr">--ok</span><span class="tr">--ok-soft</span><span class="tr">--shadow-1</span></div>
+      </div>
+      <div class="preview paper" style="gap:10px">
+        <span class="sp"><span class="d"></span>Draft</span>
+        <span class="sp live"><span class="d pulse"></span>Live</span>
+        <span class="sp prod"><span class="d"></span>Production</span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Keyboard Badge</span>
+        <span class="block-sel">.kbd</span>
+        <p class="block-desc">Static key indicator. JetBrains Mono at 10.5px, 20px min-height. Inset box-shadow renders the keycap border — never a visible border. Dark variant for use inside ink-background buttons.</p>
+        <p class="block-rule"><b>Only for actual keyboard shortcuts.</b> Never use as a general tag or label.</p>
+        <div class="token-refs"><span class="tr">--font-mono</span><span class="tr">--paper-2</span><span class="tr">--line</span><span class="tr">--r-xs</span></div>
+      </div>
+      <div class="preview" style="gap:6px">
+        <span class="kbd">⌘</span>
+        <span class="kbd">↵</span>
+        <span class="kbd">Esc</span>
+        <span class="kbd">⇧</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:var(--ink);padding:8px 12px;border-radius:9px">
+          <span style="color:var(--paper);font:600 13px/1 var(--font-sans)">Start session</span>
+          <span class="kbd dark">⌘</span><span class="kbd dark">↵</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Segmented Control</span>
+        <span class="block-sel">.seg</span>
+        <p class="block-desc">Binary or 3-option inline toggle. Paper-2 tray with paper card active pill + shadow-1. Used for demo state switchers (Empty / Uploaded) and view-mode toggles (Dev / Preview / Logs). 24px pill height inside a 6px-padded tray.</p>
+        <p class="block-rule"><b>2–3 options only.</b> Labels must be short enough to stay on one line. Four+ options → use a tab strip or dropdown.</p>
+        <div class="token-refs"><span class="tr">--paper-2</span><span class="tr">--card</span><span class="tr">--shadow-1</span><span class="tr">--line-2</span></div>
+      </div>
+      <div class="preview paper" style="gap:14px">
+        <div class="seg">
+          <button class="on">Empty</button>
+          <button>Uploaded</button>
+        </div>
+        <div class="seg">
+          <button class="on">Dev</button>
+          <button>Preview</button>
+          <button>Logs</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Buttons & Actions ──────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Buttons &amp; Actions</h2><span class="count">4 blocks</span><span class="note">One Primary per screen. Ghost for secondary actions. Alt Pill for mode-switching only.</span></div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Button: Primary</span>
+        <span class="block-sel">.btn-go / .btn-pri</span>
+        <p class="block-desc">36px, ink fill, paper text, 9px radius. The main call-to-action for session starts and form submissions. Label changes per mode. Can carry a dark Keyboard Badge on the right for shortcut hint. Disabled state at 45% opacity.</p>
+        <p class="block-rule"><b>One per screen.</b> "Start session" / "Continue session" / "Clone &amp; start session" / "Continue — start agent session" depending on mode.</p>
+        <div class="token-refs"><span class="tr">--ink</span><span class="tr">--paper</span><span class="tr">--dur-fast</span></div>
+      </div>
+      <div class="preview" style="flex-wrap:wrap;gap:10px">
+        <button class="btn-pri">Start session <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+        <button class="btn-pri">Continue session</button>
+        <button class="btn-pri">Clone &amp; start session</button>
+        <button class="btn-pri" disabled>Start session</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Button: Secondary</span>
+        <span class="block-sel">.btn-sec</span>
+        <p class="block-desc">36px, white fill, inset border. For secondary actions placed alongside a primary CTA. Hover deepens the border from --line to --ink-3. Same height as Primary so they form aligned pairs.</p>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--line</span><span class="tr">--ink-3</span></div>
+      </div>
+      <div class="preview" style="gap:10px">
+        <button class="btn-sec">Open preview</button>
+        <button class="btn-sec">View session</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Button: Ghost</span>
+        <span class="block-sel">.btn-ghost / .tool</span>
+        <p class="block-desc">30px, no border, no fill, ink-3 text. Hover reveals paper-2 background. Three contexts: toolbar tools (Attach, Stack, DB), card-head actions (Override, Edit), header nav. Bordered variant (.bd) adds an explicit line border — used for "Replace" in file strips.</p>
+        <div class="token-refs"><span class="tr">--ink-3</span><span class="tr">--paper-2</span><span class="tr">--line</span></div>
+      </div>
+      <div class="preview paper" style="flex-wrap:wrap;gap:8px">
+        <button class="btn-ghost">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a5 5 0 1 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L11 17a2 2 0 1 1-3-3l7-7"/></svg>
+          Attach
+        </button>
+        <button class="btn-ghost">Stack: <span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-4)">auto</span></button>
+        <a href="#" class="btn-ghost">Override</a>
+        <button class="btn-ghost bd">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Replace
+        </button>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Alt Pill (Mode Switcher)</span>
+        <span class="block-sel">.alt / .alt.active</span>
+        <p class="block-desc">32px pill for start-mode selection. Default: paper-2 bg, ink-2 text. Active: ink fill + paper text + shadow-2 + trailing × to dismiss. Clicking an active pill returns to the default prompt mode. Only one active at a time.</p>
+        <p class="block-rule">4 modes: Template · GitHub · Upload .zip · Fork. These are mutually exclusive — activating one implicitly deactivates the rest.</p>
+        <div class="token-refs"><span class="tr">--paper-2</span><span class="tr">--ink</span><span class="tr">--shadow-2</span><span class="tr">--r-pill</span></div>
+      </div>
+      <div class="preview paper" style="flex-wrap:wrap;gap:8px">
+        <button class="alt">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6C17 15.2 20 14 20 9.3a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.4 0C6.4 2.6 5.4 2.9 5.4 2.9a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.3c0 4.6 3 5.9 5.9 6.2a3.4 3.4 0 0 0-.9 2.6V22"/></svg>
+          Import GitHub
+        </button>
+        <button class="alt on">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload .zip <span class="x">×</span>
+        </button>
+        <button class="alt">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6v6H9z"/></svg>
+          Template
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Inputs ─────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Inputs</h2><span class="count">4 blocks</span><span class="note">All inputs share the same inset-border focus model. Never use outline: auto — always suppress and replace with the accent focus ring.</span></div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Text Field</span>
+        <span class="block-sel">.field</span>
+        <p class="block-desc">Standard single-line input. 36px height, card background, 7px radius, inset box-shadow border. Focus replaces the shadow with a deeper line + the accent focus ring (0 0 0 4px --accent-soft). Disabled at 45% opacity.</p>
+        <p class="block-rule"><b>Always suppress</b> the browser's default outline. Use the inset-shadow + focus-ring pattern instead. Never use a visible border — the box-shadow keeps the border participates in the focus transition cleanly.</p>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--line</span><span class="tr">--r-sm</span><span class="tr">--accent-soft</span><span class="tr">--ink-3</span></div>
+      </div>
+      <div class="preview col" style="gap:10px">
+        <input class="inp-field" placeholder="Describe what to build…" />
+        <input class="inp-field" value="App name filled in" />
+        <input class="inp-field" placeholder="Disabled" disabled />
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Mono Text Field</span>
+        <span class="block-sel">.field.mono / .gh-field</span>
+        <p class="block-desc">Same geometry as Text Field but uses JetBrains Mono at 13px / 500. Used wherever the value is an identifier: a repository slug, a branch name, a domain name, an env var key. Same focus ring behaviour.</p>
+        <p class="block-rule"><b>Mono only for identifiers.</b> Never use for natural-language input — switch back to sans-serif the moment the field accepts human prose.</p>
+        <div class="token-refs"><span class="tr">--font-mono</span><span class="tr">--card</span><span class="tr">--line</span><span class="tr">--r-sm</span></div>
+      </div>
+      <div class="preview col" style="gap:10px">
+        <input class="inp-mono" placeholder="owner/repo" />
+        <input class="inp-mono" value="recipe-jar" />
+        <input class="inp-mono" placeholder="DATABASE_URL" />
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Textarea</span>
+        <span class="block-sel">.composer-textarea / textarea</span>
+        <p class="block-desc">Multi-line input. Inherits the same inset-border + focus-ring model as Text Field. <code>resize:none</code> — height is controlled programmatically via auto-grow (set <code>height:auto</code> on input, then reassign <code>scrollHeight</code>). Used bare inside the Composer composition; the Composer card provides the visual container.</p>
+        <p class="block-rule">Min-height 88px standalone; 118px inside the Composer. Max-height 360px — beyond that the textarea scrolls internally. <b>Never</b> expose the native resize handle.</p>
+        <div class="token-refs"><span class="tr">--font-sans</span><span class="tr">--ink-4</span><span class="tr">--accent-soft</span><span class="tr">--r-sm</span></div>
+      </div>
+      <div class="preview col">
+        <textarea class="inp-textarea" placeholder="A weekend planner that pulls events from my Google calendar, lets me drag them onto a 2-day grid, and emails me a summary every Friday at 5 pm."></textarea>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Select</span>
+        <span class="block-sel">.gh-branch / select</span>
+        <p class="block-desc">30px native <code>&lt;select&gt;</code> with <code>appearance:none</code> and a custom SVG chevron via <code>background-image</code>. Same inset-border as other inputs. Used for branch selection in the GitHub Input Panel and for stack override dropdowns. Keeps Inter / ink-2 text.</p>
+        <p class="block-rule">Use native <code>&lt;select&gt;</code> — not a custom dropdown — unless the option list requires rich content (icons, grouped sections). Native select is accessible and works on mobile without extra JS.</p>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--line</span><span class="tr">--r-sm</span><span class="tr">--ink-2</span></div>
+      </div>
+      <div class="preview" style="gap:12px;flex-wrap:wrap">
+        <select class="inp-select"><option>main</option><option>develop</option><option>staging</option><option>feature/auth</option></select>
+        <select class="inp-select"><option>Next.js · Postgres</option><option>Vite + React</option><option>SvelteKit</option><option>Django + Postgres</option></select>
+        <select class="inp-select"><option>auto-detect</option><option>Node 20</option><option>Python 3.12</option><option>Ruby 3.3</option></select>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Display Primitives ──────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Display Primitives</h2><span class="count">4 blocks</span><span class="note">Leaf-level display elements. Used as building material inside component compositions.</span></div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Stack Tag</span>
+        <span class="block-sel">.stack-tag</span>
+        <p class="block-desc">22px height chip showing a dependency name + mono version number. Paper-2 background, inset border. Used inside the Stack Detection Card composition. Clusters wrap naturally.</p>
+        <div class="token-refs"><span class="tr">--paper-2</span><span class="tr">--font-mono</span><span class="tr">--line</span><span class="tr">--r-xs</span></div>
+      </div>
+      <div class="preview" style="flex-wrap:wrap;gap:6px">
+        <span class="stag">Next.js <span class="v">14.2.3</span></span>
+        <span class="stag">React <span class="v">18.3.1</span></span>
+        <span class="stag">Prisma <span class="v">5.14</span></span>
+        <span class="stag">TypeScript <span class="v">5.4</span></span>
+        <span class="stag">Tailwind <span class="v">3.4</span></span>
+        <span class="stag">pnpm <span class="v">9.1</span></span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Domain / Identifier Chip</span>
+        <span class="block-sel">.domain-chip / inline mono</span>
+        <p class="block-desc">Monospaced identifier in a paper-2 background pill with inset border. Used for subdomain URLs, git repo paths, env var names, and script commands. Not interactive unless paired with an edit action.</p>
+        <p class="block-rule"><b>JetBrains Mono only.</b> Never use sans-serif for identifiers, URLs, or code values.</p>
+        <div class="token-refs"><span class="tr">--font-mono</span><span class="tr">--paper-2</span><span class="tr">--line</span></div>
+      </div>
+      <div class="preview" style="flex-wrap:wrap;gap:8px">
+        <span class="dchip">recipe-jar.openvoid.dev</span>
+        <span class="dchip">github.com/openvoid-apps/recipe-jar</span>
+        <span class="dchip">DATABASE_URL</span>
+        <span class="dchip">pnpm dev</span>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Info Note Card</span>
+        <span class="block-sel">.empty-note</span>
+        <p class="block-desc">Leaf-level informational card: SVG icon (14px) + bold title (12.5px / 600) + 1–2 lines of body copy (12.5px / ink-3). Sits inside the Info Grid composition below the Drop Zone. Line-2 border, no shadow.</p>
+        <p class="block-rule">Body copy max 2 lines. Never add a CTA inside a Note — if action is needed, use a different block.</p>
+        <div class="token-refs"><span class="tr">--line-2</span><span class="tr">--ink-3</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="preview col" style="gap:8px">
+        <div class="note">
+          <div class="nt"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Sandbox isolation</div>
+          <div class="nb">Your code runs in an ephemeral container. We don't retain or train on uploaded sources.</div>
+        </div>
+        <div class="note">
+          <div class="nt"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Zip what matters</div>
+          <div class="nb">Skip <code>node_modules</code>, <code>.git</code>, build artifacts. We'll install fresh.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Drop Zone</span>
+        <span class="block-sel">.drop</span>
+        <p class="block-desc">Full-width dashed upload target. A single interactive surface — not a composition. Three states: default (dashed --line border), hover (border darkens to ink-3), dragging (accent border + accent-soft fill + focus ring). Click opens file picker; drag-and-drop accepted anywhere on the document.</p>
+        <p class="block-rule"><b>Accepts .zip only.</b> The dragging state is applied by JavaScript on <code>dragenter</code>/<code>dragleave</code>/<code>drop</code>. Drag depth counter prevents flicker on child hover.</p>
+        <div class="token-refs"><span class="tr">--line</span><span class="tr">--accent</span><span class="tr">--accent-soft</span><span class="tr">--r-xl</span><span class="tr">--shadow-2</span></div>
+      </div>
+      <div class="preview col" style="gap:12px;padding:0;border:0;background:transparent;box-shadow:none">
+        <div class="dz">
+          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <div class="hed">Drop your <code style="font-family:var(--font-mono);background:var(--paper-2);padding:1px 5px;border-radius:4px">.zip</code> here, or <span class="br">browse files</span></div>
+          <div class="mt">Up to 200 MB · <span class="kbd">.zip</span> only</div>
+        </div>
+        <div class="dz drag">
+          <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <div class="hed" style="color:var(--accent)">Drop to upload codebase</div>
+          <div class="mt" style="color:var(--accent)">Dragging state — accent border + tinted fill</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Terminal ───────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><h2>Terminal</h2><span class="count">1 block</span><span class="note">The only dark surface in the system. Used exclusively on the Provisioning screen.</span></div>
+    <div class="block">
+      <div class="block-meta">
+        <span class="block-name">Boot Log</span>
+        <span class="block-sel">.terminal</span>
+        <p class="block-desc">Dark (#0E0E0E) surface, JetBrains Mono 12px / 1.7 line-height. Four text colour classes: <code>.dim</code> for comments/metadata, <code>.ok</code> for success lines (green), <code>.inf</code> for neutral lines (off-white), <code>.acc</code> for highlights (warm amber). No spinner characters — use the Breathing Dot (Eyebrow Pill) above the terminal for live state.</p>
+        <p class="block-rule"><b>Never</b> put interactive elements inside the terminal. It is read-only output. Scrolls vertically inside a constrained container — max-height should be set by the parent composition.</p>
+        <div class="token-refs"><span class="tr">--terminal</span><span class="tr">--font-mono</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="preview dark">
+        <div class="term">
+          <span class="dim">→ openvoid provisioning v1.4.2</span><br>
+          <span class="inf">  Pulling openvoid/sandbox:node20…</span><br>
+          <span class="ok">✓ Container ready in 1.2s</span><br>
+          <span class="inf">  Installing dependencies (pnpm install)…</span><br>
+          <span class="inf">  184 packages installed in 3.4s</span><br>
+          <span class="ok">✓ Dev server ready at </span><span class="acc">recipe-jar.openvoid.dev</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>OpenVoid design system · Blocks · v0.1</span>
+    <span>21 blocks across 6 groups</span>
+  </footer>
+</main>
+</body>
+</html>
