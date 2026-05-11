@@ -8,7 +8,7 @@ export interface TextareaProps {
 }
 
 /**
- * Multi-line text input — extends `.wf-input` with `display: block`
+ * Multi-line text input — extends `.field` with `display: block`
  * and `min-height: 84px` (per the wireframe canvas's Create-screen
  * variant). The user's prompt to the agent lands here.
  *
@@ -20,7 +20,7 @@ export interface TextareaProps {
 export function Textarea() {
   return ({ name, placeholder, defaultValue, required, rows = 4, id }: TextareaProps) => (
     <textarea
-      class="wf-input"
+      class="field"
       id={id}
       name={name}
       rows={rows}
