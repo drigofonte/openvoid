@@ -6,12 +6,14 @@ import { TopBar } from '../../app/ui/top-bar.tsx'
 
 describe('TopBar', () => {
   describe('path mode', () => {
-    it('renders the decorative slug with the existing 44px shape', async () => {
+    it('renders a bare <header> (shape governed by .app-shell header) with the decorative slug', async () => {
       const html = await renderToString(
         <TopBar chrome={{ mode: 'path', path: '/sessions/abc' }} />,
       )
-      assert.match(html, /class="wf-toolbar"/)
-      assert.doesNotMatch(html, /wf-toolbar-tall/)
+      // No chrome class — the App Shell composition styles the
+      // <header> element via descendant rule.
+      assert.match(html, /<header>/)
+      assert.doesNotMatch(html, /class="wf-toolbar/)
       assert.match(html, /openvoid\.dev\/sessions\/abc/)
     })
 
@@ -39,11 +41,13 @@ describe('TopBar', () => {
   })
 
   describe('crumbs mode', () => {
-    it('renders the 56px wf-toolbar-tall shape with the here segment in mono', async () => {
+    it('renders a bare <header> with the here segment in mono', async () => {
       const html = await renderToString(
         <TopBar chrome={{ mode: 'crumbs', here: '01HABCDE' }} />,
       )
-      assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+      // No chrome class — shape comes from `.app-shell header`.
+      assert.match(html, /<header>/)
+      assert.doesNotMatch(html, /class="wf-toolbar/)
       assert.match(html, /font-family:\s*var\(--font-mono\)/)
       assert.match(html, />01HABCDE</)
     })
