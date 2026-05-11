@@ -5,9 +5,9 @@
  * programmatic focus does.
  *
  * Cross-cutting: targets canonical button selectors (.btn-pri,
- * .btn-sec, .btn-ghost) plus typography links and product
- * extensions (.wf-alt — will rename to .alt in U7; .wf-sug stays
- * non-canonical until the canonical Suggested Prompts Row
+ * .btn-sec, .btn-ghost), canonical .alt, typography links, and
+ * the non-canonical .wf-sug (leaf of the canonical Suggested
+ * Prompts Row composition — stays wf-prefixed until that
  * composition lands). Loaded last among blocks/ so its specificity
  * wins regardless of source file order.
  *
@@ -18,7 +18,7 @@
 .btn-sec:focus-visible,
 .btn-ghost:focus-visible,
 .wf-link:focus-visible,
-.wf-alt:focus-visible,
+.alt:focus-visible,
 .wf-sug:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);

@@ -67,7 +67,8 @@ describe('blocks/ + compositions/', () => {
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
-      '.wf-alt',
+      '.alt',
+      '.alt.on',
       '.wf-sug',
       // Typography utilities
       '.kicker',
@@ -88,7 +89,7 @@ describe('blocks/ + compositions/', () => {
 
   it('the focus-visible composite covers canonical buttons and product-extension pills', () => {
     const focusRing = fs.readFileSync(path.join(BLOCKS_DIR, 'focus-ring.css'), 'utf-8')
-    for (const sel of ['.btn-pri', '.btn-sec', '.btn-ghost', '.wf-alt', '.wf-sug']) {
+    for (const sel of ['.btn-pri', '.btn-sec', '.btn-ghost', '.alt', '.wf-sug']) {
       assert.match(focusRing, new RegExp(escapeRegex(sel) + ':focus-visible'))
     }
   })

@@ -289,7 +289,7 @@ function Alts() {
   return () => (
     <Cluster space="var(--sp-3)" justify="center">
       {ALTS.map((alt) => (
-        <button type="button" class="wf-alt" data-coming-soon="" title="Coming soon">
+        <button type="button" class="alt" data-coming-soon="" title="Coming soon">
           <Glyph d={alt.d} size={13} />
           {alt.label}
         </button>

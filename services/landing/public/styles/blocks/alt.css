@@ -1,11 +1,23 @@
-/* ── Alts row pill button ────────────────────────────────
- * Distinct from `.btn-pri` / `.btn-sec` / `.btn-ghost`
- * (bordered, ink fg). Used for the four alternative-entry pills
- * under the composer. v1 ships with `data-coming-soon` and a
- * `title` tooltip — NOT `disabled`, since `disabled` defeats
- * `:hover` and the pill row would render visually inert.
+/*
+ * Alt Pill — canonical block per OpenVoid Blocks.html entry 11
+ * (`.alt / .alt.on`). 32px pill button for mode-switching.
+ *
+ *   .alt        Default — paper-2 bg, ink-2 text
+ *   .alt.on     Active — ink fill, paper text, shadow-2
+ *               (canonical names this `.active` in prose but the
+ *                CSS uses `.on`; we follow the CSS).
+ *
+ * Distinct from .btn-pri / .btn-sec / .btn-ghost: the alt pill is
+ * a mode toggle, not an action — only one in a row should ever be
+ * active.
+ *
+ * The `[data-coming-soon]` attribute is a non-canonical pragmatic
+ * addition for v1's inert mode pills (Template / Upload / Fork).
+ * NOT `disabled` — `disabled` defeats `:hover` and the row would
+ * render visually inert; we keep the hover state and just override
+ * the cursor + opacity.
  */
-.wf-alt {
+.alt {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
@@ -17,21 +29,35 @@
   color: var(--ink-2);
   font: 500 12.5px/1 var(--font-sans);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+  transition: background var(--dur-fast) var(--ease-std),
+              color var(--dur-fast) var(--ease-std),
+              box-shadow var(--dur-fast) var(--ease-std);
 }
-.wf-alt:hover {
+.alt:hover {
   background: var(--paper-3);
   color: var(--ink);
 }
-.wf-alt svg {
+.alt.on {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: var(--shadow-2);
+}
+.alt.on:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.alt svg {
   width: 13px;
   height: 13px;
   color: var(--ink-3);
 }
-.wf-alt:hover svg {
+.alt:hover svg {
   color: var(--ink-2);
 }
-.wf-alt[data-coming-soon] {
+.alt.on svg {
+  color: var(--paper);
+}
+.alt[data-coming-soon] {
   cursor: not-allowed;
   opacity: 0.85;
 }
