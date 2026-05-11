@@ -54,7 +54,7 @@ describe('blocks/ + compositions/', () => {
   it('contains the new component recipes the redesign introduces', () => {
     for (const sel of [
       '.wf-toolbar-tall',
-      '.wf-card-elev',
+      '.card-shell',
       '.wf-btn-action',
       '.wf-btn-action-pri',
       '.wf-btn-action-sec',
@@ -74,13 +74,13 @@ describe('blocks/ + compositions/', () => {
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
-      '.wf-composer',
-      '.wf-composer-bar',
+      '.composer',
+      '.composer-bar',
       '.wf-tool',
       '.wf-btn-go',
       '.wf-alt',
       '.wf-sug',
-      '.wf-livesat',
+      '.composer-derived',
     ]) {
       assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
     }
@@ -88,9 +88,9 @@ describe('blocks/ + compositions/', () => {
 
   it('wires the composer focus-within halo and the narrow-viewport bar wrap', () => {
     const composer = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'composer.css'), 'utf-8')
-    const composerBlock = matchBlock(composer, '.wf-composer')
+    const composerBlock = matchBlock(composer, '.composer')
     assert.match(composerBlock, /overflow:\s*hidden/)
-    assert.match(composer, /\.wf-composer:focus-within/)
+    assert.match(composer, /\.composer:focus-within/)
     assert.match(composer, /@media \(max-width:\s*720px\)/)
   })
 
@@ -101,11 +101,11 @@ describe('blocks/ + compositions/', () => {
     }
   })
 
-  it('wf-livesat fades via opacity transition gated by [data-hidden]', () => {
-    const livesat = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'livesat.css'), 'utf-8')
-    const block = matchBlock(livesat, '.wf-livesat')
+  it('the composer derived row fades via opacity transition gated by [data-hidden]', () => {
+    const composer = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'composer.css'), 'utf-8')
+    const block = matchBlock(composer, '.composer-derived')
     assert.match(block, /transition:\s*opacity/)
-    assert.match(livesat, /\.wf-livesat\[data-hidden\]/)
+    assert.match(composer, /\.composer-derived\[data-hidden\]/)
   })
 
   it('declares the breathe and flow keyframes', () => {
@@ -131,19 +131,13 @@ describe('blocks/ + compositions/', () => {
     assert.doesNotMatch(block, /outline:\s*2px solid/)
   })
 
-  it('compositions/ holds the 13 composition-shaped files split out from blocks/', () => {
+  it('compositions/ holds only composition-shaped files', () => {
     const expected = [
-      'app-icon.css',
+      'card-shell.css',
       'composer.css',
       'connector.css',
-      'icon-mark.css',
-      'livesat.css',
-      'progress.css',
-      'skeleton.css',
-      'spinner.css',
       'split-tip.css',
       'suggestion.css',
-      'surface.css',
       'toolbar.css',
       'url-row.css',
     ]
@@ -151,27 +145,39 @@ describe('blocks/ + compositions/', () => {
     assert.deepEqual(actual, expected)
   })
 
-  it('blocks/ no longer holds files that belong in compositions/', () => {
+  it('blocks/ holds leaf display primitives including the leaves reclassified from compositions/', () => {
     const blockNames = blockFiles.map((f) => f.name)
-    for (const moved of [
+    for (const leaf of [
       'app-icon.css',
-      'composer.css',
-      'connector.css',
       'icon-mark.css',
-      'livesat.css',
       'progress.css',
       'skeleton.css',
       'spinner.css',
+      'surface.css',
+    ]) {
+      assert.equal(
+        blockNames.includes(leaf),
+        true,
+        `${leaf} should live in blocks/ (leaf display primitive)`,
+      )
+    }
+  })
+
+  it('blocks/ does not hold composition-shaped files', () => {
+    const blockNames = blockFiles.map((f) => f.name)
+    for (const composition of [
+      'card-shell.css',
+      'composer.css',
+      'connector.css',
       'split-tip.css',
       'suggestion.css',
-      'surface.css',
       'toolbar.css',
       'url-row.css',
     ]) {
       assert.equal(
-        blockNames.includes(moved),
+        blockNames.includes(composition),
         false,
-        `${moved} should have moved to compositions/`,
+        `${composition} should live in compositions/`,
       )
     }
   })

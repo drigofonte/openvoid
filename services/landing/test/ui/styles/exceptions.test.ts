@@ -21,7 +21,7 @@ const css = fs.readFileSync(EXCEPTIONS_PATH, 'utf-8')
 
 describe('exceptions.css', () => {
   it('contains the accent-top pseudo for elevated cards', () => {
-    assert.match(css, /\.wf-card-elev\[data-accent-top\]::before/)
+    assert.match(css, /\.card-shell\[data-accent-top\]::before/)
   })
 
   it('uses linear-gradient with --accent for the strip', () => {

@@ -11,6 +11,6 @@ describe('DerivedSlug (SSR fallback)', () => {
     )
     assert.doesNotMatch(html, /<button\b/)
     assert.doesNotMatch(html, /<a\b/)
-    assert.doesNotMatch(html, /wf-livesat/)
+    assert.doesNotMatch(html, /composer-derived/)
   })
 })

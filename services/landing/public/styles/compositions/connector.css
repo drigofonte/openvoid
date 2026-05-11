@@ -1,4 +1,15 @@
-/* Animated SVG between the duo cards. */
+/*
+ * Connector — NON-CANONICAL product extension. The canonical
+ * `docs/designs/OpenVoid Compositions.html` does not define this
+ * composition; it's a Ready-page-specific flourish: an animated
+ * dashed-line SVG that visually connects the two artifact cards
+ * (Dev / Watch) in the Ready stage.
+ *
+ * Kept under the `wf-` prefix until the canonical doc either (a)
+ * absorbs the pattern with a proper name, or (b) declares it
+ * out-of-scope and the implementation moves to inline JSX/SVG.
+ * Animated SVG between the duo cards.
+ */
 .wf-connector-host {
   position: relative;
   container-type: inline-size;

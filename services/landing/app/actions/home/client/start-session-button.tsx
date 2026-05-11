@@ -6,7 +6,7 @@ import { PROMPT_MIN_LENGTH } from './constants.ts'
  * StartSessionButton — replaces the original `SubmitButton` for the
  * Create-page composer. Renders a `.wf-btn-go` button with the
  * label and an arrow SVG inside; the `⌘ ↵` kbd hint is rendered
- * by the page in a sibling `.wf-submit-area` span (NOT inside this
+ * by the page in a sibling `.composer-submit-area` span (NOT inside this
  * button — that contradicts the design's `.btn-go` shape).
  *
  * Behavior:

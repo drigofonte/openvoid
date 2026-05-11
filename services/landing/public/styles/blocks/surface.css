@@ -1,0 +1,28 @@
+/*
+ * Leaf surfaces and background-pattern utilities. NOT canonical
+ * Blocks-doc entries — these predate the canonical taxonomy and
+ * are kept under the `wf-` prefix as non-canonical product utilities.
+ * The canonical Card Shell composition lives in
+ * `compositions/card-shell.css`.
+ */
+.wf-hairline {
+  border: 1px solid var(--wf-line);
+  border-radius: 8px;
+  background: #fff;
+}
+.wf-card {
+  border: 1px solid var(--wf-line);
+  border-radius: 10px;
+  background: #fff;
+}
+.wf-bg-alt { background: var(--wf-bg-alt); }
+.wf-grid-bg {
+  background-image:
+    linear-gradient(var(--wf-line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wf-line-soft) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.wf-stripe-bg {
+  background-image:
+    repeating-linear-gradient(135deg, var(--wf-line-soft) 0 8px, transparent 8px 16px);
+}

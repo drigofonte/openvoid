@@ -1,0 +1,34 @@
+/*
+ * Card Shell — canonical OpenVoid Compositions block (entry 07 in
+ * `docs/designs/OpenVoid Compositions.html`). An elevated surface
+ * (paper card + shadow-2 + sp-8 padding) that serves as the
+ * container for component compositions like Stack Detection Card,
+ * File Header Strip, and the Ready-page artifact cards.
+ *
+ * Structure: a flex column so an inner Stack (CUBE composition
+ * primitive in `composition.css`) can grow to fill the card's
+ * height. Combined with `.stack-split { margin-block-end: auto }`,
+ * this lets a card's bottom-row content (URL row + action button)
+ * anchor to the card's bottom edge — so two side-by-side cards
+ * with different middle-content heights still align their bottom
+ * rows. The `.card-shell > .stack` descendant rule is a deliberate
+ * cross-layer combinator and must travel with this file.
+ */
+.card-shell {
+  position: relative;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  padding: var(--sp-8);
+  transition: transform var(--dur-fast) var(--ease-std),
+              box-shadow var(--dur-fast) var(--ease-std);
+  display: flex;
+  flex-direction: column;
+}
+.card-shell > .stack {
+  flex: 1;
+}
+.card-shell:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-3);
+}

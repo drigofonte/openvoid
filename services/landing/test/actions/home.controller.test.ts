@@ -68,8 +68,8 @@ describe('home / index', () => {
     assert.match(html, />new app</)
     assert.match(html, /Back to apps/)
     // Composer is rendered as a single elevated form with the
-    // .wf-composer recipe.
-    assert.match(html, /<form\b[^>]*\bclass="[^"]*\bwf-composer\b[^"]*"/)
+    // canonical .composer recipe.
+    assert.match(html, /<form\b[^>]*\bclass="[^"]*\bcomposer\b[^"]*"/)
     // Repo/branch inputs are gone — controller defaults them.
     assert.doesNotMatch(html, /name="repo"/)
     assert.doesNotMatch(html, /name="branch"/)

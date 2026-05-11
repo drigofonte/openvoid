@@ -35,13 +35,19 @@ export interface DocumentProps {
 const BLOCK_FILES = [
   'alt',
   'animations',
+  'app-icon',
   'button',
   'chip',
   'dot',
+  'icon-mark',
   'input',
   'keycap',
   'layout',
   'pill',
+  'progress',
+  'skeleton',
+  'spinner',
+  'surface',
   'tool',
   'typography',
   'visually-hidden',
@@ -51,17 +57,11 @@ const BLOCK_FILES = [
 ] as const
 
 const COMPOSITION_FILES = [
-  'app-icon',
+  'card-shell',
   'composer',
   'connector',
-  'icon-mark',
-  'livesat',
-  'progress',
-  'skeleton',
-  'spinner',
   'split-tip',
   'suggestion',
-  'surface',
   'toolbar',
   'url-row',
 ] as const
