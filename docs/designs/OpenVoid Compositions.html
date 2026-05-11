@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OpenVoid · Compositions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --paper:       oklch(0.972 0.006 75);
+  --paper-2:     oklch(0.955 0.006 75);
+  --paper-3:     oklch(0.935 0.006 75);
+  --card:        #ffffff;
+  --ink:         oklch(0.18 0.005 60);
+  --ink-2:       oklch(0.42 0.005 60);
+  --ink-3:       oklch(0.62 0.005 60);
+  --ink-4:       oklch(0.78 0.005 60);
+  --line:        oklch(0.91 0.004 75);
+  --line-2:      oklch(0.95 0.004 75);
+  --accent:      oklch(0.68 0.18 50);
+  --accent-soft: oklch(0.94 0.04 60);
+  --ok:          oklch(0.55 0.10 155);
+  --ok-soft:     oklch(0.94 0.04 155);
+  --good:        oklch(0.62 0.14 150);
+  --shadow-1: 0 1px 0 rgba(20,18,14,.04), 0 1px 2px rgba(20,18,14,.04);
+  --shadow-2: 0 1px 0 rgba(20,18,14,.04), 0 4px 14px rgba(20,18,14,.06);
+  --r-xs:4px;--r-sm:7px;--r-md:10px;--r-lg:14px;--r-xl:18px;--r-pill:999px;
+  --font-sans:'Inter',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+  font-family:var(--font-sans);font-size:14px;line-height:1.5;letter-spacing:-0.005em;
+  -webkit-font-smoothing:antialiased}
+
+header{height:56px;display:flex;align-items:center;gap:14px;padding:0 24px;
+  border-bottom:1px solid var(--line);background:var(--paper);position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.brand-mark{width:22px;height:22px;border-radius:6px;background:var(--ink);display:grid;place-items:center}
+.brand-mark::before{content:"";width:9px;height:9px;border-radius:50%;border:1.5px solid var(--paper)}
+.crumbs{display:flex;align-items:center;gap:8px;color:var(--ink-3);font-size:13.5px}
+.crumbs .sep{color:var(--ink-4)}
+.crumbs .here{color:var(--ink);font-weight:500}
+.grow{flex:1}
+.ver{font:500 11px/1 var(--font-mono);color:var(--ink-3);background:var(--paper-2);padding:4px 8px;border-radius:var(--r-xs)}
+
+main{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+.hero{margin-bottom:48px}
+.hero h1{font-size:38px;font-weight:600;letter-spacing:-0.025em;margin:0 0 8px;line-height:1.05}
+.hero p{font-size:15px;color:var(--ink-2);margin:0 0 8px;max-width:600px;line-height:1.55}
+.hero .tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 11px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:14px}
+.hero a{color:var(--ink);font-weight:500;text-underline-offset:3px}
+
+/* Part divider */
+.part{margin:0 0 32px;padding:10px 0;border-bottom:2px solid var(--ink)}
+.part h2{font-size:22px;font-weight:600;letter-spacing:-0.018em;margin:0 0 4px}
+.part p{font-size:13px;color:var(--ink-2);margin:0;max-width:600px}
+
+section{margin-bottom:52px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.sec-head h3{margin:0;font-size:16px;font-weight:600;letter-spacing:-0.012em}
+.sec-head .num{font:500 11px/1 var(--font-mono);color:var(--accent);background:var(--accent-soft);padding:3px 7px;border-radius:var(--r-xs)}
+.sec-head .note{margin-left:auto;font-size:12px;color:var(--ink-2);max-width:360px;text-align:right}
+
+.comp{display:grid;grid-template-columns:240px 1fr;gap:28px;align-items:start;
+  padding:22px 0;border-top:1px solid var(--line-2)}
+.comp:first-of-type{border-top:0;padding-top:0}
+.comp-meta{display:flex;flex-direction:column;gap:5px}
+.comp-name{font:600 14px/1 var(--font-sans);color:var(--ink)}
+.comp-sel{font:500 11.5px/1 var(--font-mono);color:var(--ink-3);background:var(--paper-2);padding:2px 6px;border-radius:var(--r-xs);display:inline-block;margin-top:2px}
+.comp-desc{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin-top:4px}
+.comp-rule{font-size:11.5px;color:var(--ink-3);line-height:1.55;margin-top:3px}
+.comp-rule b{color:var(--ink-2);font-weight:500}
+.token-refs{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.tr{font:500 11px/1 var(--font-mono);color:var(--ink-3);background:var(--paper-2);padding:2px 6px;border-radius:3px;box-shadow:inset 0 0 0 1px var(--line-2)}
+.slot-list{display:flex;flex-direction:column;gap:3px;margin-top:6px}
+.slot-item{font-size:11.5px;color:var(--ink-2);line-height:1.5;display:flex;align-items:baseline;gap:6px}
+.slot-item b{color:var(--ink);font-weight:600;white-space:nowrap}
+
+/* Diagram system */
+.diagram{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow-1)}
+.di{padding:18px;background:var(--paper-2);display:flex;flex-direction:column;gap:8px}
+.dr{display:flex;gap:7px;align-items:stretch}
+/* slot colours */
+.s{border-radius:5px;display:flex;align-items:center;justify-content:center;
+  font:500 10px/1.3 var(--font-mono);text-align:center;padding:7px 9px;border:1.5px solid transparent;letter-spacing:0.01em}
+.sf{background:color-mix(in oklab,var(--ink) 8%,white);border-color:color-mix(in oklab,var(--ink) 18%,var(--line));color:var(--ink-2)}   /* fixed chrome */
+.sc{background:color-mix(in oklab,var(--accent) 9%,white);border-color:color-mix(in oklab,var(--accent) 30%,var(--line));color:color-mix(in oklab,var(--accent) 80%,var(--ink))} /* content slot */
+.sa{background:color-mix(in oklab,var(--ok) 8%,white);border-color:color-mix(in oklab,var(--ok) 30%,var(--line));color:color-mix(in oklab,var(--ok) 80%,var(--ink))}     /* action */
+.sd{background:var(--paper-2);border-color:var(--line-2);color:var(--ink-4)}  /* spacer/dim */
+.mono{font-family:var(--font-mono);font-size:10px}
+.df{font:500 10px/1 var(--font-mono);color:var(--ink-4)}
+
+/* Diagram footnote */
+.dfooter{padding:10px 18px;border-top:1px solid var(--line-2);display:flex;flex-wrap:wrap;gap:14px}
+.dnote{flex:1;min-width:160px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.dnote b{color:var(--ink);font-weight:600;display:block;margin-bottom:2px}
+
+/* Summary table */
+.map-table{width:100%;border-collapse:collapse;font-size:12.5px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow-1)}
+.map-table th{padding:10px 16px;text-align:left;font-weight:600;color:var(--ink);background:var(--paper-2);border-bottom:1px solid var(--line)}
+.map-table td{padding:10px 16px;border-bottom:1px solid var(--line-2);color:var(--ink-2)}
+.map-table tr:last-child td{border-bottom:0}
+.map-table td:first-child{font-weight:500;color:var(--ink)}
+.map-table .mono{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3)}
+
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12.5px;display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand"><span class="brand-mark"></span>openvoid</span>
+  <div class="crumbs"><span>system</span><span class="sep">/</span><span class="here">compositions</span></div>
+  <div class="grow"></div>
+  <span class="ver">v0.1</span>
+</header>
+
+<main>
+  <div class="hero">
+    <span class="tag"><span style="width:5px;height:5px;border-radius:50%;background:currentColor;display:inline-block"></span>Compositions</span>
+    <h1>Flexible layout systems.</h1>
+    <p>In CUBE CSS, compositions are a high-level macro view — even when applied at component scale. The composition layer creates flexible, component-agnostic layout systems that support as many variants of content as possible.</p>
+    <p>Compositions don't care what blocks live inside them. They only define spatial relationships: how slots are sized, ordered, and spaced. The atomic pieces that fill those slots are documented in <a href="OpenVoid Blocks.html">Blocks</a>.</p>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="part">
+    <h2>Part 1 · Spatial Compositions</h2>
+    <p>Screen-level and layout-level arrangements. These are the largest structural units — they describe how entire pages and major regions are organised.</p>
+  </div>
+
+  <section>
+    <div class="sec-head"><h3>App Shell</h3><span class="num">01</span><span class="note">Every screen. Never re-implement.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">App Shell</span>
+        <span class="comp-sel">header + main</span>
+        <p class="comp-desc">Sticky 56px header fixed at top of viewport; scrolling <code>main</code> fills the rest. The header is always <code>position:sticky; top:0; z-index:10</code> — nothing overlaps it.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>header</b>Brand mark · Breadcrumbs · Grow · Actions · Avatar</div>
+          <div class="slot-item"><b>main</b>Any screen composition — scrolls independently</div>
+        </div>
+        <div class="token-refs"><span class="tr">--h-header:56px</span><span class="tr">--line</span><span class="tr">--paper</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="gap:5px">
+          <div class="dr" style="height:40px">
+            <div class="s sf" style="flex:0 0 130px">brand + crumbs</div>
+            <div class="s sd" style="flex:1">grow</div>
+            <div class="s sf" style="flex:0 0 80px">actions</div>
+            <div class="s sf" style="flex:0 0 44px">avatar</div>
+          </div>
+          <div class="df" style="padding:0 2px">border-bottom: 1px solid var(--line)</div>
+          <div class="s sc" style="min-height:96px;align-items:flex-start;justify-content:flex-start;padding:12px">main · scrolls · fills remaining vh</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Stage</h3><span class="num">02</span><span class="note">Create Prompt, Provisioning, Two-Links screens.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Stage</span>
+        <span class="comp-sel">.stage</span>
+        <p class="comp-desc">Full-viewport-height flex column with children stacking vertically and a consistent gap. Background is always --paper. Two variants: centered (Provisioning) and top-aligned with padding-top (Create Prompt).</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Centered</b><code>justify-content:center</code> — Provisioning, session-ready screens</div>
+          <div class="slot-item"><b>Top-aligned</b><code>padding:80px 24px 80px; gap:28px</code> — Create Prompt</div>
+        </div>
+        <p class="comp-rule"><b>Max-width lives on children</b>, never on the stage. Stage is always full-bleed.</p>
+        <div class="token-refs"><span class="tr">--paper</span><span class="tr">--sp-12</span><span class="tr">--w-stage</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="align-items:center;gap:9px">
+          <div class="s sf" style="width:100%">page heading block</div>
+          <div class="s sc" style="width:92%;min-height:64px">hero block (Composer / boot card)</div>
+          <div class="s sd" style="width:80%">alt row / suggested prompts</div>
+          <div class="s sd" style="width:60%;font-size:9px">footer note</div>
+          <div class="df" style="text-align:center">children set their own max-width — stage never does</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Centered Column</h3><span class="num">03</span><span class="note">Three named widths — pick the right one for context.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Centered Column</span>
+        <span class="comp-sel">max-width + margin: 0 auto</span>
+        <p class="comp-desc">Single-axis centering. Applied on content wrappers, never on the shell or stage. Three named sizes:</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>--w-prose (520px)</b>Lede copy, footnotes, narrow panels</div>
+          <div class="slot-item"><b>--w-stage (760px)</b>Composer, single-column heroes</div>
+          <div class="slot-item"><b>--w-page (1080px)</b>Two-column layouts, full-page grids</div>
+        </div>
+        <p class="comp-rule"><b>Always add</b> <code>padding: 0 24px</code> to prevent edge-bleed on narrow viewports.</p>
+        <div class="token-refs"><span class="tr">--w-prose</span><span class="tr">--w-stage</span><span class="tr">--w-page</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="position:relative;height:140px;overflow:hidden;align-items:center;justify-content:center">
+          <div style="width:100%;height:116px;background:color-mix(in oklab,var(--ink) 4%,white);border-radius:5px;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center">
+            <div class="df">--w-page · 1080px</div>
+          </div>
+          <div style="position:absolute;width:72%;height:82px;background:color-mix(in oklab,var(--accent) 8%,white);border-radius:5px;border:1.5px dashed color-mix(in oklab,var(--accent) 35%,var(--line));display:flex;align-items:center;justify-content:center">
+            <div class="df" style="color:color-mix(in oklab,var(--accent) 70%,var(--ink))">--w-stage · 760px</div>
+          </div>
+          <div style="position:absolute;width:46%;height:48px;background:color-mix(in oklab,var(--ok) 8%,white);border-radius:5px;border:1.5px dashed color-mix(in oklab,var(--ok) 35%,var(--line));display:flex;align-items:center;justify-content:center">
+            <div class="df" style="color:color-mix(in oklab,var(--ok) 70%,var(--ink))">--w-prose · 520px</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Stack</h3><span class="num">04</span><span class="note">The most-used composition. Vertical sequencing with a single gap value.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Stack</span>
+        <span class="comp-sel">flex-direction:column; gap:N</span>
+        <p class="comp-desc">A vertical sequence of children separated by a single gap from the spacing scale. Child-agnostic — works for page sections, card body rows, meta labels, anything stacked vertically.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>gap: 4px</b>Tight: icon+label, status sub-info</div>
+          <div class="slot-item"><b>gap: 8–10px</b>Default: alt pills row, quick chips</div>
+          <div class="slot-item"><b>gap: 14px</b>Card body items, composer layers</div>
+          <div class="slot-item"><b>gap: 18px</b>Between cards (left column)</div>
+          <div class="slot-item"><b>gap: 28px</b>Stage-level sections</div>
+        </div>
+        <p class="comp-rule"><b>One gap value per stack.</b> If two adjacent children need different spacing, split them into separate stacks.</p>
+        <div class="token-refs"><span class="tr">--sp-1 → --sp-12</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="align-items:stretch">
+          <div class="s sc" style="height:28px">child A</div>
+          <div class="df" style="text-align:center">gap (from scale)</div>
+          <div class="s sc" style="height:28px">child B</div>
+          <div class="df" style="text-align:center">same gap</div>
+          <div class="s sc" style="height:28px">child C</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Cluster</h3><span class="num">05</span><span class="note">Horizontal groups that wrap. Buttons, chips, tags, toolbar items.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Cluster</span>
+        <span class="comp-sel">flex-wrap:wrap; gap:N; align-items:center</span>
+        <p class="comp-desc">A horizontal row of naturally-sized children that wraps onto new lines when it overflows. Never use inline-block or margin hacks — always <code>gap</code>.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>gap: 6px</b>Stack Tags, suggested prompt chips</div>
+          <div class="slot-item"><b>gap: 8px</b>Composer toolbar tools, action rows</div>
+          <div class="slot-item"><b>gap: 10px</b>Alt Pills row</div>
+        </div>
+        <p class="comp-rule">The Composer toolbar is the <b>only</b> Cluster that uses <code>margin-left:auto</code> to push the submit group right. Everywhere else, children are left-aligned.</p>
+        <div class="token-refs"><span class="tr">--sp-2</span><span class="tr">--sp-3</span><span class="tr">--sp-4</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div class="dr" style="flex-wrap:wrap;gap:7px">
+            <div class="s sc" style="flex:0 0 auto;height:26px;padding:0 11px">chip A</div>
+            <div class="s sc" style="flex:0 0 auto;height:26px;padding:0 11px">chip B wider</div>
+            <div class="s sc" style="flex:0 0 auto;height:26px;padding:0 11px">chip C</div>
+            <div class="s sc" style="flex:0 0 auto;height:26px;padding:0 11px">chip D</div>
+            <div class="s sc" style="flex:0 0 auto;height:26px;padding:0 11px">chip E</div>
+            <div class="s sd" style="flex:0 0 auto;height:26px;padding:0 11px">wraps ↵</div>
+            <div class="s sc" style="flex:0 0 auto;height:26px;padding:0 11px">chip F</div>
+          </div>
+          <div class="df">all children: flex:0 0 auto · naturally sized · no fixed widths</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Toolbar Row</h3><span class="num">06</span><span class="note">Left tools, right submit. Composer bar and Card Head.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Toolbar Row</span>
+        <span class="comp-sel">.composer-bar / .card-head</span>
+        <p class="comp-desc">Horizontal flex row. Tools or labels cluster on the left; submit/action group pinned right with <code>margin-left:auto</code>. A top border + paper-2 background separate it from the content above (Composer variant only).</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Left</b>Ghost tool buttons (Attach, Stack, DB…) or card title + muted label</div>
+          <div class="slot-item"><b>Right</b>Shortcut hint + Primary button, or text action links (.act)</div>
+        </div>
+        <p class="comp-rule">On narrow viewports (&lt;720px): submit-area wraps to its own row — <code>flex-wrap:wrap</code> on the bar; <code>margin-left:0; width:100%; justify-content:flex-end</code> on submit-area.</p>
+        <div class="token-refs"><span class="tr">--line-2</span><span class="tr">--paper-2</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="padding:0">
+          <div style="padding:9px 14px;background:var(--paper-2);border-top:1px solid var(--line-2)">
+            <div class="dr" style="align-items:center;gap:8px">
+              <div class="s sf" style="flex:0 0 auto;height:24px;padding:0 9px">tool 1</div>
+              <div class="s sf" style="flex:0 0 auto;height:24px;padding:0 9px">tool 2</div>
+              <div class="s sd" style="flex:1;height:24px">margin-left:auto →</div>
+              <div class="s sd" style="flex:0 0 auto;height:24px;padding:0 9px">⌘↵</div>
+              <div class="s sa" style="flex:0 0 auto;height:24px;padding:0 11px;font-weight:600">Primary CTA</div>
+            </div>
+          </div>
+        </div>
+        <div class="dfooter">
+          <div class="dnote"><b>Card-head variant</b>No paper-2 background. Border-bottom only. Right slot uses text links, not primary buttons.</div>
+          <div class="dnote"><b>Height</b>30px content + 12px/14px padding = ~56px total. Never grow.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Card Shell</h3><span class="num">07</span><span class="note">Universal card pattern. Head optional, body always present.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Card Shell</span>
+        <span class="comp-sel">.card &gt; .card-head + .card-body</span>
+        <p class="comp-desc">White card (border + shadow-1 + --r-md radius) split into head and body zones by a --line-2 divider. Head carries a title, optional muted context, and right-aligned action links. Body is unconstrained.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>card-head</b>Title (13px/600) · muted label · grow · action links</div>
+          <div class="slot-item"><b>card-body</b>Any content — padding 14px top / 16px bottom / 18px sides</div>
+        </div>
+        <p class="comp-rule"><b>Head-less variant:</b> omit .card-head entirely; use only .card-body with full padding. Set <code>overflow:hidden</code> on .card only when a child needs clipping.</p>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--line</span><span class="tr">--line-2</span><span class="tr">--shadow-1</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="padding:0;gap:0">
+          <div style="background:var(--card);border-radius:var(--r-md) var(--r-md) 0 0;overflow:hidden">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:8px">
+              <div class="s sf" style="flex:0 0 auto;height:20px;padding:0 9px;font-size:10px">title</div>
+              <div class="s sd" style="flex:0 0 auto;height:20px;padding:0 9px;font-size:10px">muted</div>
+              <div class="s sd" style="flex:1;height:20px"></div>
+              <div class="s sf" style="flex:0 0 auto;height:20px;padding:0 9px;font-size:10px">action</div>
+            </div>
+            <div style="padding:12px 14px 14px">
+              <div class="s sc" style="min-height:52px;align-items:flex-start;justify-content:flex-start">body content · any block</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Info Grid</h3><span class="num">08</span><span class="note">3-column equal grid below the Drop Zone.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Info Grid</span>
+        <span class="comp-sel">.empty-notes</span>
+        <p class="comp-desc">CSS Grid — <code>grid-template-columns: 1fr 1fr 1fr</code>, gap 14px. Fills with Info Note Card blocks. Always exactly 3 columns. Collapses to 1 column below 900px.</p>
+        <p class="comp-rule"><b>Content:</b> each note is a leaf block — icon + title + 1–2 line body. Never use more than 3 items per row or the grid will orphan single cards awkwardly.</p>
+        <div class="token-refs"><span class="tr">--sp-6</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div class="s sc" style="height:56px;flex-direction:column;gap:4px"><span>icon + title</span><span style="font-size:9px;opacity:.65">body copy</span></div>
+            <div class="s sc" style="height:56px;flex-direction:column;gap:4px"><span>icon + title</span><span style="font-size:9px;opacity:.65">body copy</span></div>
+            <div class="s sc" style="height:56px;flex-direction:column;gap:4px"><span>icon + title</span><span style="font-size:9px;opacity:.65">body copy</span></div>
+          </div>
+          <div class="df">→ 1-col stack below 900px</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Sidebar</h3><span class="num">09</span><span class="note">Codebase Uploaded state — analysis left, sticky kickoff right.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Asymmetric Sidebar</span>
+        <span class="comp-sel">.body</span>
+        <p class="comp-desc">CSS Grid — <code>minmax(0, 1.45fr) minmax(0, 1fr)</code>. Left column is a stack of cards that scrolls normally. Right column is a sticky kickoff composer (<code>position:sticky; top:80px</code>).</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Left (1.45fr)</b>File Header · Compat Banner · Stack Detection Card · Footer Bar</div>
+          <div class="slot-item"><b>Right (1fr)</b>Kickoff Composer — sticky, never scrolls past viewport</div>
+        </div>
+        <p class="comp-rule"><b>Always <code>minmax(0, ...)</code></b> to prevent blowout from long mono strings. Single column below 900px; right panel falls below and becomes static.</p>
+        <div class="token-refs"><span class="tr">--w-page</span><span class="tr">--sp-7</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div class="dr" style="gap:8px;align-items:stretch">
+            <div style="flex:1.45;display:flex;flex-direction:column;gap:7px">
+              <div class="s sf" style="height:32px">file header</div>
+              <div class="s sf" style="height:36px">compat banner</div>
+              <div class="s sc" style="height:80px">stack detection card</div>
+              <div class="s sf" style="height:32px">footer bar</div>
+            </div>
+            <div style="flex:1">
+              <div class="s sa" style="height:100%;min-height:160px;flex-direction:column;gap:5px;justify-content:flex-start;padding:11px;align-items:flex-start">
+                <span>kickoff composer</span>
+                <span style="font-size:9px;opacity:.7">position:sticky · top:80px</span>
+              </div>
+            </div>
+          </div>
+          <div class="df">grid-template-columns: minmax(0,1.45fr) minmax(0,1fr) · gap:18px</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Page Heading</h3><span class="num">10</span><span class="note">Four-layer contextual header above page content.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Page Heading</span>
+        <span class="comp-sel">.pageheading</span>
+        <p class="comp-desc">A vertical sequence of four independently-constrained layers. Not a block — it arranges four separate blocks with different max-widths and spacing rhythms between each transition.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Eyebrow</b>Pill block · 11.5px accent · margin-bottom 12px</div>
+          <div class="slot-item"><b>H1</b>34px / 600 · max-width 680px · margin-bottom 8px</div>
+          <div class="slot-item"><b>Lede</b>15px / ink-2 · max-width --w-prose · margin-bottom 12px</div>
+          <div class="slot-item"><b>Switch Row</b>Optional — only on dedicated sub-mode screens</div>
+        </div>
+        <p class="comp-rule">H1 and lede <b>rewrite dynamically</b> on mode change. Eyebrow and Switch Row are static.</p>
+        <div class="token-refs"><span class="tr">--w-page</span><span class="tr">--w-prose</span><span class="tr">--accent-soft</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="gap:0">
+          <div style="display:flex;margin-bottom:11px"><div class="s sc" style="flex:0 0 auto;height:20px;padding:0 9px;font-size:9px">eyebrow pill · accent</div></div>
+          <div class="s sf" style="height:38px;justify-content:flex-start;padding:0 4px;margin-bottom:7px;font-size:10px">H1 · 34px/600 · max-width 680px</div>
+          <div class="s sd" style="height:28px;justify-content:flex-start;padding:0 4px;margin-bottom:11px;font-size:10px">lede · 15px/ink-2 · max-width --w-prose</div>
+          <div class="dr" style="gap:6px">
+            <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 7px;font-size:9px">Or start from</div>
+            <div class="s sc" style="flex:0 0 auto;height:18px;padding:0 7px;font-size:9px">a prompt</div>
+            <div class="s sc" style="flex:0 0 auto;height:18px;padding:0 7px;font-size:9px">GitHub</div>
+            <div class="s sc" style="flex:0 0 auto;height:18px;padding:0 7px;font-size:9px">template</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <div class="part">
+    <h2>Part 2 · Component Compositions</h2>
+    <p>Component-agnostic layout systems at component scale. These compose blocks into larger UI patterns — they define the spatial relationships inside a component, not what the component looks like.</p>
+  </div>
+
+  <section>
+    <div class="sec-head"><h3>Composer</h3><span class="num">11</span><span class="note">Hero input on the Create Prompt screen.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Composer</span>
+        <span class="comp-sel">.composer</span>
+        <p class="comp-desc">Three-zone vertical composition inside a white card. Arranges a free-text input zone, an optional derived-name row, and a Toolbar Row. The zones stack without gaps — borders and padding handle spacing internally.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Body</b>Textarea — auto-grows, max-height 360px</div>
+          <div class="slot-item"><b>Derived row</b>Optional — fades in once ≥ 8 chars typed</div>
+          <div class="slot-item"><b>Toolbar</b>Toolbar Row composition — tools left, submit right</div>
+        </div>
+        <p class="comp-rule">Focus-within on the card triggers the accent focus ring. A dragging state (class applied by JS on file drag) shows an inset drop overlay above all three zones.</p>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--r-xl</span><span class="tr">--shadow-2</span><span class="tr">--accent-soft</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="padding:0;gap:0">
+          <div style="background:var(--card);border-radius:var(--r-xl) var(--r-xl) 0 0;overflow:hidden">
+            <div style="padding:16px 18px 6px">
+              <div class="s sc" style="min-height:52px;align-items:flex-start;justify-content:flex-start">textarea · auto-grows · placeholder resets per mode</div>
+            </div>
+            <div style="padding:0 18px 10px;display:flex;align-items:center;gap:8px">
+              <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">Will live at</div>
+              <div class="s sf" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">slug.openvoid.dev</div>
+              <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">edit name</div>
+            </div>
+            <div style="padding:8px 12px 10px;background:var(--paper-2);border-top:1px solid var(--line-2)">
+              <div class="dr" style="align-items:center;gap:7px">
+                <div class="s sf" style="flex:0 0 auto;height:22px;padding:0 8px;font-size:9px">Attach</div>
+                <div class="s sf" style="flex:0 0 auto;height:22px;padding:0 8px;font-size:9px">Stack</div>
+                <div class="s sd" style="flex:1;height:22px;font-size:9px">→ margin-left:auto →</div>
+                <div class="s sd" style="flex:0 0 auto;height:22px;padding:0 8px;font-size:9px">⌘↵</div>
+                <div class="s sa" style="flex:0 0 auto;height:22px;padding:0 10px;font-size:9px;font-weight:700">Start session</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Attached Artifact Card</h3><span class="num">12</span><span class="note">Pinned confirmation that a source has been selected.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Attached Artifact Card</span>
+        <span class="comp-sel">.attached</span>
+        <p class="comp-desc">Horizontal three-slot composition: icon square + meta stack + dismiss. Appears above the Composer body when a mode selects an artifact (zip, repo, template, fork). Animates in from above.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Icon square</b>34×34px ink block — SVG varies by artifact type</div>
+          <div class="slot-item"><b>Meta stack</b>Mono filename (top) + sub-line cluster (files · size · stack chip)</div>
+          <div class="slot-item"><b>Dismiss (×)</b>26px ghost icon button — clears artifact, returns to prompt mode</div>
+        </div>
+        <div class="token-refs"><span class="tr">--paper</span><span class="tr">--line</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div class="dr" style="align-items:center;gap:10px">
+            <div class="s sf" style="flex:0 0 34px;height:34px;padding:0">icon</div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+              <div class="s sc" style="height:18px;justify-content:flex-start;padding:0 7px;font-size:9px">mono filename</div>
+              <div class="dr" style="gap:5px">
+                <div class="s sd" style="flex:0 0 auto;height:16px;padding:0 7px;font-size:9px">N files</div>
+                <div class="s sd" style="flex:0 0 auto;height:16px;padding:0 7px;font-size:9px">N MB</div>
+                <div class="s sf" style="flex:0 0 auto;height:16px;padding:0 7px;font-size:9px">Stack chip</div>
+              </div>
+            </div>
+            <div class="s sd" style="flex:0 0 26px;height:26px;padding:0">×</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>File Header Strip</h3><span class="num">13</span><span class="note">Persistent uploaded-file banner at the top of the Uploaded state.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">File Header Strip</span>
+        <span class="comp-sel">.fileheader</span>
+        <p class="comp-desc">Horizontal three-slot composition: icon block + meta stack + trailing action. Anchors the uploaded state — tells the user what was uploaded and gives them a Replace escape hatch.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Icon</b>38×38px ink square — zip SVG</div>
+          <div class="slot-item"><b>Meta stack</b>Mono filename + sub-line (files · size · "Unpacked" ok check)</div>
+          <div class="slot-item"><b>Action</b>Ghost button (bordered) — triggers file picker to replace</div>
+        </div>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--shadow-1</span><span class="tr">--r-md</span><span class="tr">--good</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div class="dr" style="align-items:center;gap:11px">
+            <div class="s sf" style="flex:0 0 38px;height:38px;padding:0">icon</div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+              <div class="s sf" style="height:18px;justify-content:flex-start;padding:0 7px;font-size:9px mono">filename.zip</div>
+              <div class="dr" style="gap:6px">
+                <div class="s sd" style="flex:0 0 auto;height:16px;padding:0 7px;font-size:9px">N files</div>
+                <div class="s sd" style="flex:0 0 auto;height:16px;padding:0 7px;font-size:9px">N MB</div>
+                <div class="s sa" style="flex:0 0 auto;height:16px;padding:0 7px;font-size:9px">✓ Unpacked</div>
+              </div>
+            </div>
+            <div class="s sf" style="flex:0 0 auto;height:28px;padding:0 10px;font-size:9px">Replace</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>GitHub Input Panel</h3><span class="num">14</span><span class="note">Inline repo selector — shown in GitHub mode before a repo is confirmed.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">GitHub Input Panel</span>
+        <span class="comp-sel">.gh-input</span>
+        <p class="comp-desc">Two-row composition inside the Composer. Top row: icon + prefix label + text field + branch select + Connect button. Bottom row: a hint line. Dismissed and replaced by an Attached Artifact Card once Connect is pressed.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Icon</b>30×30px ink square with branch SVG</div>
+          <div class="slot-item"><b>Prefix + field</b>"github.com/" label + free text input (owner/repo)</div>
+          <div class="slot-item"><b>Branch select</b>Dropdown — main / master / develop / staging</div>
+          <div class="slot-item"><b>Connect</b>28px primary-style button — disabled until valid repo typed</div>
+          <div class="slot-item"><b>Hint</b>12px ink-3 · private repo link</div>
+        </div>
+        <div class="token-refs"><span class="tr">--paper</span><span class="tr">--line</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="gap:8px">
+          <div class="dr" style="align-items:center;gap:7px">
+            <div class="s sf" style="flex:0 0 30px;height:30px;padding:0">ic</div>
+            <div class="s sd" style="flex:0 0 auto;height:26px;padding:0 8px;font-size:9px">github.com/</div>
+            <div class="s sc" style="flex:1;height:26px;font-size:9px">owner/repo field</div>
+            <div class="s sf" style="flex:0 0 auto;height:26px;padding:0 8px;font-size:9px">branch ▾</div>
+            <div class="s sa" style="flex:0 0 auto;height:26px;padding:0 10px;font-size:9px;font-weight:700">Connect →</div>
+          </div>
+          <div class="s sd" style="height:18px;justify-content:flex-start;padding:0 8px;font-size:9px">hint · Public repos work instantly · Connect GitHub for private</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Stack Detection Card</h3><span class="num">15</span><span class="note">Post-upload analysis — what we found and how confident we are.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Stack Detection Card</span>
+        <span class="comp-sel">.card + .stack-row + .stack-tags</span>
+        <p class="comp-desc">A Card Shell composition filled with two sub-compositions: a horizontal stack-row (icon + info stack + confidence badge) and a wrapping Cluster of Stack Tag blocks below it.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Card shell</b>Head (title + source label + Override action) + body</div>
+          <div class="slot-item"><b>Stack row</b>44px icon square · name+detail stack · confidence pill</div>
+          <div class="slot-item"><b>Tags cluster</b>Stack Tag blocks (name + version) — wrapping Cluster, gap 6px</div>
+        </div>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--shadow-1</span><span class="tr">--good</span><span class="tr">--r-md</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="padding:0;gap:0">
+          <div style="background:var(--card);border-radius:var(--r-md) var(--r-md) 0 0;overflow:hidden">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:7px">
+              <div class="s sf" style="flex:0 0 auto;height:20px;padding:0 8px;font-size:9px">Detected stack</div>
+              <div class="s sd" style="flex:0 0 auto;height:20px;padding:0 8px;font-size:9px">package.json · next.config.js</div>
+              <div style="flex:1"></div>
+              <div class="s sf" style="flex:0 0 auto;height:20px;padding:0 8px;font-size:9px">Override</div>
+            </div>
+            <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px">
+              <div class="dr" style="align-items:center;gap:10px">
+                <div class="s sf" style="flex:0 0 44px;height:44px;padding:0">icon</div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+                  <div class="s sc" style="height:18px;justify-content:flex-start;padding:0 7px;font-size:9px">Next.js · App Router</div>
+                  <div class="s sd" style="height:16px;justify-content:flex-start;padding:0 7px;font-size:9px">Postgres · TypeScript · Tailwind</div>
+                </div>
+                <div class="s sa" style="flex:0 0 auto;height:22px;padding:0 9px;font-size:9px">● High confidence</div>
+              </div>
+              <div class="dr" style="flex-wrap:wrap;gap:5px">
+                <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">Next.js 14.2</div>
+                <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">React 18</div>
+                <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">Prisma 5</div>
+                <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">TypeScript</div>
+                <div class="s sd" style="flex:0 0 auto;height:18px;padding:0 8px;font-size:9px">Tailwind</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Verdict Banners</h3><span class="num">16</span><span class="note">Compatibility and Warning — one icon, one message, one optional action.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Verdict Banner</span>
+        <span class="comp-sel">.compat / .warnings</span>
+        <p class="comp-desc">Horizontal three-slot composition: icon square + message text + optional action. Two semantic variants share the same spatial layout — only colour and icon change.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Compat (ok/warn)</b>30×30px tinted icon · title + sub-copy stack · no action</div>
+          <div class="slot-item"><b>Warning</b>16px icon · flex-1 message with bold culprit · dismiss text link</div>
+        </div>
+        <p class="comp-rule"><b>Compat</b> = block-level verdict (appears above stack card). <b>Warning</b> = non-blocking advisory (dismissible). Never use Warning for errors that block submission.</p>
+        <div class="token-refs"><span class="tr">--good</span><span class="tr">--warn</span><span class="tr">--r-md</span><span class="tr">--shadow-1</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di" style="gap:8px">
+          <div class="dr" style="align-items:flex-start;gap:11px">
+            <div class="s sa" style="flex:0 0 30px;height:30px;padding:0">✓</div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <div class="s sf" style="height:18px;justify-content:flex-start;padding:0 7px;font-size:9px">We can work with this directly.</div>
+              <div class="s sd" style="height:16px;justify-content:flex-start;padding:0 7px;font-size:9px">agent will containerise + wire live preview</div>
+            </div>
+          </div>
+          <div class="df">border-top: 1px solid var(--line-2)</div>
+          <div class="dr" style="align-items:center;gap:10px">
+            <div class="s sd" style="flex:0 0 16px;height:16px;padding:0">!</div>
+            <div class="s sd" style="flex:1;height:22px;justify-content:flex-start;padding:0 7px;font-size:9px">node_modules/ found · 8,420 files · will skip</div>
+            <div class="s sf" style="flex:0 0 auto;height:22px;padding:0 8px;font-size:9px">Got it</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Suggested Prompts Row</h3><span class="num">17</span><span class="note">Fills the textarea with example prompts on click.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Suggested Prompts Row</span>
+        <span class="comp-sel">.suggested</span>
+        <p class="comp-desc">A Cluster composition: a "try" label followed by pill chip buttons. On click, each chip fills the Composer textarea. Two variants swap with mode: <em>default</em> (new app ideas) for prompt/template/fork; <em>resume</em> (codebase tasks) for zip/github.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Label</b>"try" — 12px / ink-3 / letter-spaced</div>
+          <div class="slot-item"><b>Chips</b>Pill buttons — paper-2, ink-2. Hover darkens.</div>
+        </div>
+        <p class="comp-rule">Chips use a CSS <code>::before</code> arrow icon — no SVG in markup. Max 4–5 chips before the row feels cluttered.</p>
+        <div class="token-refs"><span class="tr">--paper-2</span><span class="tr">--r-pill</span><span class="tr">--sp-3</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div class="dr" style="flex-wrap:wrap;gap:7px;align-items:center">
+            <div class="s sd" style="flex:0 0 auto;height:24px;padding:0 9px;font-size:9px">try</div>
+            <div class="s sc" style="flex:0 0 auto;height:24px;padding:0 10px;font-size:9px">↑ Notion-style notes</div>
+            <div class="s sc" style="flex:0 0 auto;height:24px;padding:0 10px;font-size:9px">↑ URL shortener</div>
+            <div class="s sc" style="flex:0 0 auto;height:24px;padding:0 10px;font-size:9px">↑ Habit tracker</div>
+            <div class="s sc" style="flex:0 0 auto;height:24px;padding:0 10px;font-size:9px">↑ Internal admin panel</div>
+          </div>
+          <div class="df">Cluster · flex-wrap:wrap · gap:9px · wraps naturally on narrow screens</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h3>Footer Bar</h3><span class="num">18</span><span class="note">Persistent action footer at the bottom of the Uploaded state.</span></div>
+    <div class="comp">
+      <div class="comp-meta">
+        <span class="comp-name">Footer Bar</span>
+        <span class="comp-sel">.footer-bar</span>
+        <p class="comp-desc">Two-slot horizontal composition: a flex-1 info text block on the left, a fixed-width primary button on the right. Full-width card. Not sticky — it lives at the natural end of the left column.</p>
+        <div class="slot-list">
+          <div class="slot-item"><b>Info (flex:1)</b>12.5px ink-3 copy with an inline Domain Chip showing the git repo path</div>
+          <div class="slot-item"><b>CTA</b>Button Primary block — "Continue — start agent session"</div>
+        </div>
+        <p class="comp-rule">This is the <b>only</b> primary CTA on the Uploaded state — the Kickoff Composer (Sidebar right column) does not have its own primary button in this screen variant.</p>
+        <div class="token-refs"><span class="tr">--card</span><span class="tr">--shadow-1</span><span class="tr">--r-md</span><span class="tr">--sp-7</span></div>
+      </div>
+      <div class="diagram">
+        <div class="di">
+          <div class="dr" style="align-items:center;gap:14px">
+            <div class="s sd" style="flex:1;height:36px;justify-content:flex-start;padding:0 10px;font-size:9px">A new repo will be created at github.com/… · agent will containerise it</div>
+            <div class="s sa" style="flex:0 0 auto;height:34px;padding:0 12px;font-size:9px;font-weight:700">Continue — start agent session →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Map table ──────────────────────────────────────── -->
+  <div class="part" style="margin-top:24px">
+    <h2>Composition × Screen map</h2>
+    <p>Which compositions appear on each screen — and which blocks fill their slots.</p>
+  </div>
+  <table class="map-table">
+    <thead>
+      <tr>
+        <th>Screen</th>
+        <th>Spatial compositions</th>
+        <th>Component compositions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Create Prompt</td>
+        <td class="mono">App Shell · Stage · Cluster</td>
+        <td>Composer · Attached Artifact · GitHub Input · Suggested Prompts Row</td>
+      </tr>
+      <tr>
+        <td>From Codebase (empty)</td>
+        <td class="mono">App Shell · Centered Col · Stack · Info Grid</td>
+        <td>Page Heading · Drop Zone (block)</td>
+      </tr>
+      <tr>
+        <td>From Codebase (uploaded)</td>
+        <td class="mono">App Shell · Centered Col · Sidebar · Card Shell</td>
+        <td>File Header Strip · Verdict Banners · Stack Detection Card · Footer Bar</td>
+      </tr>
+      <tr>
+        <td>Provisioning</td>
+        <td class="mono">App Shell · Stage (centered)</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td>Session Ready (Two Links)</td>
+        <td class="mono">App Shell · Centered Col · Stack</td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer>
+    <span>OpenVoid design system · Compositions · v0.1</span>
+    <span>18 compositions · CUBE CSS · cube.fyi</span>
+  </footer>
+</main>
+</body>
+</html>
