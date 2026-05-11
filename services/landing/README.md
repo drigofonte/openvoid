@@ -88,14 +88,22 @@ services/landing/
 │   ├── tokens.css             # substrate — OpenVoid semantic tokens + wf-* aliases
 │   ├── global.css             # element resets, body bg, typography
 │   ├── composition.css        # CUBE Composition layer — singular (Every Layout primitives: stack, cluster, grid)
-│   ├── blocks/                # CUBE Block layer — one .wf-* component per file
+│   ├── blocks/                # CUBE Block layer — leaf components and display primitives
 │   │   ├── button.css         # (focus-ring.css loads last so its
 │   │   ├── chip.css           #  :focus-visible composite wins)
-│   │   └── …
-│   ├── compositions/          # OpenVoid composition tier — plural (assemblies of blocks: Composer, Cards, Connector)
-│   │   ├── composer.css       # loaded after blocks/ so a composition can override
-│   │   ├── connector.css      # a block default without `!important`
-│   │   └── …
+│   │   ├── app-icon.css       # leaf display primitives reclassified
+│   │   ├── icon-mark.css      # back from compositions/ in PR alignment cycle 2
+│   │   ├── spinner.css
+│   │   ├── …
+│   │   └── focus-ring.css     # cross-cutting :focus-visible composite (loads last)
+│   ├── compositions/          # OpenVoid composition tier — assemblies of blocks
+│   │   ├── card-shell.css     # canonical Card Shell (entry 07)
+│   │   ├── composer.css       # canonical Composer (entry 11) + absorbed Derived row
+│   │   ├── connector.css      # non-canonical: Ready-page card-to-card SVG
+│   │   ├── split-tip.css      # non-canonical: Ready-page window-split hint
+│   │   ├── suggestion.css     # leaf of canonical Suggested Prompts Row (entry 17)
+│   │   ├── toolbar.css        # app-shell chrome bar (not the canonical Toolbar Row)
+│   │   └── url-row.css        # non-canonical: Ready-page session-URL pill
 │   └── exceptions.css         # CUBE Exception layer (data-attribute variants)
 ├── server.ts                  # http server bootstrap
 ├── package.json
