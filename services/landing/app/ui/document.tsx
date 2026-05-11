@@ -60,7 +60,6 @@ const COMPOSITION_FILES = [
   'card-shell',
   'composer',
   'connector',
-  'livesat',
   'split-tip',
   'suggestion',
   'toolbar',

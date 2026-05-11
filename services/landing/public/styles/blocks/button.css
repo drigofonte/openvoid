@@ -49,7 +49,7 @@
 /* ── Submit-action button ("Start session →") ────────────
  * Distinct from `.wf-btn-action-pri` (7px radius, 12px padding,
  * no inner-arrow slot). The arrow SVG sits inside the button;
- * the kbd hint (`⌘ ↵`) lives in a sibling `.wf-submit-area` span,
+ * the kbd hint (`⌘ ↵`) lives in a sibling `.composer-submit-area` span,
  * NOT inside this button.
  */
 .wf-btn-go {

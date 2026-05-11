@@ -74,13 +74,13 @@ describe('blocks/ + compositions/', () => {
       '.wf-connector-host',
       '.wf-connector',
       '.wf-connector-flow',
-      '.wf-composer',
-      '.wf-composer-bar',
+      '.composer',
+      '.composer-bar',
       '.wf-tool',
       '.wf-btn-go',
       '.wf-alt',
       '.wf-sug',
-      '.wf-livesat',
+      '.composer-derived',
     ]) {
       assert.match(css, new RegExp(escapeRegex(sel) + '\\s*[,{]'))
     }
@@ -88,9 +88,9 @@ describe('blocks/ + compositions/', () => {
 
   it('wires the composer focus-within halo and the narrow-viewport bar wrap', () => {
     const composer = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'composer.css'), 'utf-8')
-    const composerBlock = matchBlock(composer, '.wf-composer')
+    const composerBlock = matchBlock(composer, '.composer')
     assert.match(composerBlock, /overflow:\s*hidden/)
-    assert.match(composer, /\.wf-composer:focus-within/)
+    assert.match(composer, /\.composer:focus-within/)
     assert.match(composer, /@media \(max-width:\s*720px\)/)
   })
 
@@ -101,11 +101,11 @@ describe('blocks/ + compositions/', () => {
     }
   })
 
-  it('wf-livesat fades via opacity transition gated by [data-hidden]', () => {
-    const livesat = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'livesat.css'), 'utf-8')
-    const block = matchBlock(livesat, '.wf-livesat')
+  it('the composer derived row fades via opacity transition gated by [data-hidden]', () => {
+    const composer = fs.readFileSync(path.join(COMPOSITIONS_DIR, 'composer.css'), 'utf-8')
+    const block = matchBlock(composer, '.composer-derived')
     assert.match(block, /transition:\s*opacity/)
-    assert.match(livesat, /\.wf-livesat\[data-hidden\]/)
+    assert.match(composer, /\.composer-derived\[data-hidden\]/)
   })
 
   it('declares the breathe and flow keyframes', () => {
@@ -136,7 +136,6 @@ describe('blocks/ + compositions/', () => {
       'card-shell.css',
       'composer.css',
       'connector.css',
-      'livesat.css',
       'split-tip.css',
       'suggestion.css',
       'toolbar.css',
@@ -170,7 +169,6 @@ describe('blocks/ + compositions/', () => {
       'card-shell.css',
       'composer.css',
       'connector.css',
-      'livesat.css',
       'split-tip.css',
       'suggestion.css',
       'toolbar.css',

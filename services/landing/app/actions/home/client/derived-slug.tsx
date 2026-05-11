@@ -5,12 +5,12 @@ import { PROMPT_MIN_LENGTH } from './constants.ts'
 /**
  * DerivedSlug — invisible clientEntry that updates the "lives at
  * <slug>.openvoid.dev" ghost line as the user types. The page
- * renders the wrapper `<div class="wf-livesat" data-hidden>` and
- * the inner `<span>` that holds the slug; this component only
+ * renders the wrapper `<div class="composer-derived" data-hidden>`
+ * and the inner `<span>` that holds the slug; this component only
  * updates the inner span's text content and toggles the wrapper's
  * `data-hidden` attribute.
  *
- * The opacity transition lives on the `.wf-livesat[data-hidden]`
+ * The opacity transition lives on the `.composer-derived[data-hidden]`
  * CSS rule — toggling the attribute (not the inner span) is what
  * gates the fade-in / fade-out.
  *

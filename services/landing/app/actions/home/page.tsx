@@ -219,7 +219,7 @@ interface ComposerProps {
 
 function Composer() {
   return ({ idempotencyKey, previousPrompt }: ComposerProps) => (
-    <form method="post" action="/" class="wf-composer">
+    <form method="post" action="/" class="composer">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <label for={PROMPT_ID} class="sr-only">
         Prompt
@@ -249,14 +249,14 @@ function Composer() {
       >
         {previousPrompt}
       </textarea>
-      <div id={SLUG_WRAPPER_ID} class="wf-livesat" data-hidden="">
-        <span class="wf-livesat-prefix">Will live at</span>
-        <span class="wf-livesat-name">
+      <div id={SLUG_WRAPPER_ID} class="composer-derived" data-hidden="">
+        <span class="composer-derived-prefix">Will live at</span>
+        <span class="composer-derived-name">
           <span id={SLUG_ID}>untitled</span>.openvoid.dev
         </span>
       </div>
       <DerivedSlug targetId={PROMPT_ID} slugId={SLUG_ID} wrapperId={SLUG_WRAPPER_ID} />
-      <div class="wf-composer-bar">
+      <div class="composer-bar">
         <Cluster space="var(--sp-3)">
           <button type="button" class="wf-tool" title="Coming soon">
             <Glyph d="M21 11.5l-8.5 8.5a5 5 0 1 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L11 17a2 2 0 1 1-3-3l7-7" />
@@ -271,8 +271,8 @@ function Composer() {
             DB: <span class="wf-tool-key">postgres</span>
           </button>
         </Cluster>
-        <span class="wf-submit-area">
-          <span class="wf-submit-hint">
+        <span class="composer-submit-area">
+          <span class="composer-submit-hint">
             <span class="wf-keycap">⌘</span>
             <span class="wf-keycap">↵</span>
             <span mix={css({ marginLeft: '4px' })}>to start</span>
