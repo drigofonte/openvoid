@@ -7,8 +7,8 @@ export interface CardProps {
    *
    * - `line` (default) — `<div class="wf-card">` — 1px line, 10px
    *   radius, white background. Today's shape.
-   * - `elevated` — `<div class="wf-card-elev">` — canonical Tokens
-   *   elevated card (14px radius, --shadow-2, hover-lift).
+   * - `elevated` — `<div class="card-shell">` — canonical Card Shell
+   *   composition (14px radius, --shadow-2, hover-lift).
    */
   variant?: 'line' | 'elevated'
   /**
@@ -24,13 +24,15 @@ export interface CardProps {
 
 /**
  * Surface primitive — paper-on-paper card. The default `line`
- * variant maps to the existing `.wf-card` rule; the `elevated`
- * variant maps to `.wf-card-elev` (with optional `[data-accent-top]`
- * attribute toggling the Exception-layer gradient strip).
+ * variant maps to the leaf `.wf-card` rule (non-canonical, in
+ * `blocks/surface.css`); the `elevated` variant maps to the
+ * canonical `.card-shell` composition (with optional
+ * `[data-accent-top]` attribute toggling the Exception-layer
+ * gradient strip).
  */
 export function Card() {
   return ({ variant = 'line', accentTop, padding, children }: CardProps) => {
-    const className = variant === 'elevated' ? 'wf-card-elev' : 'wf-card'
+    const className = variant === 'elevated' ? 'card-shell' : 'wf-card'
     const mix = padding ? css({ padding }) : undefined
     if (variant === 'elevated' && accentTop) {
       return (

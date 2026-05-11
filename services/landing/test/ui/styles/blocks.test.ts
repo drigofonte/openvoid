@@ -54,7 +54,7 @@ describe('blocks/ + compositions/', () => {
   it('contains the new component recipes the redesign introduces', () => {
     for (const sel of [
       '.wf-toolbar-tall',
-      '.wf-card-elev',
+      '.card-shell',
       '.wf-btn-action',
       '.wf-btn-action-pri',
       '.wf-btn-action-sec',
@@ -133,12 +133,12 @@ describe('blocks/ + compositions/', () => {
 
   it('compositions/ holds only composition-shaped files', () => {
     const expected = [
+      'card-shell.css',
       'composer.css',
       'connector.css',
       'livesat.css',
       'split-tip.css',
       'suggestion.css',
-      'surface.css',
       'toolbar.css',
       'url-row.css',
     ]
@@ -146,7 +146,7 @@ describe('blocks/ + compositions/', () => {
     assert.deepEqual(actual, expected)
   })
 
-  it('blocks/ holds leaf display primitives, including those reclassified from compositions/', () => {
+  it('blocks/ holds leaf display primitives including the leaves reclassified from compositions/', () => {
     const blockNames = blockFiles.map((f) => f.name)
     for (const leaf of [
       'app-icon.css',
@@ -154,6 +154,7 @@ describe('blocks/ + compositions/', () => {
       'progress.css',
       'skeleton.css',
       'spinner.css',
+      'surface.css',
     ]) {
       assert.equal(
         blockNames.includes(leaf),
@@ -166,12 +167,12 @@ describe('blocks/ + compositions/', () => {
   it('blocks/ does not hold composition-shaped files', () => {
     const blockNames = blockFiles.map((f) => f.name)
     for (const composition of [
+      'card-shell.css',
       'composer.css',
       'connector.css',
       'livesat.css',
       'split-tip.css',
       'suggestion.css',
-      'surface.css',
       'toolbar.css',
       'url-row.css',
     ]) {

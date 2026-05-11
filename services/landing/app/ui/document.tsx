@@ -47,6 +47,7 @@ const BLOCK_FILES = [
   'progress',
   'skeleton',
   'spinner',
+  'surface',
   'tool',
   'typography',
   'visually-hidden',
@@ -56,12 +57,12 @@ const BLOCK_FILES = [
 ] as const
 
 const COMPOSITION_FILES = [
+  'card-shell',
   'composer',
   'connector',
   'livesat',
   'split-tip',
   'suggestion',
-  'surface',
   'toolbar',
   'url-row',
 ] as const

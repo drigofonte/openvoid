@@ -10,9 +10,9 @@ describe('Card', () => {
     assert.match(html, /<div class="wf-card">x<\/div>/)
   })
 
-  it('elevated variant renders <div class="wf-card-elev">', async () => {
+  it('elevated variant renders <div class="card-shell">', async () => {
     const html = await renderToString(<Card variant="elevated">x</Card>)
-    assert.match(html, /<div class="wf-card-elev">x<\/div>/)
+    assert.match(html, /<div class="card-shell">x<\/div>/)
   })
 
   it('elevated + accentTop emits the data-accent-top attribute', async () => {
@@ -21,7 +21,7 @@ describe('Card', () => {
         x
       </Card>,
     )
-    assert.match(html, /<div\b[^>]*\bclass="wf-card-elev"[^>]*>x<\/div>/)
+    assert.match(html, /<div\b[^>]*\bclass="card-shell"[^>]*>x<\/div>/)
     assert.match(html, /<div\b[^>]*\bdata-accent-top="?"?[^>]*>x<\/div>/)
   })
 

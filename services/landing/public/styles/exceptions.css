@@ -12,7 +12,7 @@
  * @link https://cube.fyi/exception.html
  */
 
-.wf-card-elev[data-accent-top]::before {
+.card-shell[data-accent-top]::before {
   content: "";
   position: absolute;
   left: var(--sp-9);
