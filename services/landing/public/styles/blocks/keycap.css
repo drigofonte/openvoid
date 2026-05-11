@@ -1,0 +1,19 @@
+/*
+ * Keycap — canonical Tokens `.kbd` recipe: 20px tall, soft paper-2
+ * background, single inset border via `box-shadow`. Replaces the
+ * older 18px / double-bordered shape so the keycap matches the
+ * design's split-tip kbd row.
+ */
+.wf-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--r-xs);
+  font: var(--fw-medium) var(--fs-mono-sm)/1 var(--font-mono);
+  color: var(--ink-2);
+  background: var(--paper-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}

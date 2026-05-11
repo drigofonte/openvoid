@@ -1,0 +1,23 @@
+/*
+ * Keyboard-focus rings — canonical Tokens recipe is a 4px
+ * accent-soft halo via box-shadow. `:focus-visible` (not `:focus`)
+ * so mouse-down on a button doesn't draw the ring; only keyboard /
+ * programmatic focus does.
+ *
+ * Cross-cutting: targets selectors defined in button.css, chip.css,
+ * tool.css, alt.css, suggestion.css, and typography.css. Loaded
+ * last among blocks/ so its specificity wins regardless of source
+ * file order.
+ */
+.wf-btn:focus-visible,
+.wf-link:focus-visible,
+.wf-chip:focus-visible,
+button.wf-chip:focus-visible,
+.wf-btn-action:focus-visible,
+.wf-tool:focus-visible,
+.wf-btn-go:focus-visible,
+.wf-alt:focus-visible,
+.wf-sug:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

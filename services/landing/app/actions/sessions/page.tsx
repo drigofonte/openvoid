@@ -193,7 +193,7 @@ export function SessionNotFoundPage() {
         <div class="wf-col" mix={css({ gap: '20px' })}>
           <div class="wf-col" mix={css({ gap: '6px' })}>
             <Eyebrow tone="danger">Not found</Eyebrow>
-            <h1 class="wf-h1" tabindex={-1}>No session with that ID</h1>
+            <h1 tabindex={-1}>No session with that ID</h1>
             <p class="wf-muted" mix={css({ fontSize: '14px', lineHeight: 1.5, margin: 0 })}>
               The session <span class="wf-mono">{sessionId}</span> doesn't
               exist or has already been cleaned up. Start a new one.

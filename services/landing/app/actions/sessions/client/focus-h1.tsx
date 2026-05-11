@@ -6,7 +6,7 @@ import { clientEntry, type Handle } from 'remix/ui'
  * arriving user (and screen reader) lands on the heading rather
  * than wherever the previous page had focus.
  *
- * Targets `main h1.wf-h1[tabindex]` — only the session-state
+ * Targets `main h1[tabindex]` — only the session-state
  * components opt in by adding `tabindex={-1}` to their h1, which
  * makes the heading programmatically focusable without inserting
  * it into the Tab order.
@@ -21,7 +21,7 @@ export const FocusH1 = clientEntry(
   function FocusH1(handle: Handle<Record<string, never>>) {
     handle.queueTask(() => {
       if (handle.signal.aborted) return
-      const heading = document.querySelector<HTMLElement>('main h1.wf-h1[tabindex]')
+      const heading = document.querySelector<HTMLElement>('main h1[tabindex]')
       heading?.focus({ preventScroll: true })
     })
 

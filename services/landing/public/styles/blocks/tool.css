@@ -1,0 +1,29 @@
+/* ── Borderless toolbar tool button ──────────────────────
+ * Distinct from `.wf-chip` (bordered, pill, 22px) and `.wf-btn`
+ * (bordered, 30px, ink fg). Used for the Attach / Stack / DB
+ * decorative tools inside the composer bar. Inner `.wf-tool-key`
+ * span (mono, ink-4) renders the `auto` / `postgres`-style
+ * value next to the label.
+ */
+.wf-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-std);
+}
+.wf-tool:hover {
+  color: var(--ink);
+}
+.wf-tool .wf-tool-key {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

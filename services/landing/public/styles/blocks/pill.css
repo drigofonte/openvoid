@@ -1,0 +1,41 @@
+/* Live / ready pills (status badges with optional breathing dot). */
+.wf-pill-live,
+.wf-pill-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 24px;
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  font: var(--fw-semi) var(--fs-eyebrow)/1 var(--font-sans);
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.wf-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: currentColor;
+  display: inline-block;
+  position: relative;
+}
+.wf-pill-dot-breathe::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: currentColor;
+  animation: breathe var(--dur-breathe) var(--ease-std) infinite;
+}
+
+/*
+ * Breathe — canonical Tokens "live" pulse. A halo ring expands
+ * outward from the dot center and fades; it inherits the pill
+ * tint via currentColor.
+ */
+@keyframes breathe {
+  0%   { transform: scale(0.7); opacity: 0.6; }
+  100% { transform: scale(2.6); opacity: 0; }
+}

@@ -33,7 +33,8 @@ import { StopButton } from '../client/stop-button.tsx'
  *
  * The thin-wrapper primitives (LivePill, ReadyPill, IconMark,
  * SplitTip) live as inline class-based recipes here — composed
- * from the `.wf-*` rules added to `blocks.css` in U1. The
+ * from the `.wf-*` rules under `public/styles/blocks/` and
+ * `public/styles/compositions/`. The
  * platform-aware Cmd/Ctrl + Shift + digit kbd group lives in
  * `app/ui/client/shortcut-hint.tsx` as a clientEntry (it needs
  * `navigator` to swap the modifier glyph).

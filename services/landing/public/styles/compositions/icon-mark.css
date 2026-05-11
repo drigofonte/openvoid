@@ -1,0 +1,18 @@
+/* Square containers for SVG glyphs (dark-fill or line variants). */
+.wf-icon-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  flex-shrink: 0;
+}
+.wf-icon-mark-dark {
+  background: var(--ink);
+  color: var(--paper);
+}
+.wf-icon-mark-line {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}

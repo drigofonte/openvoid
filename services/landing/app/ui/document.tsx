@@ -6,24 +6,66 @@ export interface DocumentProps {
 }
 
 /**
- * The HTML shell. Loads CSS through six `<link>` tags in
- * CUBE-canonical cascade order:
+ * The HTML shell. Loads CSS in CUBE-canonical cascade order:
  *
- *   1. utopia.css      — substrate (Utopia fluid type/space scales)
- *   2. tokens.css      — substrate (OpenVoid semantic tokens + wf-* aliases)
- *   3. base.css        — reset / globals
- *   4. composition.css — CUBE Composition layer (Every Layout primitives)
- *   5. blocks.css      — CUBE Block layer (component classes + animations)
- *   6. exceptions.css  — CUBE Exception layer (data-attribute variants)
+ *   1. utopia.css       — substrate (Utopia fluid type/space scales)
+ *   2. tokens.css       — substrate (OpenVoid semantic tokens + wf-* aliases)
+ *   3. global.css       — reset / globals
+ *   4. composition.css  — CUBE Composition layer (Every Layout primitives)
+ *   5. blocks/*.css     — CUBE Block layer, one file per component
+ *   6. compositions/*.css — OpenVoid composition tier (assemblies of blocks:
+ *                         Composer, Cards, Connector, etc.). Loaded after
+ *                         blocks so a composition can override a block
+ *                         default without `!important`. NOT the same as
+ *                         the singular `composition.css` above.
+ *   7. exceptions.css   — CUBE Exception layer (data-attribute variants)
  *
  * File-import order is the cascade-control mechanism (no
  * `@layer` directives required) — see Andy Bell's CUBE
- * boilerplate convention. All six files are served by the
+ * boilerplate convention. Every file is served by the
  * `staticFiles` middleware in `app/router.ts`.
+ *
+ * The block files are listed alphabetically except `focus-ring.css`,
+ * which loads last so its `:focus-visible` composite wins regardless
+ * of which component file defined the underlying selector.
  *
  * @link https://cube.fyi/
  * @link https://utopia.fyi/
  */
+const BLOCK_FILES = [
+  'alt',
+  'animations',
+  'button',
+  'chip',
+  'dot',
+  'input',
+  'keycap',
+  'layout',
+  'pill',
+  'tool',
+  'typography',
+  'visually-hidden',
+  // focus-ring is intentionally last — it depends on selectors
+  // declared in many of the files above.
+  'focus-ring',
+] as const
+
+const COMPOSITION_FILES = [
+  'app-icon',
+  'composer',
+  'connector',
+  'icon-mark',
+  'livesat',
+  'progress',
+  'skeleton',
+  'spinner',
+  'split-tip',
+  'suggestion',
+  'surface',
+  'toolbar',
+  'url-row',
+] as const
+
 export function Document() {
   return ({ title = 'openvoid', children }: DocumentProps) => (
     <html lang="en">
@@ -39,9 +81,14 @@ export function Document() {
         />
         <link rel="stylesheet" href="/styles/utopia.css" />
         <link rel="stylesheet" href="/styles/tokens.css" />
-        <link rel="stylesheet" href="/styles/base.css" />
+        <link rel="stylesheet" href="/styles/global.css" />
         <link rel="stylesheet" href="/styles/composition.css" />
-        <link rel="stylesheet" href="/styles/blocks.css" />
+        {BLOCK_FILES.map((name) => (
+          <link key={name} rel="stylesheet" href={`/styles/blocks/${name}.css`} />
+        ))}
+        {COMPOSITION_FILES.map((name) => (
+          <link key={name} rel="stylesheet" href={`/styles/compositions/${name}.css`} />
+        ))}
         <link rel="stylesheet" href="/styles/exceptions.css" />
         <script type="module" src="/_rmx/app/assets/run.ts" />
       </head>

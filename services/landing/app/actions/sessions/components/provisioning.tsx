@@ -44,7 +44,7 @@ export function Provisioning() {
         <div class="wf-col" mix={css({ gap: '12px', alignItems: 'center', maxWidth: '520px' })}>
           <Eyebrow>Spinning up</Eyebrow>
           <h1
-            class="wf-h1 wf-mono"
+            class="wf-mono"
             tabindex={-1}
             mix={css({ fontSize: '22px', wordBreak: 'break-all' })}
           >

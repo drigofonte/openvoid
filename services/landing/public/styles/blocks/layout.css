@@ -1,0 +1,5 @@
+/* Lightweight flex helpers used inside other blocks. */
+.wf-row { display: flex; align-items: center; }
+.wf-col { display: flex; flex-direction: column; }
+.wf-spacer { flex: 1; }
+.wf-divider { height: 1px; background: var(--wf-line); width: 100%; }

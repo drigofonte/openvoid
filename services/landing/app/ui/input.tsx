@@ -15,8 +15,9 @@ export interface InputProps {
 }
 
 /**
- * Text input — 34px height, 8px radius, focus ring in the accent
- * colour. Maps to `wireframe-primitives.jsx`'s `.wf-input` class.
+ * Text input — renders the canonical `.field` shape via the
+ * `.wf-input` block (36h, --r-sm radius, --card bg, inset 1px
+ * line, accent halo on focus).
  *
  * `defaultValue` becomes the `value=` HTML attribute (the
  * server-rendered initial value). React-style `defaultValue=` is

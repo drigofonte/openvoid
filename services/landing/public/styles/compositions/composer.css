@@ -1,0 +1,63 @@
+/*
+ * NOTE on naming: this file lives in `public/styles/compositions/`
+ * (plural — OpenVoid composition tier: assemblies of blocks like the
+ * Composer, Cards, Connector). Its sibling `public/styles/composition.css`
+ * (singular — CUBE Composition layer: layout primitives like .stack,
+ * .cluster, .grid) is a different concept loaded earlier in the cascade.
+ * See README's styles tree for the load order.
+ *
+ * The composer is an elevated surface that hosts the prompt
+ * textarea and a toolbar band footer. The `:focus-within` halo
+ * mirrors the canonical accent-soft focus ring; `overflow: hidden`
+ * keeps the toolbar band's `--paper-2` background within the
+ * rounded corners. The narrow-viewport rule in the bar lets the
+ * submit button stay reachable on mobile.
+ */
+.wf-composer {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow var(--dur-fast) var(--ease-std);
+}
+.wf-composer:focus-within {
+  box-shadow: var(--shadow-2), 0 0 0 4px var(--accent-soft);
+}
+
+.wf-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 12px 14px 14px 18px;
+  border-top: 1px solid var(--line-2);
+  background: var(--paper-2);
+}
+@media (max-width: 720px) {
+  .wf-composer-bar {
+    flex-wrap: wrap;
+  }
+  .wf-composer-bar .wf-submit-area {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.wf-submit-area {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.wf-submit-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}

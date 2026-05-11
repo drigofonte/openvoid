@@ -1,0 +1,15 @@
+.wf-mono { font-family: var(--wf-mono); font-feature-settings: "liga" 0; }
+.wf-link {
+  color: var(--wf-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.wf-eyebrow {
+  font: 600 10.5px/1 var(--wf-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wf-fg-muted);
+}
+.wf-muted { color: var(--wf-fg-muted); }
+.wf-faint { color: var(--wf-fg-faint); }
