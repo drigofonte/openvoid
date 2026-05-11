@@ -1,27 +1,47 @@
-/* Live / ready pills (status badges with optional breathing dot). */
-.wf-pill-live,
-.wf-pill-ready {
+/*
+ * Status Pill — canonical block per OpenVoid Blocks.html entry 12.
+ * `.pill / .pill.live / .pill.prod`. Inline session-state indicator
+ * (header pill, in-card status badge). Three paint variants:
+ *
+ *   .pill            Neutral (card bg + shadow-1, for drafts)
+ *   .pill.live       Accent (warm orange) — running agent / live state
+ *   .pill.prod       OK (green) — deployed to production
+ *
+ * Nested `.d` is the leading dot; `.d.pulse` adds the breathing halo
+ * animation (used only on live states).
+ */
+.pill {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
-  height: 24px;
+  height: 26px;
   padding: 0 11px;
   border-radius: var(--r-pill);
-  font: var(--fw-semi) var(--fs-eyebrow)/1 var(--font-sans);
-  letter-spacing: var(--ls-eyebrow);
-  text-transform: uppercase;
+  background: var(--card);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-1);
+  font: var(--fw-medium) 12px/1 var(--font-sans);
+}
+.pill.live {
   background: var(--accent-soft);
   color: var(--accent);
+  box-shadow: none;
 }
-.wf-pill-dot {
+.pill.prod {
+  background: var(--ok-soft);
+  color: var(--ok);
+  box-shadow: none;
+}
+.pill .d {
   width: 6px;
   height: 6px;
   border-radius: var(--r-pill);
   background: currentColor;
   display: inline-block;
   position: relative;
+  flex-shrink: 0;
 }
-.wf-pill-dot-breathe::before {
+.pill .d.pulse::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -31,9 +51,10 @@
 }
 
 /*
- * Breathe — canonical Tokens "live" pulse. A halo ring expands
- * outward from the dot center and fades; it inherits the pill
- * tint via currentColor.
+ * Breathe keyframe — shared by the Status Pill's `.d.pulse` and any
+ * future canonical Eyebrow Pill's `.dot.live`. A halo ring expands
+ * outward from the dot center and fades; it inherits the pill tint
+ * via currentColor.
  */
 @keyframes breathe {
   0%   { transform: scale(0.7); opacity: 0.6; }

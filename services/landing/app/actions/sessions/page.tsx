@@ -86,8 +86,8 @@ export function SessionPage() {
 function HeaderSlot() {
   return () => (
     <div class="wf-row" mix={css({ gap: 'var(--sp-5)' })}>
-      <span class="wf-pill-live">
-        <span class="wf-pill-dot wf-pill-dot-breathe" />
+      <span class="pill live">
+        <span class="d pulse" />
         Session live
       </span>
       <Avatar />

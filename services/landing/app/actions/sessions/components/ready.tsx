@@ -95,8 +95,8 @@ function Hero() {
     >
       <Stack space="var(--sp-6)">
         <div mix={css({ display: 'flex', justifyContent: 'center' })}>
-          <span class="wf-pill-ready">
-            <span class="wf-pill-dot" />
+          <span class="pill live">
+            <span class="d" />
             Sandbox ready
           </span>
         </div>
