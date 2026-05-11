@@ -33,7 +33,10 @@ describe('Layout', () => {
     const html = await renderToString(
       <Layout topBarChrome={{ mode: 'crumbs', here: '01HABCDE' }}>x</Layout>,
     )
-    assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+    // <body class="app-shell"> wraps the page; the bare <header>
+    // is shaped by `.app-shell header` in compositions/app-shell.css.
+    assert.match(html, /<body class="app-shell">/)
+    assert.match(html, /<header>/)
     assert.match(html, />01HABCDE</)
   })
 

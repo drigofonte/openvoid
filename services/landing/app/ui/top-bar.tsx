@@ -3,9 +3,13 @@ import { css } from 'remix/ui'
 import { Logo } from './logo.tsx'
 
 /**
- * Path-mode chrome — today's 44px header with a decorative URL
+ * Path-mode chrome — header content variant with a decorative URL
  * slug (`maria / openvoid.dev<path>`). Used by Home, the Create
  * flow, and every non-Ready session state.
+ *
+ * Shape is now governed by the canonical `.app-shell header` rule
+ * (single 56px height) — the path/crumbs distinction is content,
+ * not chrome dimensions.
  */
 export interface PathChrome {
   mode: 'path'
@@ -14,8 +18,8 @@ export interface PathChrome {
 }
 
 /**
- * Crumbs-mode chrome — 56px header with the workspace / repo
- * breadcrumb pair. Used by the Ready view.
+ * Crumbs-mode chrome — header content variant with the workspace /
+ * repo breadcrumb pair. Used by the Ready view.
  *
  * `workspace` is optional: v1 ships without a workspace segment
  * (auth-layer plumbing is deferred). When auth lands, pass the
@@ -47,19 +51,23 @@ export interface TopBarProps {
 }
 
 /**
- * Browser-chrome-styled toolbar with the openvoid wordmark and a
- * right-aligned slot. The middle section varies by `chrome.mode`:
+ * Renders the App Shell's `<header>` element. Shape (56px, sticky,
+ * paper bg, line border-bottom) is governed by `.app-shell header`
+ * in `compositions/app-shell.css`. The middle section varies by
+ * `chrome.mode`:
  *
- * - `path` (44px) — decorative `maria / openvoid.dev<path>` slug.
- * - `crumbs` (56px) — `<workspace> / <here>` breadcrumb in the
- *   canonical Tokens header shape.
+ * - `path` — decorative `maria / openvoid.dev<path>` slug.
+ * - `crumbs` — `<workspace> / <here>` breadcrumb.
+ *
+ * Both modes use the tall Logo and a 20px vertical divider since
+ * the shared 56px chrome accommodates the larger glyph proportions.
  */
 export function TopBar() {
   return ({ chrome, right }: TopBarProps) => {
     if (chrome.mode === 'crumbs') {
       const workspace = chrome.workspace && chrome.workspace.length > 0 ? chrome.workspace : null
       return (
-        <header class="wf-toolbar wf-toolbar-tall">
+        <header>
           <Logo tall />
           <div mix={css({ width: '1px', height: '20px', background: 'var(--line)', margin: '0 4px' })} />
           <div
@@ -89,13 +97,13 @@ export function TopBar() {
     }
     const path = chrome.path ?? ''
     return (
-      <header class="wf-toolbar">
-        <Logo />
-        <div mix={css({ width: '1px', height: '18px', background: 'var(--wf-line)', margin: '0 4px' })} />
+      <header>
+        <Logo tall />
+        <div mix={css({ width: '1px', height: '20px', background: 'var(--line)', margin: '0 4px' })} />
         <div class="wf-row" mix={css({ gap: '6px' })}>
-          <span class="wf-muted" mix={css({ fontSize: '12.5px' })}>maria</span>
+          <span class="wf-muted" mix={css({ fontSize: '13.5px' })}>maria</span>
           <span class="wf-faint">/</span>
-          <span mix={css({ fontSize: '12.5px', fontWeight: 500 })}>openvoid.dev{path}</span>
+          <span mix={css({ fontSize: '13.5px', fontWeight: 500 })}>openvoid.dev{path}</span>
         </div>
         <div class="wf-spacer" />
         {right}

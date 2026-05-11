@@ -55,12 +55,12 @@ const BLOCK_FILES = [
 ] as const
 
 const COMPOSITION_FILES = [
+  'app-shell',
   'card-shell',
   'composer',
   'connector',
   'split-tip',
   'suggestion',
-  'toolbar',
   'url-row',
 ] as const
 
@@ -90,7 +90,7 @@ export function Document() {
         <link rel="stylesheet" href="/styles/exceptions.css" />
         <script type="module" src="/_rmx/app/assets/run.ts" />
       </head>
-      <body>{children}</body>
+      <body class="app-shell">{children}</body>
     </html>
   )
 }

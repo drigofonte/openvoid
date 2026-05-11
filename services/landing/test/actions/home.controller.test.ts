@@ -63,8 +63,9 @@ describe('home / index', () => {
     // New Hi-Fi headline + composer shape.
     assert.match(html, /Let's make something\./)
     assert.match(html, /name="prompt"/)
-    // Crumbs chrome with "new app" segment + Back-to-apps link.
-    assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+    // App Shell wrapping; crumbs-mode chrome content (no chrome
+    // class — the bare <header> is styled via `.app-shell header`).
+    assert.match(html, /<body class="app-shell">/)
     assert.match(html, />new app</)
     assert.match(html, /Back to apps/)
     // Composer is rendered as a single elevated form with the

@@ -106,7 +106,7 @@ describe('GET /sessions/:id', () => {
     assert.doesNotMatch(html, /Stop &amp; save/)
   })
 
-  it('renders Ready chrome — wf-toolbar-tall, single-segment crumb (8-char id-prefix), Session live pill', async (t) => {
+  it('renders Ready chrome — crumbs mode (8-char id-prefix), Session live pill', async (t) => {
     const session: SessionShape = {
       sessionId: SID,
       status: 'Running',
@@ -119,8 +119,9 @@ describe('GET /sessions/:id', () => {
     const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
     const html = await response.text()
 
-    // 56px toolbar variant present.
-    assert.match(html, /class="wf-toolbar wf-toolbar-tall"/)
+    // App Shell wraps the body; bare <header> is shaped by
+    // `.app-shell header` (canonical 56h).
+    assert.match(html, /<body class="app-shell">/)
     // 8-char session-id prefix renders in the breadcrumb (single-segment).
     assert.match(html, new RegExp(`>${SID.slice(0, 8)}<`))
     // No 'maria' workspace segment in v1 — the auth layer plumbs a
@@ -132,7 +133,7 @@ describe('GET /sessions/:id', () => {
     assert.doesNotMatch(html, /Session live\s*[·]/)
   })
 
-  it('renders the existing 44px chrome on non-Ready states (Provisioning)', async (t) => {
+  it('renders path-mode chrome on non-Ready states (Provisioning)', async (t) => {
     const session: SessionShape = { sessionId: SID, status: 'Pending' }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -140,9 +141,10 @@ describe('GET /sessions/:id', () => {
     const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
     const html = await response.text()
 
-    assert.match(html, /class="wf-toolbar"/)
-    assert.doesNotMatch(html, /wf-toolbar-tall/)
-    // Decorative slug visible.
+    // Same App Shell as Ready — height/shape unified by canonical recipe.
+    assert.match(html, /<body class="app-shell">/)
+    // Decorative slug visible (the visual distinction between
+    // Ready and Provisioning is content, not chrome height).
     assert.match(html, new RegExp(`/sessions/${SID}`))
     // No LivePill on non-Ready chrome.
     assert.doesNotMatch(html, /Session live/)

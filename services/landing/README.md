@@ -101,12 +101,12 @@ services/landing/
 │   │   ├── typography.css     # .kicker (canonical typography helper) + .wf-mono, .wf-link, …
 │   │   └── focus-ring.css     # cross-cutting :focus-visible composite (loads last)
 │   ├── compositions/          # OpenVoid composition tier — assemblies of blocks
+│   │   ├── app-shell.css      # canonical App Shell (entry 01) — sticky 56h header + main
 │   │   ├── card-shell.css     # canonical Card Shell (entry 07)
 │   │   ├── composer.css       # canonical Composer (entry 11) + absorbed Derived row
 │   │   ├── connector.css      # non-canonical: Ready-page card-to-card SVG
 │   │   ├── split-tip.css      # non-canonical: Ready-page window-split hint
 │   │   ├── suggestion.css     # leaf of canonical Suggested Prompts Row (entry 17)
-│   │   ├── toolbar.css        # app-shell chrome bar (not the canonical Toolbar Row)
 │   │   └── url-row.css        # non-canonical: Ready-page session-URL pill
 │   └── exceptions.css         # CUBE Exception layer (data-attribute variants)
 ├── server.ts                  # http server bootstrap

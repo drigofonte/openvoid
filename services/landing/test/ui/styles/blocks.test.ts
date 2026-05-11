@@ -49,8 +49,6 @@ describe('blocks/ + compositions/', () => {
       // Non-canonical product extensions (still wf- prefixed)
       '.wf-card',
       '.kbd',
-      '.wf-toolbar',
-      '.wf-toolbar-tall',
       '.pill',
       '.pill.live',
       '.pill.prod',
@@ -131,12 +129,12 @@ describe('blocks/ + compositions/', () => {
 
   it('compositions/ holds only composition-shaped files', () => {
     const expected = [
+      'app-shell.css',
       'card-shell.css',
       'composer.css',
       'connector.css',
       'split-tip.css',
       'suggestion.css',
-      'toolbar.css',
       'url-row.css',
     ]
     const actual = compositionFiles.map((f) => f.name)
@@ -164,12 +162,12 @@ describe('blocks/ + compositions/', () => {
   it('blocks/ does not hold composition-shaped files', () => {
     const blockNames = blockFiles.map((f) => f.name)
     for (const composition of [
+      'app-shell.css',
       'card-shell.css',
       'composer.css',
       'connector.css',
       'split-tip.css',
       'suggestion.css',
-      'toolbar.css',
       'url-row.css',
     ]) {
       assert.equal(
