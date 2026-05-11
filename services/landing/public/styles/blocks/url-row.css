@@ -1,0 +1,29 @@
+.wf-url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--paper-2);
+  border-radius: var(--r-sm);
+  padding: var(--sp-4) var(--sp-5);
+  font: var(--fw-medium) var(--fs-mono-sm)/1.4 var(--font-mono);
+  color: var(--ink);
+  min-width: 0;
+}
+.wf-url-scheme {
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.wf-url-rest {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wf-url-trail {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}

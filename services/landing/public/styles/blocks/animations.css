@@ -1,0 +1,12 @@
+/* Standalone animation utility classes. Component-specific
+   keyframes (breathe, flow, wf-spin) live with their owning block. */
+.wf-pulse { animation: wf-pulse 1.6s ease-in-out infinite; }
+@keyframes wf-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+.wf-blink { animation: wf-blink 1.1s steps(2, end) infinite; }
+@keyframes wf-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}

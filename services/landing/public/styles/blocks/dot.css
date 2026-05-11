@@ -1,0 +1,5 @@
+.wf-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--wf-fg-faint); display: inline-block; }
+.wf-dot-ok { background: var(--wf-ok); }
+.wf-dot-acc { background: var(--wf-accent); }
+.wf-dot-warn { background: var(--wf-warn); }
+.wf-dot-danger { background: var(--wf-danger); }

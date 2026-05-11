@@ -1,0 +1,31 @@
+/* ── Lives-at slug ghost line ────────────────────────────
+ * Inline `<span>`-style tag rendered below the composer
+ * textarea. The wrapper `<div class="wf-livesat">` carries the
+ * `data-hidden` attribute the `DerivedSlug` clientEntry toggles —
+ * the opacity transition lives here so the slug fades in / out
+ * as the user crosses the 8-char threshold.
+ */
+.wf-livesat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 24px 14px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  transition: opacity 0.25s ease;
+}
+.wf-livesat[data-hidden] {
+  opacity: 0;
+  pointer-events: none;
+}
+.wf-livesat .wf-livesat-prefix {
+  color: var(--ink-4);
+}
+.wf-livesat .wf-livesat-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--paper-2);
+  padding: 2px 7px;
+  border-radius: 5px;
+}

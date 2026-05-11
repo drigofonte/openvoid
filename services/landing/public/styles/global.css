@@ -48,4 +48,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Heading recipes — applied to bare <h1>/<h2>/<h3> elements so
+     consumers don't need to opt in via class. The universal margin
+     reset above zeroes the user-agent margin; we only set the
+     typographic shape. */
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+  h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+  h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 }

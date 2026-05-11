@@ -12,7 +12,7 @@ export interface UrlRowProps {
 /**
  * URL row — paper-2 sunken pill with the scheme greyed out and
  * the rest of the URL ellipsised. Uses the `.wf-url-*` class
- * recipes in `blocks.css` (CUBE Block layer).
+ * recipes in `blocks/url-row.css` (CUBE Block layer).
  *
  * The scheme/rest split runs at the JSX layer (no runtime cost):
  * everything up to and including the first `://` is the scheme;

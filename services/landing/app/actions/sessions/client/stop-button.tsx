@@ -123,7 +123,7 @@ export const StopButton = clientEntry(
                   <span class="wf-eyebrow" mix={css({ color: 'var(--wf-danger)' })}>
                     Stop session
                   </span>
-                  <h2 id="stop-dialog-title" class="wf-h2" mix={css({ margin: 0 })}>
+                  <h2 id="stop-dialog-title">
                     Save your work and shut down?
                   </h2>
                   <p

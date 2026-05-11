@@ -1,11 +1,11 @@
 /**
  * Connector — animated SVG joining the duo of cards in the Ready
  * stage. The flow path uses a dashed stroke offset by the `flow`
- * keyframe (defined in `blocks.css`) and ends with a chevron
+ * keyframe (defined in `blocks/connector.css`) and ends with a chevron
  * arrowhead.
  *
  * Positioning + responsive rotation live on the `.wf-connector`
- * rule in `blocks.css`. The container element (`.wf-connector-host`)
+ * rule in `blocks/connector.css`. The container element (`.wf-connector-host`)
  * is set up by the consumer; this component just emits the SVG
  * inside the wrapper that consumers position absolutely.
  *

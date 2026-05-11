@@ -1,0 +1,5 @@
+.wf-skeleton-line {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--wf-line-soft);
+}

@@ -1,0 +1,42 @@
+/*
+ * Input — matches the canonical Tokens `.field` recipe: 36h,
+ * --r-sm radius, --card background, with the 1px line drawn as
+ * an inset box-shadow rather than a real border. Inset shadow
+ * keeps the box model stable on focus (a real border would shift
+ * content 1px when the focus ring swaps it for an accent stroke).
+ *
+ * On focus, the inset shadow recolors to --accent and the
+ * canonical 4px --focus-ring halo draws outside. Uses `:focus`
+ * (not `:focus-visible`) so mouse users also get a visible
+ * indicator — text fields need a clear "your keystrokes land
+ * here" cue regardless of input modality.
+ *
+ * In the composer (`blocks/composer.css`), the wrapping surface
+ * already has a `:focus-within` halo. Its `overflow: hidden`
+ * clips this textarea's outer halo; only the inset accent stroke
+ * shows, which subtly marks the active field within the surface.
+ */
+.wf-input {
+  appearance: none;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: var(--fw-regular) 13px/1 var(--font-sans);
+  color: var(--ink);
+}
+.wf-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent), var(--focus-ring);
+}
+
+textarea.wf-input {
+  display: block;
+  height: auto;
+  min-height: 84px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}

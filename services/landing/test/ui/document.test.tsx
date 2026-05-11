@@ -5,26 +5,45 @@ import { renderToString } from 'remix/ui/server'
 import { Document } from '../../app/ui/document.tsx'
 
 const STYLE_LINK_ORDER = [
-  'utopia.css',
-  'tokens.css',
-  'base.css',
-  'composition.css',
-  'blocks.css',
-  'exceptions.css',
+  '/styles/utopia.css',
+  '/styles/tokens.css',
+  '/styles/global.css',
+  '/styles/composition.css',
+  '/styles/blocks/layout.css',
+  '/styles/blocks/focus-ring.css',
+  '/styles/exceptions.css',
 ] as const
 
 describe('Document', () => {
-  it('emits six stylesheet <link> tags in CUBE-canonical cascade order', async () => {
+  it('emits stylesheet <link> tags in CUBE-canonical cascade order', async () => {
     const html = await renderToString(<Document title="x">hi</Document>)
     const indices = STYLE_LINK_ORDER.map((file) => {
-      const idx = html.indexOf(`href="/styles/${file}"`)
-      assert.notEqual(idx, -1, `expected /styles/${file} <link>`)
+      const idx = html.indexOf(`href="${file}"`)
+      assert.notEqual(idx, -1, `expected ${file} <link>`)
       return idx
     })
     for (let i = 1; i < indices.length; i++) {
       assert.ok(
         indices[i - 1] < indices[i],
         `expected ${STYLE_LINK_ORDER[i - 1]} before ${STYLE_LINK_ORDER[i]}`,
+      )
+    }
+  })
+
+  it('loads focus-ring.css after every other block file so its :focus-visible composite wins', async () => {
+    const html = await renderToString(<Document title="x">hi</Document>)
+    const focusRing = html.indexOf('href="/styles/blocks/focus-ring.css"')
+    const exceptions = html.indexOf('href="/styles/exceptions.css"')
+    assert.ok(focusRing > 0)
+    assert.ok(focusRing < exceptions, 'focus-ring must precede exceptions')
+    // Every other blocks/*.css link should appear before focus-ring.
+    const blocksRe = /href="\/styles\/blocks\/([^"]+)\.css"/g
+    let m: RegExpExecArray | null
+    while ((m = blocksRe.exec(html)) !== null) {
+      if (m[1] === 'focus-ring') continue
+      assert.ok(
+        m.index < focusRing,
+        `block file ${m[1]} should load before focus-ring`,
       )
     }
   })

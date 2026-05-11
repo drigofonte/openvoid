@@ -1,0 +1,37 @@
+/* ── Alts row pill button ────────────────────────────────
+ * Distinct from `.wf-chip` (smaller, bordered) and `.wf-btn`
+ * (bordered, ink fg). Used for the four alternative-entry pills
+ * under the composer. v1 ships with `data-coming-soon` and a
+ * `title` tooltip — NOT `disabled`, since `disabled` defeats
+ * `:hover` and the pill row would render visually inert.
+ */
+.wf-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--paper-2);
+  color: var(--ink-2);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+}
+.wf-alt:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.wf-alt svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ink-3);
+}
+.wf-alt:hover svg {
+  color: var(--ink-2);
+}
+.wf-alt[data-coming-soon] {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
