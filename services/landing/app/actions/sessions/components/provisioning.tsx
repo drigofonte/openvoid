@@ -55,7 +55,7 @@ export function Provisioning() {
           Spinning up
         </span>
 
-        <div mix={css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' })}>
+        <div mix={css({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' })}>
           <h1
             tabindex={-1}
             mix={css({
@@ -88,7 +88,7 @@ export function Provisioning() {
         <div
           class="card-shell"
           data-storyboard
-          mix={css({ width: '100%', maxWidth: '560px', padding: '22px 24px 20px', gap: '18px' })}
+          mix={css({ width: '100%', maxWidth: '640px', padding: '28px 32px 26px', gap: '22px' })}
         >
           <div class="card-head">
             <span class="title">Boot sequence</span>

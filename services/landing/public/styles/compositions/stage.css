@@ -6,7 +6,7 @@
  *
  *   min-height: 100vh minus the App Shell header
  *   flex column, centered along both axes
- *   gap 20px between children
+ *   gap 28px between children
  *   padding 60/24 (top, sides — generous breathing room)
  *   paper background (matches App Shell main)
  *
@@ -25,6 +25,6 @@
   align-items: center;
   justify-content: center;
   padding: 60px 24px;
-  gap: 20px;
+  gap: 28px;
   background: var(--paper);
 }
