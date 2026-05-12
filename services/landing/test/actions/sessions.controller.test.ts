@@ -74,7 +74,16 @@ describe('GET /sessions/:id', () => {
     assert.equal(response.status, 200)
     const html = await response.text()
     assert.match(html, /Spinning up/)
-    assert.match(html, /Cancel/)
+    // Cancel lives in the page header (topBarRight) on Provisioning,
+    // not in the page body. Per U5 of plan 2026-05-12-001.
+    const headerMatch = html.match(/<header[\s\S]*?<\/header>/)
+    assert.notEqual(headerMatch, null, 'expected a <header> element')
+    assert.match(headerMatch![0], /Cancel/)
+    // CancelButton renders a form with intent=cancel.
+    assert.match(headerMatch![0], /name="intent" value="cancel"/)
+    // Avatar still renders alongside Cancel — the "M" letter is
+    // the Avatar's default content (Hi-Fi shape).
+    assert.match(headerMatch![0], />M</)
   })
 
   it('renders Ready when status=Running, both URLs present, ingress probe succeeds', async (t) => {

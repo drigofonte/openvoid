@@ -8,6 +8,7 @@ import { isTerminal } from '../../utils/poll.ts'
 import type { View } from '../../utils/derive.ts'
 import { FocusH1 } from './client/focus-h1.tsx'
 import { StatusPoller } from './client/status-poller.tsx'
+import { CancelButton } from './client/cancel-button.tsx'
 import { Done } from './components/done.tsx'
 import { Failed } from './components/failed.tsx'
 import { KillConfirm } from './components/kill-confirm.tsx'
@@ -45,11 +46,18 @@ export interface SessionPageProps {
 export function SessionPage() {
   return ({ view, confirmStop = false, actionError = null }: SessionPageProps) => {
     const isReady = view.kind === 'ready'
+    const isProvisioning = view.kind === 'provisioning'
     const chrome = isReady
       ? ({ mode: 'crumbs' as const, here: view.sessionId.slice(0, 8) })
       : ({ mode: 'path' as const, path: `/sessions/${view.sessionId}` })
     const mainKind = isReady ? ('full' as const) : ('narrow' as const)
-    const headerRight = isReady ? <HeaderSlot /> : <Avatar />
+    const headerRight = isReady ? (
+      <HeaderSlot />
+    ) : isProvisioning ? (
+      <ProvisioningHeaderSlot sessionId={view.sessionId} />
+    ) : (
+      <Avatar />
+    )
     return (
       <Layout
         title={pageTitle(view)}
@@ -90,6 +98,21 @@ function HeaderSlot() {
         <span class="d pulse" />
         Session live
       </span>
+      <Avatar />
+    </div>
+  )
+}
+
+/**
+ * Right-aligned header content for the Provisioning chrome — a
+ * Cancel ghost-button and the Avatar, matching the Hi-Fi shape.
+ * Cancel lives here (not in the page body) per U5/U9 of plan
+ * 2026-05-12-001; the body has no in-flow Cancel after U4 lands.
+ */
+function ProvisioningHeaderSlot() {
+  return ({ sessionId }: { sessionId: string }) => (
+    <div class="wf-row" mix={css({ gap: 'var(--sp-3)' })}>
+      <CancelButton sessionId={sessionId} />
       <Avatar />
     </div>
   )
