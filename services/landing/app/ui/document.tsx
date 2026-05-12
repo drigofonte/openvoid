@@ -51,9 +51,9 @@ const LAYOUT_PRIMITIVE_FILES = [
 const BLOCK_FILES = [
   'alt',
   'animations',
-  'app-icon',
   'button',
   'dot',
+  'eyebrow',
   'field',
   'icon-mark',
   'kbd',
@@ -61,7 +61,6 @@ const BLOCK_FILES = [
   'pill',
   'progress',
   'skeleton',
-  'spinner',
   'surface',
   'typography',
   'visually-hidden',
@@ -75,7 +74,9 @@ const COMPOSITION_FILES = [
   'card-shell',
   'composer',
   'connector',
+  'provisioning-card',
   'split-tip',
+  'stage',
   'suggestion',
   'url-row',
 ] as const

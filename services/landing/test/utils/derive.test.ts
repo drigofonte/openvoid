@@ -17,6 +17,18 @@ describe('deriveView', () => {
       sessionId: SID,
       status: 'Pending',
       pendingPhase: 'pending',
+      sessionCreatedAt: undefined,
+    })
+  })
+
+  it('Pending → provisioning carries sessionCreatedAt through', () => {
+    const view = deriveView(input({ status: 'Pending', createdAt: '2026-05-12T00:00:00.000Z' }))
+    assert.deepEqual(view, {
+      kind: 'provisioning',
+      sessionId: SID,
+      status: 'Pending',
+      pendingPhase: 'pending',
+      sessionCreatedAt: '2026-05-12T00:00:00.000Z',
     })
   })
 
@@ -43,6 +55,7 @@ describe('deriveView', () => {
       sessionId: SID,
       status: 'Running',
       pendingPhase: 'running-pre-ingress',
+      sessionCreatedAt: undefined,
     })
   })
 

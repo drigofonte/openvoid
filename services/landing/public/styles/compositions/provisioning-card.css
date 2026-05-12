@@ -1,0 +1,228 @@
+/*
+ * Provisioning Card — the Boot Sequence composition shown on the
+ * Provisioning view. Sits inside `.card-shell` and arranges: card
+ * head (title + ETA), animated progress bar, 5-step list, a
+ * disclosure for the synthetic live log, and the log terminal
+ * surface itself.
+ *
+ * Non-canonical: not defined in `OpenVoid Compositions.html`.
+ * Lives under `compositions/` because it's a composition of blocks
+ * (card-shell + bar + steps + disclosure + terminal). The selectors
+ * are bare (no `wf-` prefix) because they're scoped under
+ * `[data-storyboard]` in JSX so they don't collide globally.
+ *
+ * Storyboard animations:
+ *   - bar shimmer (continuous gradient sweep on the fill)
+ *   - active-step breathing halo (matches Eyebrow Pill's .dot.live)
+ *   - log cursor blink on the last log line
+ *
+ * Past TOTAL+GRACE seconds elapsed, the ProvisioningStoryboard
+ * clientEntry adds `.indeterminate` to `#bar-fill` (CSS-only
+ * striped marquee replaces the fixed width) and reveals
+ * `[data-stuck-meta]`. The `[data-eta-wrap]` element is hidden
+ * (its `hidden` attribute is toggled by the entry, not by CSS).
+ *
+ * All animations respect `prefers-reduced-motion: reduce` (see
+ * the @media block at the end).
+ */
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.card-head .title {
+  font-size: 13.5px;
+  font-weight: var(--fw-semi);
+  color: var(--ink);
+}
+.card-head .eta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.card-head .eta .num {
+  color: var(--ink);
+  font-weight: var(--fw-semi);
+}
+
+.bar {
+  height: 3px;
+  background: var(--paper-2);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--ink);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.6s cubic-bezier(0.2, 0.7, 0.3, 1);
+  position: relative;
+}
+.bar-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+/* Long-running degraded state: striped marquee, full width. */
+.bar-fill.indeterminate {
+  width: 100% !important;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink-3) 0 12px,
+    var(--paper-2) 12px 24px
+  );
+  background-size: 24px 100%;
+  animation: marquee 1.2s linear infinite;
+  transition: none;
+}
+.bar-fill.indeterminate::after {
+  display: none;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes marquee {
+  0% { background-position: 0 0; }
+  100% { background-position: 24px 0; }
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 12px;
+  font-size: 13.5px;
+  color: var(--ink-3);
+  transition: color 0.2s;
+}
+.step .check {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+  position: relative;
+}
+.step.done .check {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.step.done .check::after {
+  content: "";
+  width: 4px;
+  height: 7px;
+  border: solid var(--paper);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+.step.active .check {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.step.active .check::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: breathe var(--dur-breathe) var(--ease-std) infinite;
+}
+.step.active .check::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.step.done .label { color: var(--ink-2); }
+.step.active .label {
+  color: var(--ink);
+  font-weight: var(--fw-medium);
+}
+
+/* Disclosure (Show/Hide live log). */
+.disc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  cursor: pointer;
+  color: var(--ink-3);
+  font: var(--fw-medium) 12px/1 var(--font-sans);
+  align-self: flex-start;
+  transition: color 0.12s;
+}
+.disc:hover { color: var(--ink); }
+.disc .chev {
+  width: 10px;
+  height: 10px;
+  transition: transform 0.2s;
+}
+.disc[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+/* Synthetic terminal log. */
+.log {
+  display: none;
+  background: var(--terminal, #0E0E0E);
+  color: #E5E2DC;
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  max-height: 180px;
+  overflow: hidden;
+  position: relative;
+}
+.log[data-open] { display: block; }
+.log::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 40px;
+  background: linear-gradient(180deg, transparent, var(--terminal, #0E0E0E));
+  pointer-events: none;
+}
+.log .ok { color: #16C079; }
+.log .now { color: #E8590C; }
+.log .dim { color: #6B6863; }
+.log .blink::after {
+  content: "▍";
+  animation: log-blink 1s steps(2) infinite;
+  color: #E5E2DC;
+  margin-left: 1px;
+}
+@keyframes log-blink { 50% { opacity: 0; } }
+
+/* Reduced motion: suppress active-step halo, bar shimmer, log cursor. */
+@media (prefers-reduced-motion: reduce) {
+  .step.active .check::before { animation: none; }
+  .bar-fill::after { animation: none; opacity: 0; }
+  .bar-fill.indeterminate { animation: none; }
+  .log .blink::after { animation: none; }
+}

@@ -43,6 +43,8 @@ describe('blocks/ + compositions/', () => {
       '.btn-sec',
       '.btn-ghost',
       '.card-shell',
+      '.eyebrow',
+      '.eyebrow.ok',
       '.composer',
       '.composer-bar',
       '.composer-derived',
@@ -133,7 +135,9 @@ describe('blocks/ + compositions/', () => {
       'card-shell.css',
       'composer.css',
       'connector.css',
+      'provisioning-card.css',
       'split-tip.css',
+      'stage.css',
       'suggestion.css',
       'url-row.css',
     ]
@@ -144,17 +148,26 @@ describe('blocks/ + compositions/', () => {
   it('blocks/ holds leaf display primitives including the leaves reclassified from compositions/', () => {
     const blockNames = blockFiles.map((f) => f.name)
     for (const leaf of [
-      'app-icon.css',
       'icon-mark.css',
       'progress.css',
       'skeleton.css',
-      'spinner.css',
       'surface.css',
     ]) {
       assert.equal(
         blockNames.includes(leaf),
         true,
         `${leaf} should live in blocks/ (leaf display primitive)`,
+      )
+    }
+  })
+
+  it('the retired wf-spinner / wf-app-icon CSS files are gone (Provisioning rewrite removed the last consumers)', () => {
+    const blockNames = blockFiles.map((f) => f.name)
+    for (const retired of ['spinner.css', 'app-icon.css']) {
+      assert.equal(
+        blockNames.includes(retired),
+        false,
+        `${retired} should be retired — sole consumer (Provisioning) no longer uses it`,
       )
     }
   })
@@ -166,7 +179,9 @@ describe('blocks/ + compositions/', () => {
       'card-shell.css',
       'composer.css',
       'connector.css',
+      'provisioning-card.css',
       'split-tip.css',
+      'stage.css',
       'suggestion.css',
       'url-row.css',
     ]) {

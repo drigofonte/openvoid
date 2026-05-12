@@ -56,4 +56,16 @@
   h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
   h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
   h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* Suppress the browser-default focus ring on programmatically-
+     focused headings. The FocusH1 clientEntry (used on session-state
+     pages) calls `heading.focus({ preventScroll: true })` so screen
+     readers announce the page heading on arrival — but the heading
+     is never keyboard-tabbed to (tabindex="-1" removes it from the
+     tab order), so the visible focus ring serves no a11y purpose
+     and visually disrupts the typographic hero. Screen readers still
+     receive the focus event. */
+  :where(h1, h2, h3)[tabindex="-1"]:focus {
+    outline: none;
+  }
 }
