@@ -1,0 +1,30 @@
+/*
+ * Stage — canonical OpenVoid Composition per `docs/designs/OpenVoid
+ * Compositions.html` entry 02. Full-viewport-height column with a
+ * consistent gap, used for screens whose primary content centers
+ * vertically (Provisioning, future Create Prompt stage variant).
+ *
+ *   min-height: 100vh minus the App Shell header
+ *   flex column, centered along both axes
+ *   gap 20px between children
+ *   padding 60/24 (top, sides — generous breathing room)
+ *   paper background (matches App Shell main)
+ *
+ * Variants documented in the canonical doc:
+ *   - centered (this file's default — justify-content: center)
+ *   - top-aligned (padding-top + gap, no justify-content) — DEFERRED
+ *     until a consumer materializes
+ *
+ * Max-width lives on children, never on the stage. Stage is always
+ * full-bleed; per-screen content owns its own width cap.
+ */
+.stage {
+  min-height: calc(100vh - var(--h-header));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  gap: 20px;
+  background: var(--paper);
+}

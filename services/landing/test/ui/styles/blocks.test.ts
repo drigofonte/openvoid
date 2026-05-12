@@ -136,6 +136,7 @@ describe('blocks/ + compositions/', () => {
       'composer.css',
       'connector.css',
       'split-tip.css',
+      'stage.css',
       'suggestion.css',
       'url-row.css',
     ]
@@ -169,6 +170,7 @@ describe('blocks/ + compositions/', () => {
       'composer.css',
       'connector.css',
       'split-tip.css',
+      'stage.css',
       'suggestion.css',
       'url-row.css',
     ]) {

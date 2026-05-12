@@ -77,6 +77,7 @@ const COMPOSITION_FILES = [
   'composer',
   'connector',
   'split-tip',
+  'stage',
   'suggestion',
   'url-row',
 ] as const
