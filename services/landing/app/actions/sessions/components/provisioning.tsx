@@ -49,7 +49,7 @@ export function Provisioning() {
   return ({ sessionId, pendingPhase, sessionCreatedAt }: ProvisioningProps) => {
     const status = pendingPhase ? STATUS_COPY[pendingPhase] : STATUS_COPY['pending']
     return (
-      <main class="stage">
+      <main class="stage top">
         <span class="eyebrow">
           <span class="dot live" />
           Spinning up
