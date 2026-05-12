@@ -1,0 +1,63 @@
+/*
+ * Eyebrow Pill — canonical block per OpenVoid Blocks.html entry 06.
+ * 24h pill with accent paint, optional leading dot, optional
+ * breathing halo on the dot for live states.
+ *
+ *   .eyebrow                 Default — accent-soft bg, accent fg, uppercase
+ *   .eyebrow.ok              OK paint (deployed / success states)
+ *   .eyebrow .dot            Leading dot (currentColor)
+ *   .eyebrow .dot.live       Adds a breathing halo (referenced from pill.css)
+ *
+ * The `breathe` keyframe is owned by `blocks/pill.css` and shared
+ * between the Status Pill's `.d.pulse` and this block's `.dot.live`.
+ * Canonical-keyframe alignment between pill.css and the Blocks doc is
+ * a deferred follow-up (see plan 2026-05-12-001).
+ */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 24px;
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: var(--fw-semi) 11px/1 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  position: relative;
+}
+.eyebrow.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: currentColor;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+}
+.eyebrow .dot.live::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--r-pill);
+  background: currentColor;
+  opacity: 0.4;
+  animation: breathe var(--dur-breathe) var(--ease-std) infinite;
+}
+
+/*
+ * Reduced-motion suppression: the dot's breathing halo scales from
+ * 0.7 to 2.6, which is large enough to trigger vestibular concerns.
+ * Under `prefers-reduced-motion: reduce`, suppress the halo entirely.
+ * The static accent-paint dot remains visible.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .eyebrow .dot.live::after {
+    animation: none;
+  }
+}

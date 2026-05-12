@@ -54,6 +54,7 @@ const BLOCK_FILES = [
   'app-icon',
   'button',
   'dot',
+  'eyebrow',
   'field',
   'icon-mark',
   'kbd',

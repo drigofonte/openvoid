@@ -43,6 +43,8 @@ describe('blocks/ + compositions/', () => {
       '.btn-sec',
       '.btn-ghost',
       '.card-shell',
+      '.eyebrow',
+      '.eyebrow.ok',
       '.composer',
       '.composer-bar',
       '.composer-derived',
