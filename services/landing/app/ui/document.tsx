@@ -51,7 +51,6 @@ const LAYOUT_PRIMITIVE_FILES = [
 const BLOCK_FILES = [
   'alt',
   'animations',
-  'app-icon',
   'button',
   'dot',
   'eyebrow',
@@ -62,7 +61,6 @@ const BLOCK_FILES = [
   'pill',
   'progress',
   'skeleton',
-  'spinner',
   'surface',
   'typography',
   'visually-hidden',

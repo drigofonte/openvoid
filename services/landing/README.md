@@ -94,20 +94,23 @@ services/landing/
 │   │   └── …                  # box, center, cover, flow, frame, reel, sidebar, switcher
 │   ├── blocks/                # CUBE Block layer — canonical blocks + leaf primitives
 │   │   ├── button.css         # canonical .btn-pri / .btn-sec / .btn-ghost (entries 09–11)
+│   │   ├── eyebrow.css        # canonical .eyebrow / .eyebrow.ok / .dot.live (entry 06)
 │   │   ├── field.css          # canonical .field (entry 13)
 │   │   ├── kbd.css            # canonical .kbd + .kbd.dark (entry 14)
 │   │   ├── pill.css           # canonical .pill / .pill.live / .pill.prod (entry 12)
 │   │   ├── alt.css            # canonical .alt / .alt.on (entry 11)
-│   │   ├── app-icon.css       # leaf display primitives (still wf-* —
-│   │   ├── icon-mark.css      #  no canonical Blocks-doc counterparts)
-│   │   ├── spinner.css
+│   │   ├── icon-mark.css      # leaf display primitives (still wf-* —
+│   │   ├── progress.css       #  no canonical Blocks-doc counterparts)
+│   │   ├── skeleton.css
 │   │   ├── …
 │   │   ├── typography.css     # .kicker (canonical typography helper) + .wf-mono, .wf-link, …
 │   │   └── focus-ring.css     # cross-cutting :focus-visible composite (loads last)
 │   ├── compositions/          # OpenVoid composition tier — assemblies of blocks
 │   │   ├── app-shell.css      # canonical App Shell (entry 01) — sticky 56h header + main
+│   │   ├── stage.css          # canonical Stage (entry 02) — full-vh centered column
 │   │   ├── card-shell.css     # canonical Card Shell (entry 07)
 │   │   ├── composer.css       # canonical Composer (entry 11) + absorbed Derived row
+│   │   ├── provisioning-card.css  # non-canonical: Boot Sequence card (steps, bar, log)
 │   │   ├── connector.css      # non-canonical: Ready-page card-to-card SVG
 │   │   ├── split-tip.css      # non-canonical: Ready-page window-split hint
 │   │   ├── suggestion.css     # leaf of canonical Suggested Prompts Row (entry 17)

@@ -10,7 +10,7 @@ import { Kicker } from '../../../ui/kicker.tsx'
  * before the Pod is fully gone.
  *
  * The clientEntry-driven log overlay (06-B's terminal stream)
- * lands in Unit 4b. For now, a spinner + status copy.
+ * lands in Unit 4b. For now, a kicker + status copy.
  */
 
 export interface StoppingProps {
