@@ -38,14 +38,11 @@ const TOTAL_SECONDS = 25
 const GRACE_SECONDS = 5 // degrade past TOTAL + GRACE
 const BASE_DURATIONS = [3, 4, 5, 6, 7] // sums to 25; shuffled per session
 
-export interface ProvisioningStoryboardProps {
-  sessionId: string
-  sessionCreatedAt: string
-}
-
 export const ProvisioningStoryboard = clientEntry(
   import.meta.url,
-  function ProvisioningStoryboard(handle: Handle<ProvisioningStoryboardProps>) {
+  function ProvisioningStoryboard(
+    handle: Handle<{ sessionId: string; sessionCreatedAt: string }>,
+  ) {
     const { sessionId, sessionCreatedAt } = handle.props
     const startMs = parseISO(sessionCreatedAt)
     if (!Number.isFinite(startMs)) {
@@ -107,11 +104,38 @@ export const ProvisioningStoryboard = clientEntry(
       if (handle.signal.aborted) return
       tick() // sync first tick replaces SSR state with real elapsed
       timer = setInterval(tick, 250)
+      wireDisclosure(handle.signal)
     })
 
     return () => null
   },
 )
+
+/**
+ * Disclosure toggle for the synthetic log. Wires aria-expanded and
+ * the `[data-open]` data attribute together. Kept inside the
+ * storyboard clientEntry so we don't pay for a second entry just
+ * for one click handler.
+ */
+function wireDisclosure(signal: AbortSignal): void {
+  const button = document.querySelector<HTMLButtonElement>('[data-disclosure]')
+  const log = document.getElementById('provisioning-log')
+  if (!button || !log) return
+
+  const onClick = () => {
+    const open = button.getAttribute('aria-expanded') !== 'true'
+    button.setAttribute('aria-expanded', open ? 'true' : 'false')
+    if (open) log.setAttribute('data-open', '')
+    else log.removeAttribute('data-open')
+    // Update trailing text node: "Show live log" / "Hide live log".
+    const last = button.lastChild
+    if (last && last.nodeType === Node.TEXT_NODE) {
+      last.textContent = open ? ' Hide live log' : ' Show live log'
+    }
+  }
+
+  button.addEventListener('click', onClick, { signal })
+}
 
 /* ── Pure helpers (testable; no DOM, no time) ───────────────── */
 

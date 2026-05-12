@@ -28,7 +28,17 @@ export interface DeriveInput extends Session {
 }
 
 export type View =
-  | { kind: 'provisioning'; sessionId: string; status: SessionPhase; pendingPhase?: PendingPhase }
+  | {
+      kind: 'provisioning'
+      sessionId: string
+      status: SessionPhase
+      pendingPhase?: PendingPhase
+      /** ISO timestamp from the Session record; drives the storyboard's
+       *  stable-timestamp anchor for elapsed-time computation. May be
+       *  undefined for older session records — the storyboard tolerates
+       *  this by no-oping rather than animating against NaN. */
+      sessionCreatedAt?: string
+    }
   | { kind: 'ready'; sessionId: string; agentUrl: string; previewUrl: string }
   | { kind: 'stopping'; sessionId: string }
   | { kind: 'done'; sessionId: string }
@@ -40,7 +50,13 @@ export function deriveView(session: DeriveInput): View {
   const sessionId = session.sessionId
   switch (session.status) {
     case 'Pending':
-      return { kind: 'provisioning', sessionId, status: 'Pending', pendingPhase: 'pending' }
+      return {
+        kind: 'provisioning',
+        sessionId,
+        status: 'Pending',
+        pendingPhase: 'pending',
+        sessionCreatedAt: session.createdAt,
+      }
     case 'Running': {
       if (session.agentUrl && session.previewUrl) {
         return {
@@ -55,6 +71,7 @@ export function deriveView(session: DeriveInput): View {
         sessionId,
         status: 'Running',
         pendingPhase: 'running-pre-ingress',
+        sessionCreatedAt: session.createdAt,
       }
     }
     case 'Stopping':

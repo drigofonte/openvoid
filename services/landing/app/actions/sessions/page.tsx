@@ -162,7 +162,13 @@ function ActionErrorBanner() {
 function renderView(view: View, confirmStop: boolean) {
   switch (view.kind) {
     case 'provisioning':
-      return <Provisioning sessionId={view.sessionId} pendingPhase={view.pendingPhase} />
+      return (
+        <Provisioning
+          sessionId={view.sessionId}
+          pendingPhase={view.pendingPhase}
+          sessionCreatedAt={view.sessionCreatedAt}
+        />
+      )
     case 'ready':
       return confirmStop ? (
         <KillConfirm sessionId={view.sessionId} />

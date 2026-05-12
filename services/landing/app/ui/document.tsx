@@ -76,6 +76,7 @@ const COMPOSITION_FILES = [
   'card-shell',
   'composer',
   'connector',
+  'provisioning-card',
   'split-tip',
   'stage',
   'suggestion',
