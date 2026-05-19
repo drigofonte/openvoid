@@ -642,12 +642,129 @@ describe("buildSessionPodManifest (U6: new-app branch)", () => {
     expect(url).toContain("openvoid-platform/scaffold-react-rr7");
   });
 
-  it("preserves the mount-discipline invariant: agent main container still has no GIT_TOKEN env even in new-app mode", () => {
+  it("preserves the credential-mount discipline: agent main container still has no GIT_TOKEN env even in new-app mode", () => {
     const manifest = buildSessionPodManifest(newAppSpec);
     const main = manifest.spec?.containers?.[0];
     const mainEnv = main?.env ?? [];
+    // GIT_TOKEN is the load-bearing credential isolation guard — the
+    // agent must not see it. OPENVOID_NEW_APP is a non-credential
+    // mode flag that U8 deliberately plumbs onto the agent container
+    // to drive its dual-process entrypoint; that one is allowed.
     expect(mainEnv.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
-    expect(mainEnv.find((e) => e.name === "OPENVOID_NEW_APP")).toBeUndefined();
+  });
+});
+
+describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", () => {
+  const newAppSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/openvoid-platform/x-aaaaaa.git",
+    isNewApp: true,
+    prompt: "a",
+  };
+  const importRepoSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/example/x",
+  };
+
+  it("sets OPENVOID_NEW_APP=true on the agent container in new-app mode (drives entrypoint dual-process branch)", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const main = manifest.spec?.containers?.[0];
+    const env = main?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")?.value).toBe("true");
+  });
+
+  it("omits OPENVOID_NEW_APP on the agent container in import-repo mode (single-process branch)", () => {
+    const manifest = buildSessionPodManifest(importRepoSpec);
+    const main = manifest.spec?.containers?.[0];
+    const env = main?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")).toBeUndefined();
+  });
+
+  it("attaches a readinessProbe (httpGet :3000/, init=5, period=3, threshold=30) on the agent container in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const main = manifest.spec?.containers?.[0];
+    expect(main?.readinessProbe).toBeDefined();
+    expect(main?.readinessProbe?.httpGet?.port).toBe(OPENCODE_PREVIEW_PORT);
+    expect(main?.readinessProbe?.httpGet?.path).toBe("/");
+    expect(main?.readinessProbe?.initialDelaySeconds).toBe(5);
+    expect(main?.readinessProbe?.periodSeconds).toBe(3);
+    expect(main?.readinessProbe?.timeoutSeconds).toBe(2);
+    expect(main?.readinessProbe?.failureThreshold).toBe(30);
+  });
+
+  it("does NOT attach a readinessProbe in import-repo mode (no pre-started dev server to probe)", () => {
+    const manifest = buildSessionPodManifest(importRepoSpec);
+    const main = manifest.spec?.containers?.[0];
+    expect(main?.readinessProbe).toBeUndefined();
+  });
+});
+
+describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () => {
+  const script = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/entrypoint.sh",
+    ),
+    "utf8",
+  );
+
+  it("uses bash (process substitution + wait -n require it; node:20-alpine ships ash)", () => {
+    expect(script).toMatch(/^#!\/bin\/bash/);
+  });
+
+  it("branches on OPENVOID_NEW_APP between run_new_app and run_import_repo", () => {
+    expect(script).toMatch(/run_new_app\(\)/);
+    expect(script).toMatch(/run_import_repo\(\)/);
+    expect(script).toMatch(/OPENVOID_NEW_APP/);
+  });
+
+  it("preserves the OPENCODE_SERVER_PASSWORD precondition check (exits 1 with a clear message if unset)", () => {
+    expect(script).toMatch(/OPENCODE_SERVER_PASSWORD/);
+    expect(script).toMatch(/exit 1/);
+  });
+
+  it("new-app branch uses process substitution (not `| sed`) so $! captures pnpm/opencode, not sed", () => {
+    expect(script).toMatch(/pnpm --dir \/workspace\/repo dev > >\(sed /);
+    expect(script).toMatch(/opencode serve [^\n]*> >\(sed /);
+  });
+
+  it("new-app branch uses `wait -n` so the pod exits when the first child dies", () => {
+    expect(script).toMatch(/wait -n "\$DEV_PID" "\$OPENCODE_PID"/);
+  });
+
+  it("traps SIGTERM/INT and forwards to both children in new-app mode (avoids kubelet SIGKILL on grace expiry)", () => {
+    expect(script).toMatch(
+      /trap 'kill -TERM "\$DEV_PID" "\$OPENCODE_PID" 2>\/dev\/null \|\| true' TERM INT/,
+    );
+  });
+
+  it("preserves the explicit-command pass-through (image validation: `docker run … opencode --version`)", () => {
+    expect(script).toMatch(/exec "\$@"/);
+  });
+});
+
+describe("scaffold-extend agent instruction (infra/images/opencode/instructions/scaffold-extend.md)", () => {
+  const md = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/instructions/scaffold-extend.md",
+    ),
+    "utf8",
+  );
+
+  it("states the load-bearing 'extend, don't rebuild' rule up front", () => {
+    // The sentence wraps across lines in the markdown source; collapse
+    // whitespace before asserting so prose reflow doesn't break the test.
+    const collapsed = md.replace(/\s+/g, " ");
+    expect(collapsed).toMatch(/extend the scaffold rather than rebuild/i);
+  });
+
+  it("references the contract surfaces the agent should treat as the starting canvas", () => {
+    expect(md).toContain("app/routes/_index.tsx");
+    expect(md).toContain("app/scaffold-meta.json");
+    expect(md).toContain("vite.config.ts");
   });
 });
 

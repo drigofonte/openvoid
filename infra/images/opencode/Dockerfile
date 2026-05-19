@@ -34,6 +34,16 @@ RUN npm install --omit=dev --no-audit --no-fund --no-package-lock opencode-ai@1.
 
 FROM node:${NODE_VERSION}
 
+# bash + pnpm are required by the new-app dual-process entrypoint:
+# entrypoint.sh uses `wait -n` and process substitution, both
+# bash-only; node:20-alpine ships ash, not bash. pnpm comes via
+# corepack (built into node 20+) and just needs activation. Pinning
+# pnpm@9 matches the workspace's package manager and the
+# workspace-init image (U7).
+RUN apk add --no-cache bash \
+    && corepack enable \
+    && corepack prepare pnpm@9 --activate
+
 # XDG paths pinned to absolute locations independent of $HOME. Rationale
 # is in docs/spikes/2026-05-05-opencode-auth.md: under OpenShift SCC the
 # random runtime UID has no /etc/passwd entry, so $HOME-relative path

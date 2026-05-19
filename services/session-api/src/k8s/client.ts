@@ -438,17 +438,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               containerPort: OPENCODE_PREVIEW_PORT,
             },
           ],
-          env: [
-            {
-              name: "OPENCODE_SERVER_PASSWORD",
-              valueFrom: {
-                secretKeyRef: {
-                  name: OPENCODE_PASSWORD_SECRET_NAME,
-                  key: OPENCODE_PASSWORD_SECRET_KEY,
-                },
-              },
-            },
-          ],
+          env: buildAgentEnv(isNewApp),
           volumeMounts: [
             {
               name: WORKSPACE_VOLUME_NAME,
@@ -468,10 +458,54 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               readOnly: true,
             },
           ],
+          // readinessProbe is conditional on new-app: only new-app pods
+          // run `pnpm dev` on port 3000, and only they should gate
+          // Ready on its response. Import-repo pods keep today's
+          // "Ready as soon as the container is up" behaviour — they
+          // have no pre-started dev server to probe.
+          ...(isNewApp
+            ? {
+                readinessProbe: {
+                  httpGet: {
+                    port: OPENCODE_PREVIEW_PORT,
+                    path: "/",
+                  },
+                  // 5s initial delay covers OpenCode + pnpm dev cold
+                  // start; 3s × 30 = 90s ceiling before the pod is
+                  // marked NotReady, which is enough for first-time
+                  // Vite boot on a cold node.
+                  initialDelaySeconds: 5,
+                  periodSeconds: 3,
+                  timeoutSeconds: 2,
+                  failureThreshold: 30,
+                },
+              }
+            : {}),
         },
       ],
     },
   };
+}
+
+function buildAgentEnv(isNewApp: boolean): V1EnvVar[] {
+  const env: V1EnvVar[] = [
+    {
+      name: "OPENCODE_SERVER_PASSWORD",
+      valueFrom: {
+        secretKeyRef: {
+          name: OPENCODE_PASSWORD_SECRET_NAME,
+          key: OPENCODE_PASSWORD_SECRET_KEY,
+        },
+      },
+    },
+  ];
+  if (isNewApp) {
+    // Selects the dual-process branch in entrypoint.sh (pnpm dev +
+    // opencode serve). Import-repo pods omit this and get the
+    // single-process opencode-only behaviour.
+    env.push({ name: "OPENVOID_NEW_APP", value: "true" });
+  }
+  return env;
 }
 
 export function buildSessionService(
