@@ -524,7 +524,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
       });
 
       expect(res.status).toBe(201);
@@ -552,7 +552,7 @@ describe("sessionsRouter", () => {
         const res = await app.request("/sessions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ repo: "https://github.com/example/x" }),
+          body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
         });
         expect(res.status).toBe(201);
         const arg = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
@@ -567,6 +567,7 @@ describe("sessionsRouter", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          mode: "import-repo",
           repo: "https://github.com/example/x",
           branch: "develop",
         }),
@@ -580,7 +581,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", branch: "" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", branch: "" }),
       });
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -591,7 +592,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", branch: 42 }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", branch: 42 }),
       });
       expect(res.status).toBe(400);
     });
@@ -607,7 +608,7 @@ describe("sessionsRouter", () => {
       expect(body.code).toBe("invalid_body");
     });
 
-    it("rejects body missing `repo` with 400", async () => {
+    it("rejects body missing `mode` with 400", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -616,13 +617,64 @@ describe("sessionsRouter", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.code).toBe("invalid_request");
+      expect(body.message).toContain("mode");
     });
 
-    it("rejects empty `repo` string with 400", async () => {
+    it("rejects unknown `mode` value with 400", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "" }),
+        body: JSON.stringify({ mode: "fork-repo", repo: "https://github.com/example/x" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+    });
+
+    it("rejects import-repo with missing `repo` (mode-conditional rule)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "import-repo" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+    });
+
+    it("rejects new-app with a `repo` (mode-conditional rule)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "new-app",
+          repo: "https://github.com/example/x",
+        }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+      expect(ops.createSessionResources).not.toHaveBeenCalled();
+    });
+
+    it("rejects import-repo with a `prompt` (mode-conditional rule)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "import-repo",
+          repo: "https://github.com/example/x",
+          prompt: "but I also want…",
+        }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects empty `repo` string with 400 (import-repo)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "import-repo", repo: "" }),
       });
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -642,7 +694,7 @@ describe("sessionsRouter", () => {
         const res = await app.request("/sessions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ repo }),
+          body: JSON.stringify({ mode: "import-repo", repo }),
         });
         expect(res.status, `repo=${repo}`).toBe(400);
         const body = await res.json();
@@ -656,7 +708,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", idleTimeoutSeconds: -1 }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", idleTimeoutSeconds: -1 }),
       });
       expect(res.status).toBe(400);
     });
@@ -667,7 +719,7 @@ describe("sessionsRouter", () => {
           method: "POST",
           headers: { "content-type": "application/json" },
           // JSON cannot encode NaN/Infinity; serialize the literal text instead.
-          body: `{"repo":"https://github.com/example/x","idleTimeoutSeconds":${v}}`,
+          body: `{"mode":"import-repo","repo":"https://github.com/example/x","idleTimeoutSeconds":${v}}`,
         });
         expect(res.status, `value=${v}`).toBe(400);
       }
@@ -677,7 +729,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", idleTimeoutSeconds: 600 }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", idleTimeoutSeconds: 600 }),
       });
       expect(res.status).toBe(201);
     });
@@ -687,7 +739,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
       });
       expect(res.status).toBe(503);
       const body = await res.json();
@@ -700,12 +752,42 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
       });
       expect(res.status).toBe(503);
       const body = await res.json();
       expect(body.code).toBe("k8s_unavailable");
       expect(body.message).not.toContain("undefined");
+    });
+
+    it("accepts new-app at the protocol layer but surfaces 501 until U6 wires the handler", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "new-app", prompt: "todo list with reminders" }),
+      });
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.code).toBe("not_implemented_yet");
+      expect(ops.createSessionResources).not.toHaveBeenCalled();
+    });
+
+    it("accepts new-app without a prompt at the protocol layer (501 stub until U6)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "new-app" }),
+      });
+      expect(res.status).toBe(501);
+    });
+
+    it("rejects new-app with a non-string `prompt` with 400", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "new-app", prompt: 42 }),
+      });
+      expect(res.status).toBe(400);
     });
   });
 

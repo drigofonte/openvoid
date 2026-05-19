@@ -17,6 +17,13 @@ type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
 type Session = components["schemas"]["Session"];
 type ApiError = components["schemas"]["ApiError"];
 
+const SESSION_MODES = ["new-app", "import-repo"] as const;
+type SessionMode = (typeof SESSION_MODES)[number];
+
+function isSessionMode(value: unknown): value is SessionMode {
+  return typeof value === "string" && (SESSION_MODES as readonly string[]).includes(value);
+}
+
 // Read OPENVOID_STUB_IMAGE at request time (not module load) so tests
 // can flip it via vi.stubEnv without re-importing. The Phase 5 demo
 // flow continues to set this to nginx:alpine to bypass OpenCode for
@@ -49,8 +56,22 @@ function isHttpsUrl(value: string): boolean {
 function isCreateRequest(body: unknown): body is CreateSessionRequest {
   if (!body || typeof body !== "object") return false;
   const r = body as Record<string, unknown>;
-  if (typeof r.repo !== "string" || r.repo.length === 0) return false;
-  if (!isHttpsUrl(r.repo)) return false;
+
+  if (!isSessionMode(r.mode)) return false;
+
+  // mode/repo/prompt conditional: import-repo requires a valid HTTPS
+  // repo URL and forbids prompt; new-app forbids repo and allows an
+  // optional prompt. The protocol expresses this in prose; the
+  // type-guard enforces it.
+  if (r.mode === "import-repo") {
+    if (typeof r.repo !== "string" || r.repo.length === 0) return false;
+    if (!isHttpsUrl(r.repo)) return false;
+    if (r.prompt !== undefined) return false;
+  } else {
+    if (r.repo !== undefined) return false;
+    if (r.prompt !== undefined && typeof r.prompt !== "string") return false;
+  }
+
   if (r.branch !== undefined) {
     if (typeof r.branch !== "string" || r.branch.length === 0) return false;
   }
@@ -86,9 +107,22 @@ export function sessionsRouter(sessionOps: SessionOps): Hono {
       return c.json(
         jsonError(
           "invalid_request",
-          "Body must include `repo` as an HTTPS Git URL (e.g. `https://github.com/<org>/<repo>`; SSH URLs are not supported), an optional non-empty `branch` string, and an optional non-negative finite `idleTimeoutSeconds`.",
+          "Body must include `mode` (one of `new-app`, `import-repo`). When `mode == \"import-repo\"`, `repo` is required as an HTTPS Git URL (e.g. `https://github.com/<org>/<repo>`; SSH URLs are not supported) and `prompt` is forbidden. When `mode == \"new-app\"`, `repo` is forbidden and `prompt` is an optional string. `branch` (non-empty string) and `idleTimeoutSeconds` (non-negative finite number) are optional.",
         ),
         400,
+      );
+    }
+
+    // U4 lands the type-guard; the new-app handler ships in U6. Until
+    // then, accept the request at the protocol layer but surface a
+    // clear 501 to landing so the flow can't silently no-op.
+    if (body.mode === "new-app") {
+      return c.json(
+        jsonError(
+          "not_implemented_yet",
+          "The new-app entry point is being wired up. Track its progress in docs/plans/2026-05-12-002-feat-coding-session-scaffold-bootstrap-plan.md.",
+        ),
+        501,
       );
     }
 
@@ -97,7 +131,7 @@ export function sessionsRouter(sessionOps: SessionOps): Hono {
       await sessionOps.createSessionResources({
         sessionId,
         image: sessionImage(),
-        repo: body.repo,
+        repo: body.repo!,
         branch: body.branch,
       });
     } catch (err) {

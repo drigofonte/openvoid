@@ -52,10 +52,14 @@ export interface components {
         };
         /** @description Request body for creating a new coding session. */
         CreateSessionRequest: {
-            /** @description HTTPS Git URL of the workspace to clone (e.g. `https://github.com/<org>/<repo>`). SSH URLs (`git@host:org/repo.git`) are not supported in v1. */
-            repo: string;
+            /** @description How the workspace is provisioned. When `new-app`, `repo` MUST be omitted and `prompt` is optional. When `import-repo`, `repo` is required and `prompt` MUST be omitted. Server-side validation enforces this conditional rule (`isCreateRequest`) and rejects mismatches with `400 invalid_request`. */
+            mode: components["schemas"]["SessionMode"];
+            /** @description HTTPS Git URL of the workspace to clone (e.g. `https://github.com/<org>/<repo>`). Required when `mode == "import-repo"`; rejected when `mode == "new-app"`. SSH URLs (`git@host:org/repo.git`) are not supported in v1. */
+            repo?: string;
+            /** @description Free-form natural-language description of the app the user wants to build. Used in `new-app` mode to slugify the repo name and seed `app/scaffold-meta.json`. Truncated at 500 chars client-side; slug truncation is enforced server-side. Empty is accepted (falls back to `app-<suffix>`). Ignored in `import-repo` mode. */
+            prompt?: string;
             /**
-             * @description Branch to check out at clone time. Defaults to `main`.
+             * @description Branch to check out at clone time (import-repo only). Defaults to `main`.
              * @default main
              */
             branch: string;
@@ -66,12 +70,21 @@ export interface components {
              */
             idleTimeoutSeconds: number;
         };
+        /**
+         * @description Boot sub-phase the session is currently in. Populated only when `status == Pending`; surfaces real init/agent progress to the Provisioning storyboard instead of a synthetic timer.
+         * @enum {string}
+         */
+        PendingPhase: "provisioning" | "seeding-scaffold" | "installing-deps" | "awaiting-dev-server" | "running-pre-ingress";
         /** @description A coding session resource as exposed by the API. */
         Session: {
             /** @description ULID identifying the session. Stable for the session's lifetime. */
             sessionId: string;
             /** @description Current lifecycle phase. */
             status: components["schemas"]["SessionPhase"];
+            /** @description Boot sub-phase. Present only when `status == Pending`; absent on `Running`, `Stopped`, `Stopping`, and `Failed`. Drives the Provisioning storyboard's active step. */
+            pendingPhase?: components["schemas"]["PendingPhase"];
+            /** @description Failure detail. Populated only when `status == Failed`; absent on every other status. */
+            error?: components["schemas"]["SessionError"];
             /** @description Reachable URL of the agent (when status is Running). Empty until Phase 5/6. */
             endpointUrl?: string;
             /**
@@ -91,6 +104,18 @@ export interface components {
             /** @description RFC 3339 timestamp the session was created. */
             createdAt?: string;
         };
+        /** @description Failure detail attached to a Session when `status == Failed`. `code` is the stable machine-readable identifier landing maps to user-facing copy; `message` is for logs/telemetry and is NOT rendered to the user verbatim. */
+        SessionError: {
+            /** @description Stable error code (e.g. `init_failed`, `agent_crashloop`, `dev_server_unhealthy`, `github_rate_limited`, `k8s_unavailable`). */
+            code: string;
+            /** @description Human-readable detail. Intended for operator logs and telemetry; do not render directly in the UI — landing maps `code` to safe copy. */
+            message: string;
+        };
+        /**
+         * @description How the session's workspace is provisioned. `new-app` creates a fresh per-app repo on the platform GitHub org and seeds it from the canonical scaffold; `import-repo` clones a user-supplied HTTPS Git URL.
+         * @enum {string}
+         */
+        SessionMode: "new-app" | "import-repo";
         /**
          * @description Lifecycle phase of a coding session.
          * @enum {string}

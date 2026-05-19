@@ -201,7 +201,7 @@ describe('createSession', () => {
     assert.equal(headers['Idempotency-Key'], 'idem-123')
     assert.equal(headers['Content-Type'], 'application/json')
     const body = JSON.parse(init.body as string)
-    assert.deepEqual(body, { repo: 'https://github.com/example/x', branch: 'main', idleTimeoutSeconds: 1800 })
+    assert.deepEqual(body, { mode: 'import-repo', repo: 'https://github.com/example/x', branch: 'main', idleTimeoutSeconds: 1800 })
   })
 
   it('fills in default branch and idleTimeoutSeconds', async (t) => {

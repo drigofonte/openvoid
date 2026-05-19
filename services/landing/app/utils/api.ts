@@ -169,7 +169,11 @@ export async function createSession(
   idempotencyKey: string,
   signal?: AbortSignal,
 ): Promise<Session> {
+  // The new-app vs. import-repo discriminator + prompt forwarding is
+  // U10's territory; until then landing only exercises the import-repo
+  // path (controller injects OPENVOID_DEFAULT_REPO).
   const body: CreateSessionRequest = {
+    mode: 'import-repo',
     repo: input.repo,
     branch: input.branch ?? 'main',
     idleTimeoutSeconds: input.idleTimeoutSeconds ?? 1800,
