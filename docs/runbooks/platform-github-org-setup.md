@@ -50,7 +50,7 @@ that need it.
    org. Recommended name: `openvoid-platform` (matches the default in
    `infra/local/session-api.yaml`'s `OPENVOID_PLATFORM_GITHUB_ORG`
    env). If your preferred name is taken, pick another — you will
-   override the env in step 4.
+   override the env in step 5.
 3. Skip the "invite members" step. The platform org has exactly one
    real owner; nobody else needs access.
 4. Org → Settings → Member privileges → set "Base permissions" to
@@ -58,11 +58,43 @@ that need it.
    but you do not want any future invited member to inherit read on
    user repos.
 
-## Step 2 — Create the fine-grained PAT
+## Step 2 — Set the org's fine-grained PAT policy (DO THIS BEFORE STEP 3)
+
+This step is load-bearing and easy to miss. The default policy on a
+new org is **"Require administrator approval"** for every fine-grained
+PAT, which means a freshly-created PAT silently sits in a Pending
+state and returns 403 on every API call until an org owner approves
+it from a separate UI. Disabling approval up front avoids the
+"created the PAT, applied the Secret, still 403" trap.
+
+1. Visit `https://github.com/organizations/<your-org-name>/settings/personal-access-tokens`
+   (or: Org → Settings → left sidebar → "Personal access tokens").
+2. Open the **"Fine-grained tokens"** tab.
+3. Under **"Require approval of fine-grained personal access tokens"**,
+   select **"Do not require administrator approval"**.
+   - You can leave the rest of the policy defaults alone. Fine-grained
+     PATs are enabled at the org level by default; the only thing the
+     default policy gets wrong is the approval requirement.
+4. Click **Save**.
+
+If you skip this step: the PAT in step 3 still gets created, but the
+token is **inactive** until you go to Org → Settings → Personal access
+tokens → "Pending requests" and approve it manually. Equally valid;
+just slower and easier to forget.
+
+## Step 3 — Create the fine-grained PAT
 
 Fine-grained PATs scope down to a single org and a defined permission
 set. Coarse "classic" PATs grant access to every repo your account can
 see — do not use one.
+
+**Critical UI ordering:** the **"Repository permissions"** section
+only renders once you have selected a non-empty value under
+**"Repository access"**. If you set Organization permissions first
+and then look for Repository permissions, you will not see Contents
+or the rest of the per-repo grants. Set Repository access to "All
+repositories" first, then scroll down — the Repository permissions
+accordion appears below Organization permissions.
 
 1. Visit https://github.com/settings/personal-access-tokens/new.
 2. **Token name**: `openvoid-platform — Session API (DATE)` — include
@@ -71,24 +103,33 @@ see — do not use one.
    PAT is the load-bearing credential for the new-app flow; expiry
    takes the platform down until the operator regenerates and reapplies.
 4. **Resource owner**: select the platform org from step 1 (NOT your
-   personal account).
-5. **Repository access**: "All repositories". The PAT must be able to
-   write to repos that do not exist yet at token-creation time (every
-   per-app repo is created on demand by the Session API).
-6. **Organization permissions** — set `Administration` to
-   `Read and write`. **This is the easy one to miss.** It lives under
-   "Organization permissions", not "Repository permissions". Without
-   it, `octokit.repos.createInOrg` returns 403 and the Session API
-   surfaces the failure on every new-app POST.
-7. **Repository permissions** (applies to all repos in the org):
-   - `Contents` → `Read and write` (clone + push).
-   - `Metadata` → `Read` (auto-included by GitHub; cannot be
-     unchecked).
-   Leave everything else at "No access".
-8. Click "Generate token". Copy the token immediately — GitHub will
-   not show it again.
+   personal account). If the org isn't in the dropdown, re-check
+   step 2 — that almost always means the org policy is restricting
+   fine-grained PATs (it shouldn't be, on defaults).
+5. **Repository access**: **"All repositories"**. Do this before
+   scrolling further — it's what unlocks the Repository permissions
+   section below. The PAT must be able to write to repos that do not
+   exist yet at token-creation time (every per-app repo is created on
+   demand by the Session API).
+6. **Organization permissions** — expand the **"Administration"**
+   row, set **Access** to **"Read and write"**. This is what the
+   `octokit.rest.repos.createInOrg` call (POST `/orgs/{org}/repos`)
+   needs; without it you'd get 403 on every new-app POST. It lives
+   under "Organization permissions", NOT under "Repository
+   permissions" → "Administration" (yes, both exist; the one you want
+   is the org-level one).
+7. **Repository permissions** — only appears after step 5. Expand
+   the **"Contents"** row and set **Access** to **"Read and write"**.
+   This covers both `git clone` and `git push` against per-app repos.
+   The **"Metadata"** row is auto-set to Read by GitHub and cannot be
+   unchecked while any other Repository permission is granted —
+   that's expected; leave it.
+8. Leave everything else under both sections at **"No access"**. The
+   PAT does not need Actions, Webhooks, Issues, Pull requests, etc.
+9. Click **"Generate token"**. Copy the token immediately — GitHub
+   will not show it again.
 
-## Step 3 — Populate and apply the Secret
+## Step 4 — Populate and apply the Secret
 
 ```sh
 cp infra/local/github-platform-creds-secret.yaml.example \
@@ -96,7 +137,7 @@ cp infra/local/github-platform-creds-secret.yaml.example \
 ```
 
 Edit `infra/local/github-platform-creds-secret.yaml` and replace
-`<YOUR_PAT_HERE>` in `stringData.token` with the token from step 2.
+`<YOUR_PAT_HERE>` in `stringData.token` with the token from step 3.
 
 Apply:
 
@@ -108,7 +149,7 @@ kubectl get secret github-platform-creds -n openvoid-sessions
 The populated manifest is gitignored (the `.example` file is committed,
 the real one is not). Do not commit a populated copy.
 
-## Step 4 — Override the org name (only if you picked a different name)
+## Step 5 — Override the org name (only if you picked a different name)
 
 If your org name is not `openvoid-platform`, edit the env on the
 Session API Deployment in `infra/local/session-api.yaml`:
@@ -121,7 +162,7 @@ Session API Deployment in `infra/local/session-api.yaml`:
 Tilt re-applies on save. On DOKS, edit the chart values (Phase 9) or
 the Deployment directly until then.
 
-## Step 5 — Restart the Session API
+## Step 6 — Restart the Session API
 
 The Session API reads the Secret once at boot. After applying the
 Secret and (optionally) the env, restart the Deployment so the new
@@ -132,7 +173,7 @@ kubectl rollout restart deployment session-api -n openvoid-system
 kubectl rollout status   deployment session-api -n openvoid-system
 ```
 
-## Step 6 — Verify
+## Step 7 — Verify
 
 ```sh
 kubectl logs -n openvoid-system deploy/session-api | grep -i 'github-platform-creds'
@@ -140,8 +181,10 @@ kubectl logs -n openvoid-system deploy/session-api | grep -i 'github-platform-cr
 
 Expected: a line confirming the Secret was read at boot. If the log
 shows an error (`Cannot read Secret ...`, `missing key "token"`, or a
-401 against GitHub), re-check step 2's permissions and step 3's
-manifest content.
+401/403 against GitHub), re-check step 3's permissions and step 4's
+manifest content. A 403 specifically on `octokit.rest.repos.createInOrg`
+points back to step 2 — the org's PAT-approval policy may have left
+the token in "Pending" state.
 
 The end-to-end happy path is a `POST /sessions { mode: "new-app" }`
 that returns 201 with a `sessionId` and creates a repo under the org;
@@ -150,7 +193,8 @@ session starts.
 
 ## Rotation
 
-1. Generate a new PAT (step 2 of this runbook).
+1. Generate a new PAT (step 3 of this runbook — the org-policy step 2
+   only needs to be done once).
 2. Update `stringData.token` in `infra/local/github-platform-creds-secret.yaml`.
 3. `kubectl apply -f infra/local/github-platform-creds-secret.yaml`.
 4. `kubectl rollout restart deployment session-api -n openvoid-system`.
