@@ -172,27 +172,66 @@ describe("buildSessionPodManifest (Phase 4.2: workspace-init container)", () => 
   });
 });
 
-describe("workspace-init image script (infra/images/workspace-init/clone.sh)", () => {
-  // The script lives in the image now (not in the manifest), so these are
-  // file-content regression guards against the same risks the inline
-  // version used to assert: token injection only at clone time, and an
-  // explicit token-stripping `remote set-url` so the PAT never lands in
-  // .git/config.
+describe("workspace-init image script (infra/images/workspace-init/init.sh)", () => {
+  // The script lives in the image now (not in the manifest), so these
+  // are file-content regression guards against the same risks the
+  // inline version used to assert: token injection only at push/clone
+  // time, and an explicit clean origin so the PAT never lands in
+  // .git/config. After U7 the same guards apply across both boot
+  // paths (import-repo and new-app).
   const script = readFileSync(
     resolve(
       dirname(fileURLToPath(import.meta.url)),
-      "../../../infra/images/workspace-init/clone.sh",
+      "../../../infra/images/workspace-init/init.sh",
     ),
     "utf8",
   );
 
-  it("injects the token into the clone URL via the GIT_TOKEN env var", () => {
-    expect(script).toContain("x-access-token:${GIT_TOKEN}");
+  it("branches on OPENVOID_NEW_APP between run_new_app and run_import_repo", () => {
+    expect(script).toMatch(/run_new_app\(\)/);
+    expect(script).toMatch(/run_import_repo\(\)/);
+    expect(script).toMatch(/OPENVOID_NEW_APP/);
   });
 
-  it("rewrites origin to the clean REPO_URL after cloning (token never lands in .git/config)", () => {
-    expect(script).toMatch(/git -C \/workspace\/repo remote set-url origin "\$REPO_URL"/);
+  it("injects the token into the URL via the GIT_TOKEN env var (both branches)", () => {
+    // Once for import-repo's clone, once for new-app's push.
+    const matches = script.match(/x-access-token:\$\{GIT_TOKEN\}/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("import-repo branch rewrites origin to the clean REPO_URL after cloning (token never lands in .git/config)", () => {
+    expect(script).toMatch(/git -C "\$REPO_DIR" remote set-url origin "\$REPO_URL"/);
     expect(script).not.toMatch(/\.git\/config.*GIT_TOKEN/);
+  });
+
+  it("new-app branch never persists the token: remote add origin uses REPO_URL, and the push uses the auth_url directly without `remote set-url`", () => {
+    expect(script).toMatch(/git remote add origin "\$REPO_URL"/);
+    expect(script).toMatch(/git push -u "\$auth_url"/);
+    // Negative: no live git invocation of `set-url` with auth_url
+    // would persist the credential into .git/config. Strip comment
+    // lines first so the explanatory note in the script doesn't
+    // false-positive.
+    const live = script
+      .split("\n")
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n");
+    expect(live).not.toMatch(/remote set-url[^\n]*auth_url/);
+  });
+
+  it("new-app branch strips the scaffold's history before re-initialising", () => {
+    expect(script).toMatch(/rm -rf "\$REPO_DIR\/\.git"/);
+    expect(script).toMatch(/git init -q -b main/);
+  });
+
+  it("new-app branch writes app/scaffold-meta.json with prompt + createdAt + scaffoldVersion", () => {
+    expect(script).toContain("scaffold-meta.json");
+    expect(script).toMatch(/"prompt": "%s"/);
+    expect(script).toMatch(/"createdAt": "%s"/);
+    expect(script).toMatch(/"scaffoldVersion": "%s"/);
+  });
+
+  it("new-app branch runs pnpm install --frozen-lockfile after the seed push", () => {
+    expect(script).toMatch(/pnpm install --frozen-lockfile/);
   });
 });
 

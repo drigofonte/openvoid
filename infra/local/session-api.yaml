@@ -114,7 +114,7 @@ spec:
             # session-api-pods Role grants `get` on this Secret) —
             # mirroring the loadOpencodeAuthHeader pattern.
             - name: OPENVOID_PLATFORM_GITHUB_ORG
-              value: "openvoid-platform"
+              value: "drigolabs"
           readinessProbe:
             httpGet:
               path: /healthz
