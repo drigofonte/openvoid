@@ -16,8 +16,8 @@ import {
   WORKSPACE_VOLUME_NAME,
   WORKSPACE_MOUNT_PATH,
   WORKSPACE_FS_GROUP,
-  GIT_CLONE_CONTAINER_NAME,
-  GIT_CLONE_IMAGE,
+  WORKSPACE_INIT_CONTAINER_NAME,
+  WORKSPACE_INIT_IMAGE,
   GIT_CREDS_SECRET_NAME,
   GIT_CREDS_SECRET_KEY,
   GIT_CREDS_VOLUME_NAME,
@@ -114,18 +114,18 @@ describe("buildSessionPodManifest (Phase 4.1: workspace volume + fsGroup)", () =
   });
 });
 
-describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => {
+describe("buildSessionPodManifest (Phase 4.2: workspace-init container)", () => {
   const baseSpec: SessionPodSpec = {
     sessionId: "01HABCDEF",
     image: "nginx:alpine",
     repo: "https://github.com/example/x",
   };
 
-  it("declares a git-clone initContainer with the pinned alpine/git image", () => {
+  it("declares a workspace-init initContainer with the pinned alpine/git image", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const init = manifest.spec?.initContainers?.[0];
-    expect(init?.name).toBe(GIT_CLONE_CONTAINER_NAME);
-    expect(init?.image).toBe(GIT_CLONE_IMAGE);
+    expect(init?.name).toBe(WORKSPACE_INIT_CONTAINER_NAME);
+    expect(init?.image).toBe(WORKSPACE_INIT_IMAGE);
   });
 
   it("passes REPO_URL and BRANCH as plain env values, GIT_TOKEN via Secret ref", () => {
@@ -156,11 +156,11 @@ describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => 
     expect(mounts).toContainEqual({ name: WORKSPACE_VOLUME_NAME, mountPath: "/workspace" });
   });
 
-  it("does not override the image's ENTRYPOINT — git-clone container ships the script", () => {
+  it("does not override the image's ENTRYPOINT — workspace-init container ships the script", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const init = manifest.spec?.initContainers?.[0];
-    // The custom image (infra/images/git-clone/) bakes the script in as
-    // ENTRYPOINT. Setting `command` here would shadow it.
+    // The custom image (infra/images/workspace-init/) bakes the script
+    // in as ENTRYPOINT. Setting `command` here would shadow it.
     expect(init?.command).toBeUndefined();
     expect(init?.args).toBeUndefined();
   });
@@ -172,7 +172,7 @@ describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => 
   });
 });
 
-describe("git-clone image script (infra/images/git-clone/clone.sh)", () => {
+describe("workspace-init image script (infra/images/workspace-init/clone.sh)", () => {
   // The script lives in the image now (not in the manifest), so these are
   // file-content regression guards against the same risks the inline
   // version used to assert: token injection only at clone time, and an
@@ -181,7 +181,7 @@ describe("git-clone image script (infra/images/git-clone/clone.sh)", () => {
   const script = readFileSync(
     resolve(
       dirname(fileURLToPath(import.meta.url)),
-      "../../../infra/images/git-clone/clone.sh",
+      "../../../infra/images/workspace-init/clone.sh",
     ),
     "utf8",
   );
@@ -249,12 +249,12 @@ describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", ()
     expect(finalizer?.restartPolicy).toBe("Always");
   });
 
-  it("keeps git-clone as a non-restarting initContainer alongside the finalizer", () => {
+  it("keeps workspace-init as a non-restarting initContainer alongside the finalizer", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const inits = manifest.spec?.initContainers ?? [];
-    const clone = inits.find((c) => c.name === GIT_CLONE_CONTAINER_NAME);
-    expect(clone).toBeDefined();
-    expect(clone?.restartPolicy).toBeUndefined();
+    const init = inits.find((c) => c.name === WORKSPACE_INIT_CONTAINER_NAME);
+    expect(init).toBeDefined();
+    expect(init?.restartPolicy).toBeUndefined();
   });
 
   it("uses the pinned alpine/git image for the finalizer", () => {
@@ -402,14 +402,14 @@ describe("buildSessionPodManifest (Phase 6.2: OpenCode main container + Secrets)
     );
   });
 
-  it("does NOT mount opencode-auth on the git-clone init container (LLM-auth isolation)", () => {
+  it("does NOT mount opencode-auth on the workspace-init container (LLM-auth isolation)", () => {
     const manifest = buildSessionPodManifest(baseSpec);
-    const clone = manifest.spec?.initContainers?.find(
-      (c) => c.name === GIT_CLONE_CONTAINER_NAME,
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === WORKSPACE_INIT_CONTAINER_NAME,
     );
-    const mounts = clone?.volumeMounts ?? [];
+    const mounts = init?.volumeMounts ?? [];
     expect(mounts.find((m) => m.name === OPENCODE_AUTH_VOLUME_NAME)).toBeUndefined();
-    const env = clone?.env ?? [];
+    const env = init?.env ?? [];
     expect(env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD")).toBeUndefined();
   });
 
@@ -481,7 +481,7 @@ describe("buildSessionPodManifest (Phase 7 follow-up: per-session resource budge
     expect(main?.resources?.limits).toEqual({ cpu: "1000m", memory: "1Gi" });
   });
 
-  it("sets small bounded resources on git-clone and git-finalizer (they're idle most of the time)", () => {
+  it("sets small bounded resources on workspace-init and git-finalizer (they're idle most of the time)", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const inits = manifest.spec?.initContainers ?? [];
     for (const init of inits) {

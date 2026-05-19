@@ -1,5 +1,5 @@
 #!/bin/sh
-# git-clone — initContainer entrypoint.
+# workspace-init — initContainer entrypoint.
 #
 # Clones the user-specified repo into /workspace/repo using the platform PAT,
 # then strips the token from the on-disk remote URL so it never lands in

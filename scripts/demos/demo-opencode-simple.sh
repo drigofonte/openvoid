@@ -3,7 +3,7 @@
 #
 # Exercises the full per-session lifecycle introduced in Phase 6:
 # Session API creates a Pod with the OpenCode main container, the
-# git-clone init, and the git-finalizer native sidecar; we drive the
+# workspace-init initContainer, and the git-finalizer native sidecar; we drive the
 # agent through OpenCode's HTTP API to write a file into the cloned
 # repo; DELETE triggers the SIGTERM cascade (kubelet → main →
 # sidecar) which pushes the agent's edit to a feat/<sid> branch on

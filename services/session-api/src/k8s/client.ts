@@ -52,13 +52,13 @@ export const WORKSPACE_VOLUME_NAME = "workspace";
 export const WORKSPACE_SIZE_LIMIT = "10Gi";
 // Mount path on the agent main container. Matches OpenCode's WORKDIR
 // (/workspace/repo) so the agent's cwd is the cloned repo. The
-// initContainer (git-clone) and sidecar (git-finalizer) mount the same
-// volume at /workspace and see the repo at /workspace/repo.
+// initContainer (workspace-init) and sidecar (git-finalizer) mount the
+// same volume at /workspace and see the repo at /workspace/repo.
 export const WORKSPACE_MOUNT_PATH = "/workspace";
 export const WORKSPACE_FS_GROUP = 65533;
 
-export const GIT_CLONE_IMAGE = "localhost:5001/openvoid/git-clone:dev";
-export const GIT_CLONE_CONTAINER_NAME = "git-clone";
+export const WORKSPACE_INIT_IMAGE = "localhost:5001/openvoid/workspace-init:dev";
+export const WORKSPACE_INIT_CONTAINER_NAME = "workspace-init";
 export const GIT_CREDS_SECRET_NAME = "git-creds";
 export const GIT_CREDS_SECRET_KEY = "token";
 export const GIT_CREDS_VOLUME_NAME = "git-creds";
@@ -92,7 +92,7 @@ export const OPENCODE_PASSWORD_SECRET_KEY = "password";
 
 // `opencode-auth` Secret — applied out-of-band, holds OpenCode's
 // `auth.json` content (LLM provider credentials). Mounted only on the
-// agent main container; never on `git-clone` or `git-finalizer`. The
+// agent main container; never on `workspace-init` or `git-finalizer`. The
 // mount path is fixed by the image's `ENV XDG_DATA_HOME` (Unit 6.1) so
 // the Secret target is independent of the runtime UID's $HOME — see
 // docs/spikes/2026-05-05-opencode-auth.md for the full rationale.
@@ -285,8 +285,8 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
       ],
       initContainers: [
         {
-          name: GIT_CLONE_CONTAINER_NAME,
-          image: GIT_CLONE_IMAGE,
+          name: WORKSPACE_INIT_CONTAINER_NAME,
+          image: WORKSPACE_INIT_IMAGE,
           resources: {
             requests: {
               cpu: SESSION_INIT_CPU_REQUEST,
@@ -401,8 +401,9 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
             },
             {
               // The opencode-auth Secret is mounted **only** here, not
-              // on git-clone or git-finalizer. Symmetrically, git-creds
-              // is mounted only on the init+sidecar pair, not here.
+              // on workspace-init or git-finalizer. Symmetrically,
+              // git-creds is mounted only on the init+sidecar pair, not
+              // here.
               // Each container sees only the credentials its job
               // requires; the unit tests assert this discipline as a
               // regression guard.

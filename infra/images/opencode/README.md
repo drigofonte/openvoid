@@ -14,7 +14,7 @@ cross-platform parity matrix.
 | **Port** | `8080` (HTTP, OpenCode server). Pod manifests name this `agent-http` for Phase 9 routing. |
 | **Health** | `GET /global/health` returns `{"healthy": true, "version": "<v>"}`. |
 | **Auth** | HTTP Basic. Username `opencode` (default), password from `OPENCODE_SERVER_PASSWORD`. |
-| **WORKDIR** | `/workspace/repo` — the cloned repository (mounted at runtime by the Phase 4 emptyDir + git-clone init). |
+| **WORKDIR** | `/workspace/repo` — the cloned repository (mounted at runtime by the Phase 4 emptyDir + workspace-init init). |
 | **PID 1** | The entrypoint shell (`opencode-entrypoint`). It backgrounds `opencode serve` and traps SIGTERM, forwarding it to the child — naïvely `exec`ing into the binary leaves OpenCode as PID 1 where Linux's PID-1 default-terminate filtering blocks SIGTERM (OpenCode does not install a handler), so the kubelet's Phase 5 SIGTERM cascade would only land on SIGKILL after the grace period. |
 | **User** | UID 1000 by default; the image is also SCC-friendly (any random UID with GID 0 can write the directories the agent needs). |
 
@@ -43,7 +43,7 @@ mount target is independent of the runtime UID's `$HOME` resolution
 (needed for OpenShift SCC compatibility — see
 `docs/spikes/2026-05-05-opencode-auth.md`).
 
-`auth.json` is **never** mounted on `git-clone` or `git-finalizer`.
+`auth.json` is **never** mounted on `workspace-init` or `git-finalizer`.
 Symmetrically, `git-creds` is **never** mounted on this container.
 The mount discipline is asserted in the Session API's unit tests
 (`services/session-api/test/routes.sessions.test.ts`).
@@ -109,7 +109,7 @@ time docker stop "$CID"
 ## Phase relationships
 
 - **Phase 4** provides the workspace volume (`/workspace`) and the
-  `git-clone` init container that populates `/workspace/repo`.
+  `workspace-init` init container that populates `/workspace/repo`.
 - **Phase 5** runs the `git-finalizer` native sidecar that, on Pod
   termination, commits and pushes the agent's edits to a
   `feat/<sessionId>` branch.
