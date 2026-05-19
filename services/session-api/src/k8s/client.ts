@@ -2,6 +2,7 @@ import {
   CoreV1Api,
   KubeConfig,
   NetworkingV1Api,
+  type V1EnvVar,
   type V1Ingress,
   type V1OwnerReference,
   type V1Pod,
@@ -63,9 +64,29 @@ export const GIT_CREDS_SECRET_NAME = "git-creds";
 export const GIT_CREDS_SECRET_KEY = "token";
 export const GIT_CREDS_VOLUME_NAME = "git-creds";
 export const GIT_CREDS_MOUNT_PATH = "/etc/git-creds";
+
+// Platform-org GitHub PAT — distinct from `git-creds`. For new-app
+// pods both the workspace-init initContainer (seed push) and the
+// git-finalizer sidecar (on-exit push) mount this Secret instead of
+// `git-creds`, because the new repo lives under the platform org and
+// a user-side PAT would 403 against it.
+export const GITHUB_PLATFORM_CREDS_SECRET_NAME = "github-platform-creds";
+export const GITHUB_PLATFORM_CREDS_SECRET_KEY = "token";
+
 export const GIT_FINALIZER_IMAGE = "localhost:5001/openvoid/git-finalizer:dev";
 export const GIT_FINALIZER_CONTAINER_NAME = "git-finalizer";
 export const DEFAULT_BRANCH = "main";
+
+// Default scaffold-template URL for the new-app entry point.
+// Overridable per session via SessionPodSpec.scaffoldTemplate; for
+// realistic operator setups, OPENVOID_SCAFFOLD_TEMPLATE_URL on the
+// Session API Deployment is the seam.
+export const DEFAULT_SCAFFOLD_TEMPLATE_URL =
+  "https://github.com/openvoid-platform/scaffold-react-rr7.git";
+
+export function getScaffoldTemplateUrl(): string {
+  return envOr("OPENVOID_SCAFFOLD_TEMPLATE_URL", DEFAULT_SCAFFOLD_TEMPLATE_URL);
+}
 
 // OpenCode agent main container (Phase 6.2). The `OPENVOID_STUB_IMAGE`
 // env var on the Session API process overrides the default to keep the
@@ -123,6 +144,16 @@ export type SessionPodSpec = {
   repo: string;
   branch?: string;
   createdAt?: string;
+  // New-app extensions (U6). When `isNewApp` is true the workspace-init
+  // script reads `OPENVOID_NEW_APP`, `SCAFFOLD_TEMPLATE_URL`, and
+  // `SCAFFOLD_PROMPT` from env and takes the scaffold-seed branch
+  // instead of the existing clone-repo branch. The Secret backing
+  // `GIT_TOKEN` swaps from `git-creds` to `github-platform-creds` on
+  // both workspace-init and git-finalizer — see
+  // GITHUB_PLATFORM_CREDS_SECRET_NAME and the manifest builder.
+  isNewApp?: boolean;
+  scaffoldTemplate?: string;
+  prompt?: string;
 };
 
 // Lightweight reference back to the parent Pod, used to build
@@ -232,6 +263,42 @@ function ownerReferenceFor(owner: PodOwner | undefined): V1OwnerReference[] | un
 export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
   const branch = spec.branch ?? DEFAULT_BRANCH;
   const createdAt = spec.createdAt ?? new Date().toISOString();
+  const isNewApp = spec.isNewApp === true;
+  // The Secret backing GIT_TOKEN differs per mode. import-repo pods
+  // use git-creds (user-side, scoped to the imported repo);
+  // new-app pods use github-platform-creds (platform PAT, can write
+  // to repos under the platform org). The volume name stays
+  // `git-creds` for both modes to keep the mount-discipline
+  // invariants and existing tests simple — the volume name is an
+  // internal handle, not a Secret identifier.
+  const gitTokenSecretName = isNewApp
+    ? GITHUB_PLATFORM_CREDS_SECRET_NAME
+    : GIT_CREDS_SECRET_NAME;
+  const gitTokenSecretKey = isNewApp
+    ? GITHUB_PLATFORM_CREDS_SECRET_KEY
+    : GIT_CREDS_SECRET_KEY;
+
+  const workspaceInitEnv: V1EnvVar[] = [
+    { name: "REPO_URL", value: spec.repo },
+    { name: "BRANCH", value: branch },
+    {
+      name: "GIT_TOKEN",
+      valueFrom: {
+        secretKeyRef: { name: gitTokenSecretName, key: gitTokenSecretKey },
+      },
+    },
+  ];
+  if (isNewApp) {
+    workspaceInitEnv.push(
+      { name: "OPENVOID_NEW_APP", value: "true" },
+      {
+        name: "SCAFFOLD_TEMPLATE_URL",
+        value: spec.scaffoldTemplate ?? getScaffoldTemplateUrl(),
+      },
+      { name: "SCAFFOLD_PROMPT", value: spec.prompt ?? "" },
+    );
+  }
+
   return {
     apiVersion: "v1",
     kind: "Pod",
@@ -265,7 +332,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         },
         {
           name: GIT_CREDS_VOLUME_NAME,
-          secret: { secretName: GIT_CREDS_SECRET_NAME },
+          secret: { secretName: gitTokenSecretName },
         },
         {
           name: OPENCODE_AUTH_VOLUME_NAME,
@@ -297,19 +364,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               memory: SESSION_INIT_MEMORY_LIMIT,
             },
           },
-          env: [
-            { name: "REPO_URL", value: spec.repo },
-            { name: "BRANCH", value: branch },
-            {
-              name: "GIT_TOKEN",
-              valueFrom: {
-                secretKeyRef: {
-                  name: GIT_CREDS_SECRET_NAME,
-                  key: GIT_CREDS_SECRET_KEY,
-                },
-              },
-            },
-          ],
+          env: workspaceInitEnv,
           volumeMounts: [
             {
               name: WORKSPACE_VOLUME_NAME,
@@ -341,8 +396,8 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               name: "GIT_TOKEN",
               valueFrom: {
                 secretKeyRef: {
-                  name: GIT_CREDS_SECRET_NAME,
-                  key: GIT_CREDS_SECRET_KEY,
+                  name: gitTokenSecretName,
+                  key: gitTokenSecretKey,
                 },
               },
             },

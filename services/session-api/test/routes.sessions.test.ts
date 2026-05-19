@@ -510,6 +510,108 @@ describe("buildSessionPodManifest (Phase 7.2: preview port on main container)", 
   });
 });
 
+describe("buildSessionPodManifest (U6: new-app branch)", () => {
+  const newAppSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/openvoid-platform/ai-flashcards-x7f2k9.git",
+    isNewApp: true,
+    prompt: "AI flashcards",
+    scaffoldTemplate: "https://github.com/openvoid-platform/scaffold-react-rr7.git",
+  };
+
+  it("sets OPENVOID_NEW_APP, SCAFFOLD_TEMPLATE_URL, SCAFFOLD_PROMPT, REPO_URL on workspace-init", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const env = init?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")?.value).toBe("true");
+    expect(env.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")?.value).toBe(
+      "https://github.com/openvoid-platform/scaffold-react-rr7.git",
+    );
+    expect(env.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("AI flashcards");
+    expect(env.find((e) => e.name === "REPO_URL")?.value).toBe(
+      "https://github.com/openvoid-platform/ai-flashcards-x7f2k9.git",
+    );
+  });
+
+  it("sources GIT_TOKEN from github-platform-creds (not git-creds) on workspace-init in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const tokenEnv = init?.env?.find((e) => e.name === "GIT_TOKEN");
+    expect(tokenEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: "github-platform-creds",
+      key: "token",
+    });
+  });
+
+  it("sources GIT_TOKEN from github-platform-creds on git-finalizer in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === "git-finalizer",
+    );
+    const tokenEnv = finalizer?.env?.find((e) => e.name === "GIT_TOKEN");
+    expect(tokenEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: "github-platform-creds",
+      key: "token",
+    });
+  });
+
+  it("swaps the Pod-level git-creds volume to mount github-platform-creds in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const volume = manifest.spec?.volumes?.find((v) => v.name === GIT_CREDS_VOLUME_NAME);
+    expect(volume?.secret?.secretName).toBe("github-platform-creds");
+  });
+
+  it("does NOT expose new-app env vars when isNewApp is unset (import-repo backwards-compat)", () => {
+    const importSpec: SessionPodSpec = {
+      sessionId: "01HABCDEF",
+      image: OPENCODE_IMAGE,
+      repo: "https://github.com/example/x",
+    };
+    const manifest = buildSessionPodManifest(importSpec);
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const env = init?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")).toBeUndefined();
+    expect(env.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")).toBeUndefined();
+    expect(env.find((e) => e.name === "SCAFFOLD_PROMPT")).toBeUndefined();
+    // Secret stays git-creds in import-repo mode.
+    expect(init?.env?.find((e) => e.name === "GIT_TOKEN")?.valueFrom?.secretKeyRef?.name).toBe(
+      "git-creds",
+    );
+  });
+
+  it("emits SCAFFOLD_PROMPT='' when prompt is omitted", () => {
+    const manifest = buildSessionPodManifest({ ...newAppSpec, prompt: undefined });
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    expect(init?.env?.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("");
+  });
+
+  it("falls back to the default SCAFFOLD_TEMPLATE_URL when spec omits scaffoldTemplate", () => {
+    const manifest = buildSessionPodManifest({ ...newAppSpec, scaffoldTemplate: undefined });
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const url = init?.env?.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")?.value ?? "";
+    expect(url).toContain("openvoid-platform/scaffold-react-rr7");
+  });
+
+  it("preserves the mount-discipline invariant: agent main container still has no GIT_TOKEN env even in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const main = manifest.spec?.containers?.[0];
+    const mainEnv = main?.env ?? [];
+    expect(mainEnv.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+    expect(mainEnv.find((e) => e.name === "OPENVOID_NEW_APP")).toBeUndefined();
+  });
+});
+
 describe("sessionsRouter", () => {
   let ops: ReturnType<typeof makeMockOps>;
   let app: ReturnType<typeof sessionsRouter>;
@@ -760,7 +862,7 @@ describe("sessionsRouter", () => {
       expect(body.message).not.toContain("undefined");
     });
 
-    it("accepts new-app at the protocol layer but surfaces 501 until U6 wires the handler", async () => {
+    it("returns 501 for new-app when the router has no newAppContext (operator hasn't run the runbook)", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -770,15 +872,6 @@ describe("sessionsRouter", () => {
       const body = await res.json();
       expect(body.code).toBe("not_implemented_yet");
       expect(ops.createSessionResources).not.toHaveBeenCalled();
-    });
-
-    it("accepts new-app without a prompt at the protocol layer (501 stub until U6)", async () => {
-      const res = await app.request("/sessions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "new-app" }),
-      });
-      expect(res.status).toBe(501);
     });
 
     it("rejects new-app with a non-string `prompt` with 400", async () => {
@@ -928,5 +1021,232 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions/x", { method: "DELETE" });
       expect(res.status).toBe(503);
     });
+  });
+});
+
+describe("sessionsRouter (U6: new-app POST + idempotency)", () => {
+  let ops: ReturnType<typeof makeMockOps>;
+  let createInOrg: ReturnType<typeof vi.fn>;
+  let github: { rest: { repos: { createInOrg: typeof createInOrg } } };
+  let app: ReturnType<typeof sessionsRouter>;
+
+  beforeEach(() => {
+    ops = makeMockOps();
+    createInOrg = vi.fn(async (params: { name: string }) => ({
+      data: {
+        name: params.name,
+        html_url: `https://github.com/openvoid-platform/${params.name}`,
+        clone_url: `https://github.com/openvoid-platform/${params.name}.git`,
+      },
+    }));
+    github = { rest: { repos: { createInOrg } } };
+    app = sessionsRouter({
+      sessionOps: ops,
+      newAppContext: { org: "openvoid-platform", github: github as never },
+    });
+  });
+
+  it("happy path: slugifies prompt, calls createInOrg, creates pod with new-app env (AE1)", async () => {
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "abc" },
+      body: JSON.stringify({ mode: "new-app", prompt: "todo list with reminders" }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.status).toBe("Pending");
+    expect(body.pendingPhase).toBe("provisioning");
+    expect(body.repo).toMatch(
+      /^https:\/\/github\.com\/openvoid-platform\/todo-list-with-reminders-[a-z0-9]{6}\.git$/,
+    );
+
+    expect(createInOrg).toHaveBeenCalledOnce();
+    const callArg = createInOrg.mock.calls[0][0] as { org: string; name: string };
+    expect(callArg.org).toBe("openvoid-platform");
+    expect(callArg.name).toMatch(/^todo-list-with-reminders-[a-z0-9]{6}$/);
+
+    expect(ops.createSessionResources).toHaveBeenCalledOnce();
+    const spec = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
+    expect(spec.isNewApp).toBe(true);
+    expect(spec.prompt).toBe("todo list with reminders");
+    expect(spec.repo).toMatch(/^https:\/\/github\.com\/openvoid-platform\/.+\.git$/);
+
+    const manifest = buildSessionPodManifest(spec);
+    const init = manifest.spec?.initContainers?.find((c) => c.name === "workspace-init");
+    const env = init?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")?.value).toBe("true");
+    expect(env.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("todo list with reminders");
+    expect(env.find((e) => e.name === "REPO_URL")?.value).toBe(spec.repo);
+  });
+
+  it("idempotency: same key within TTL returns the cached sessionId; github called once total", async () => {
+    const first = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "dedupe-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    const firstBody = await first.json();
+
+    const second = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "dedupe-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    expect(second.status).toBe(201);
+    expect(await second.json()).toEqual(firstBody);
+    expect(createInOrg).toHaveBeenCalledTimes(1);
+    expect(ops.createSessionResources).toHaveBeenCalledTimes(1);
+  });
+
+  it("different idempotency keys produce different sessions (random suffix yields different slugs)", async () => {
+    const first = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "k1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    const second = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "k2" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    const a = await first.json();
+    const b = await second.json();
+    expect(a.sessionId).not.toBe(b.sessionId);
+    expect(createInOrg).toHaveBeenCalledTimes(2);
+    const names = createInOrg.mock.calls.map((call) => (call[0] as { name: string }).name);
+    expect(names[0]).not.toBe(names[1]);
+  });
+
+  it("empty prompt: slug starts with `app-`, SCAFFOLD_PROMPT env is empty", async () => {
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app" }),
+    });
+    expect(res.status).toBe(201);
+    const callArg = createInOrg.mock.calls[0][0] as { name: string };
+    expect(callArg.name).toMatch(/^app-[a-z0-9]{6}$/);
+    const spec = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
+    const manifest = buildSessionPodManifest(spec);
+    const init = manifest.spec?.initContainers?.find((c) => c.name === "workspace-init");
+    expect(init?.env?.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("");
+  });
+
+  it("import-repo path is preserved unchanged when the router is configured with newAppContext", async () => {
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
+    });
+    expect(res.status).toBe(201);
+    expect(createInOrg).not.toHaveBeenCalled();
+    const spec = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
+    expect(spec.isNewApp).toBeUndefined();
+    expect(spec.repo).toBe("https://github.com/example/x");
+  });
+
+  it("GithubRateLimited → 503 with Retry-After; pod is NOT created", async () => {
+    createInOrg.mockRejectedValueOnce(
+      Object.assign(new Error("API rate limit exceeded"), {
+        status: 403,
+        response: {
+          headers: {
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 90),
+          },
+        },
+      }),
+    );
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "x" }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe("github_rate_limited");
+    const retryAfter = Number(res.headers.get("retry-after"));
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(ops.createSessionResources).not.toHaveBeenCalled();
+  });
+
+  it("RepoNameCollision retries up to 3x then surfaces 500 (repo_name_collision)", async () => {
+    const collision = () =>
+      Object.assign(new Error("name already exists on this account"), { status: 422 });
+    createInOrg.mockRejectedValueOnce(collision());
+    createInOrg.mockRejectedValueOnce(collision());
+    createInOrg.mockRejectedValueOnce(collision());
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "popular name" }),
+    });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe("repo_name_collision");
+    expect(createInOrg).toHaveBeenCalledTimes(3);
+    expect(ops.createSessionResources).not.toHaveBeenCalled();
+  });
+
+  it("RepoNameCollision on the first attempt then succeeds → 201", async () => {
+    createInOrg.mockRejectedValueOnce(
+      Object.assign(new Error("name already exists on this account"), { status: 422 }),
+    );
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "ok" }),
+    });
+    expect(res.status).toBe(201);
+    expect(createInOrg).toHaveBeenCalledTimes(2);
+    expect(ops.createSessionResources).toHaveBeenCalledOnce();
+  });
+
+  it("GitHub succeeds but pod-create fails → 503 k8s_unavailable; repo orphan documented (v1)", async () => {
+    ops.createSessionResources.mockRejectedValueOnce(new Error("apiserver unreachable"));
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "test" }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe("k8s_unavailable");
+    expect(createInOrg).toHaveBeenCalledOnce();
+  });
+
+  it("idempotency: 409 in-flight when the same key arrives while the prior call is still running", async () => {
+    let resolveFirst: () => void = () => {};
+    createInOrg.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = () =>
+            resolve({
+              data: {
+                name: "x-aaaaaa",
+                html_url: "https://github.com/openvoid-platform/x-aaaaaa",
+                clone_url: "https://github.com/openvoid-platform/x-aaaaaa.git",
+              },
+            });
+        }),
+    );
+    const firstPromise = app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "race-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "x" }),
+    });
+    // Allow the first request to enter the handler and reserve the key.
+    await new Promise((r) => setImmediate(r));
+    const second = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "race-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "x" }),
+    });
+    expect(second.status).toBe(409);
+    expect((await second.json()).code).toBe("idempotency_in_flight");
+    resolveFirst();
+    const first = await firstPromise;
+    expect(first.status).toBe(201);
   });
 });

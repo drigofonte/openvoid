@@ -35,11 +35,13 @@ async function main(): Promise<void> {
   // is unset we skip the Secret read entirely — operators running
   // import-repo-only deployments shouldn't be forced to provision the
   // platform creds.
+  let newAppContext: { org: string; github: Awaited<ReturnType<typeof loadPlatformGithub>>["client"] } | undefined;
   if (process.env[PLATFORM_GITHUB_ORG_ENV]) {
     const kc = loadKubeConfig();
     const core = kc.makeApiClient(CoreV1Api);
-    const { org } = await loadPlatformGithub(core);
+    const { org, client } = await loadPlatformGithub(core);
     console.log(`loaded github-platform-creds for org ${org}`);
+    newAppContext = { org, github: client };
   } else {
     console.warn(
       `${PLATFORM_GITHUB_ORG_ENV} unset; the new-app entry point will surface 501 until it is configured ` +
@@ -65,7 +67,7 @@ async function main(): Promise<void> {
 
   mountDocs(app);
 
-  app.route("/", sessionsRouter(sessionOps));
+  app.route("/", sessionsRouter({ sessionOps, newAppContext }));
 
   serve({ fetch: app.fetch, port: PORT }, ({ port }) => {
     console.log(`session-api listening on :${port}`);
