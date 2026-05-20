@@ -1,7 +1,7 @@
 ---
 title: "feat: Coding-session scaffold bootstrap (new-app entry point)"
 type: feat
-status: active
+status: completed
 date: 2026-05-12
 origin: docs/brainstorms/2026-05-12-coding-session-scaffold-bootstrap-requirements.md
 ---
