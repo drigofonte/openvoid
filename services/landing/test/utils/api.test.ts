@@ -189,7 +189,7 @@ describe('createSession', () => {
     )
 
     const result = await createSession(
-      { repo: 'https://github.com/example/x', branch: 'main' },
+      { mode: 'import-repo', repo: 'https://github.com/example/x', branch: 'main' },
       'idem-123',
     )
 
@@ -209,7 +209,7 @@ describe('createSession', () => {
       jsonResponse({ sessionId: SID, status: 'Pending' as const }, { status: 201 }),
     )
 
-    await createSession({ repo: 'https://github.com/example/x' }, 'idem-1')
+    await createSession({ mode: 'import-repo', repo: 'https://github.com/example/x' }, 'idem-1')
 
     const [, init] = fetchMock.mock.calls[0]!.arguments as [string, RequestInit]
     const body = JSON.parse(init.body as string)
@@ -223,10 +223,43 @@ describe('createSession', () => {
     )
 
     await assert.rejects(
-      () => createSession({ repo: 'git@github.com:example/x' }, 'idem-1'),
+      () => createSession({ mode: 'import-repo', repo: 'git@github.com:example/x' }, 'idem-1'),
       (error: unknown) =>
         error instanceof ApiError && error.code === 'invalid_request' && error.status === 400,
     )
+  })
+
+  it('U10: new-app body forwards prompt and omits repo', async (t) => {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
+      jsonResponse(
+        { sessionId: SID, status: 'Pending' as const, pendingPhase: 'provisioning' as const },
+        { status: 201 },
+      ),
+    )
+
+    await createSession(
+      { mode: 'new-app', prompt: 'todo list with reminders' },
+      'idem-new-1',
+    )
+
+    const [, init] = fetchMock.mock.calls[0]!.arguments as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    assert.equal(body.mode, 'new-app')
+    assert.equal(body.prompt, 'todo list with reminders')
+    assert.equal(body.repo, undefined)
+  })
+
+  it('U10: new-app body without prompt omits prompt (server treats as empty/app- slug)', async (t) => {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
+      jsonResponse({ sessionId: SID, status: 'Pending' as const }, { status: 201 }),
+    )
+
+    await createSession({ mode: 'new-app' }, 'idem-new-2')
+
+    const [, init] = fetchMock.mock.calls[0]!.arguments as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    assert.equal(body.mode, 'new-app')
+    assert.equal(body.prompt, undefined)
   })
 })
 

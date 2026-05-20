@@ -44,7 +44,10 @@ describe('isTerminal', () => {
       true,
     )
     assert.equal(isTerminal({ kind: 'done', sessionId: 'x' }), true)
-    assert.equal(isTerminal({ kind: 'failed', sessionId: 'x' }), true)
+    assert.equal(
+      isTerminal({ kind: 'failed', sessionId: 'x', reason: 'oops', retryHref: '/' }),
+      true,
+    )
   })
 
   it('is idempotent (calling twice returns the same value)', () => {

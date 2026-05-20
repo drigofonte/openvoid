@@ -86,14 +86,23 @@ describe('deriveView', () => {
     assert.deepEqual(view, { kind: 'done', sessionId: SID })
   })
 
-  it('Failed without reason → failed without reason', () => {
+  it('Failed without error → failed view with generic copy + retryHref to home', () => {
     const view = deriveView(input({ status: 'Failed' }))
-    assert.deepEqual(view, { kind: 'failed', sessionId: SID, reason: undefined })
+    assert.deepEqual(view, {
+      kind: 'failed',
+      sessionId: SID,
+      reason: 'Something went wrong setting up your sandbox.',
+      retryHref: '/',
+    })
   })
 
-  it('Failed with failureReason.message → failed with reason', () => {
-    const view = deriveView(input({ status: 'Failed', failureReason: { message: 'image pull' } }))
-    assert.deepEqual(view, { kind: 'failed', sessionId: SID, reason: 'image pull' })
+  it('Failed with an unrecognised error.code → generic copy (no raw message leak)', () => {
+    const view = deriveView(
+      input({ status: 'Failed', error: { code: 'unknown_code', message: 'raw boom from upstream' } }),
+    )
+    if (view.kind !== 'failed') return assert.fail('expected failed view')
+    assert.equal(view.reason, 'Something went wrong setting up your sandbox.')
+    assert.equal(view.retryHref, '/')
   })
 
   it('throws on an unknown SessionPhase (protocol-drift guard)', () => {
@@ -151,29 +160,51 @@ describe('deriveView', () => {
     assert.equal(view.activeStep, 0)
   })
 
-  it('U9: Failed with session.error.message → failed view carries the error message as reason', () => {
+  it('U10: github_rate_limited → friendly retry copy (no raw error message)', () => {
+    const view = deriveView(
+      input({
+        status: 'Failed',
+        error: { code: 'github_rate_limited', message: 'API rate limit exceeded' },
+      }),
+    )
+    if (view.kind !== 'failed') return assert.fail('expected failed view')
+    assert.equal(view.reason, "GitHub couldn't create the repo right now — try again in a minute.")
+    assert.equal(view.retryHref, '/')
+  })
+
+  it('U10: k8s_unavailable → cluster-reachability copy', () => {
+    const view = deriveView(
+      input({
+        status: 'Failed',
+        error: { code: 'k8s_unavailable', message: 'apiserver unreachable' },
+      }),
+    )
+    if (view.kind !== 'failed') return assert.fail('expected failed view')
+    assert.equal(view.reason, "We couldn't reach the cluster to start your sandbox.")
+  })
+
+  it('U10: init_failed → workspace-setup copy (raw container-exit detail never surfaced)', () => {
     const view = deriveView(
       input({
         status: 'Failed',
         error: { code: 'init_failed', message: 'workspace-init Error (exit 128): git push rejected' },
       }),
     )
-    assert.deepEqual(view, {
-      kind: 'failed',
-      sessionId: SID,
-      reason: 'workspace-init Error (exit 128): git push rejected',
-    })
+    if (view.kind !== 'failed') return assert.fail('expected failed view')
+    assert.equal(view.reason, 'Setting up your workspace failed. Try again.')
+    // Negative: do not leak operator-facing detail to the UI surface.
+    assert.equal(view.reason.includes('exit 128'), false)
+    assert.equal(view.reason.includes('workspace-init'), false)
   })
 
-  it('U9: Failed prefers session.error.message over the legacy failureReason.message', () => {
+  it('U10: agent_crashloop → agent-container copy', () => {
     const view = deriveView(
       input({
         status: 'Failed',
-        error: { code: 'agent_crashloop', message: 'agent crashlooped' },
-        failureReason: { message: 'legacy fallback' },
+        error: { code: 'agent_crashloop', message: 'CrashLoopBackOff' },
       }),
     )
     if (view.kind !== 'failed') return assert.fail('expected failed view')
-    assert.equal(view.reason, 'agent crashlooped')
+    assert.equal(view.reason, "The agent container couldn't stay up. Try again.")
   })
 })

@@ -30,6 +30,8 @@ import { ProvisioningStoryboard } from '../client/provisioning-storyboard.tsx'
 export interface ProvisioningProps {
   sessionId: string
   pendingPhase?: PendingPhase
+  /** 0..4 — server-derived step index via derive.ts. */
+  activeStep?: number
   sessionCreatedAt?: string
 }
 
@@ -46,11 +48,11 @@ const STEPS = [
   'Cloning starter template',
   'Installing dependencies',
   'Booting agent',
-  'Mounting preview server',
+  'Starting preview server',
 ] as const
 
 export function Provisioning() {
-  return ({ sessionId, pendingPhase, sessionCreatedAt }: ProvisioningProps) => {
+  return ({ sessionId, pendingPhase, activeStep = 0 }: ProvisioningProps) => {
     const status = pendingPhase ? STATUS_COPY[pendingPhase] : STATUS_COPY['provisioning']
     return (
       <main class="stage top">
@@ -97,7 +99,7 @@ export function Provisioning() {
           <div class="card-head">
             <span class="title">Boot sequence</span>
             <span class="eta" data-eta-wrap>
-              <span class="num" id="eta">25</span>s remaining
+              Setting up your sandbox…
             </span>
             <span class="eta" data-stuck-meta hidden>
               taking longer than usual
@@ -109,12 +111,15 @@ export function Provisioning() {
           </div>
 
           <ul class="steps">
-            {STEPS.map((label, i) => (
-              <li id={`step-${i}`} class={i === 0 ? 'step active' : 'step'}>
-                <span class="check" />
-                <span class="label">{label}</span>
-              </li>
-            ))}
+            {STEPS.map((label, i) => {
+              const cls = i < activeStep ? 'step done' : i === activeStep ? 'step active' : 'step'
+              return (
+                <li id={`step-${i}`} class={cls}>
+                  <span class="check" />
+                  <span class="label">{label}</span>
+                </li>
+              )
+            })}
           </ul>
 
           <button
@@ -172,9 +177,11 @@ export function Provisioning() {
           .
         </p>
 
-        {sessionCreatedAt ? (
-          <ProvisioningStoryboard sessionId={sessionId} sessionCreatedAt={sessionCreatedAt} />
-        ) : null}
+        <ProvisioningStoryboard
+          sessionId={sessionId}
+          activeStep={activeStep}
+          pendingPhase={pendingPhase}
+        />
       </main>
     )
   }

@@ -54,7 +54,7 @@ export type View =
   | { kind: 'ready'; sessionId: string; agentUrl: string; previewUrl: string }
   | { kind: 'stopping'; sessionId: string }
   | { kind: 'done'; sessionId: string }
-  | { kind: 'failed'; sessionId: string; reason?: string }
+  | { kind: 'failed'; sessionId: string; reason: string; retryHref: string }
 
 const ACTIVE_STEP: Record<PendingPhase, number> = {
   provisioning: 0,
@@ -66,6 +66,38 @@ const ACTIVE_STEP: Record<PendingPhase, number> = {
 
 export function activeStepFor(phase: PendingPhase): number {
   return ACTIVE_STEP[phase]
+}
+
+const GENERIC_FAILED_REASON = "Something went wrong setting up your sandbox."
+
+const FAILED_REASON: Record<string, string> = {
+  github_rate_limited:
+    "GitHub couldn't create the repo right now — try again in a minute.",
+  github_client_error:
+    "GitHub rejected the request to create the repo. Try again, and check the runbook if it keeps failing.",
+  github_unavailable:
+    "GitHub couldn't be reached right now. Try again in a moment.",
+  repo_name_collision:
+    "We couldn't allocate a unique name for your app. Try again.",
+  k8s_unavailable:
+    "We couldn't reach the cluster to start your sandbox.",
+  init_failed:
+    "Setting up your workspace failed. Try again.",
+  agent_crashloop:
+    "The agent container couldn't stay up. Try again.",
+  dev_server_unhealthy:
+    "Your dev server didn't respond in time. Try again.",
+  pod_failed:
+    "Your sandbox failed to start. Try again.",
+  not_implemented_yet:
+    "This entry point isn't fully configured yet. Check the runbook.",
+  idempotency_in_flight:
+    "An earlier request is still being processed. Try again in a moment.",
+}
+
+export function failedReasonFor(code: string | undefined): string {
+  if (!code) return GENERIC_FAILED_REASON
+  return FAILED_REASON[code] ?? GENERIC_FAILED_REASON
 }
 
 export function deriveView(session: DeriveInput): View {
@@ -108,13 +140,18 @@ export function deriveView(session: DeriveInput): View {
     case 'Stopped':
       return { kind: 'done', sessionId }
     case 'Failed':
-      // Prefer the new protocol field (`session.error.message`); fall
-      // back to the legacy `failureReason.message` shape so existing
-      // test fixtures keep working through U10's failed-view rewire.
+      // Map the server's machine-readable `error.code` to safe
+      // user-facing copy via FAILED_REASON. Never render the raw
+      // `error.message` — those strings carry operator detail (exit
+      // codes, container names, terminated.message tails) that's
+      // useful for logs but inappropriate for a Hi-Fi error surface.
+      // The legacy `failureReason.message` path stays only as a
+      // generic-fallback signal for pre-U9 fixtures.
       return {
         kind: 'failed',
         sessionId,
-        reason: session.error?.message ?? session.failureReason?.message,
+        reason: failedReasonFor(session.error?.code),
+        retryHref: '/',
       }
     default: {
       const exhaustive: never = session.status

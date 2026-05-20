@@ -151,33 +151,55 @@ export async function getSessionWithRetry(
   throw lastError ?? new ApiError({ code: 'not_found', message: 'Session not found', status: 404 })
 }
 
-export interface CreateSessionInput {
-  repo: string
-  branch?: string
-  idleTimeoutSeconds?: number
-}
+export type CreateSessionInput =
+  | {
+      mode: 'new-app'
+      prompt?: string
+      idleTimeoutSeconds?: number
+    }
+  | {
+      mode: 'import-repo'
+      repo: string
+      branch?: string
+      idleTimeoutSeconds?: number
+    }
 
 /**
- * POST /sessions. The compile-time `CreateSessionRequest` makes
- * `branch` and `idleTimeoutSeconds` required because openapi-typescript
- * treats defaulted fields as required. The form is validated by the
- * controller's schema, so we accept a relaxed input here and fill the
- * defaults at the boundary.
+ * POST /sessions.
+ *
+ * Body shape varies by mode:
+ *   - `new-app`: forwards an optional free-form `prompt`; the
+ *     Session API slugifies it and creates a per-app repo under the
+ *     platform GitHub org. Today's landing surface only sends
+ *     `new-app` (the import-repo path has no UI yet).
+ *   - `import-repo`: forwards `repo` (HTTPS) + optional `branch`;
+ *     the Session API clones the user's repo verbatim. Kept on
+ *     this client for any future surface that might want it.
+ *
+ * `branch` and `idleTimeoutSeconds` are required in the generated
+ * `CreateSessionRequest` because openapi-typescript treats
+ * server-defaulted fields as required; we fill them at the
+ * boundary (branch only matters for import-repo).
  */
 export async function createSession(
   input: CreateSessionInput,
   idempotencyKey: string,
   signal?: AbortSignal,
 ): Promise<Session> {
-  // The new-app vs. import-repo discriminator + prompt forwarding is
-  // U10's territory; until then landing only exercises the import-repo
-  // path (controller injects OPENVOID_DEFAULT_REPO).
-  const body: CreateSessionRequest = {
-    mode: 'import-repo',
-    repo: input.repo,
-    branch: input.branch ?? 'main',
-    idleTimeoutSeconds: input.idleTimeoutSeconds ?? 1800,
-  }
+  const body: CreateSessionRequest =
+    input.mode === 'new-app'
+      ? {
+          mode: 'new-app',
+          prompt: input.prompt,
+          branch: 'main',
+          idleTimeoutSeconds: input.idleTimeoutSeconds ?? 1800,
+        }
+      : {
+          mode: 'import-repo',
+          repo: input.repo,
+          branch: input.branch ?? 'main',
+          idleTimeoutSeconds: input.idleTimeoutSeconds ?? 1800,
+        }
   const path = '/sessions'
   const response = await callApi(path, {
     method: 'POST',

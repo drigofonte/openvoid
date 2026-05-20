@@ -166,6 +166,7 @@ function renderView(view: View, confirmStop: boolean) {
         <Provisioning
           sessionId={view.sessionId}
           pendingPhase={view.pendingPhase}
+          activeStep={view.activeStep}
           sessionCreatedAt={view.sessionCreatedAt}
         />
       )
@@ -184,7 +185,9 @@ function renderView(view: View, confirmStop: boolean) {
     case 'done':
       return <Done sessionId={view.sessionId} />
     case 'failed':
-      return <Failed sessionId={view.sessionId} reason={view.reason} />
+      return (
+        <Failed sessionId={view.sessionId} reason={view.reason} retryHref={view.retryHref} />
+      )
     default: {
       const exhaustive: never = view
       void exhaustive
