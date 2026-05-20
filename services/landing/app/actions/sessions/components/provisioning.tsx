@@ -1,5 +1,6 @@
 import { css } from 'remix/ui'
 
+import type { PendingPhase } from '../../../utils/derive.ts'
 import { ProvisioningStoryboard } from '../client/provisioning-storyboard.tsx'
 
 /**
@@ -28,12 +29,15 @@ import { ProvisioningStoryboard } from '../client/provisioning-storyboard.tsx'
 
 export interface ProvisioningProps {
   sessionId: string
-  pendingPhase?: 'pending' | 'running-pre-ingress'
+  pendingPhase?: PendingPhase
   sessionCreatedAt?: string
 }
 
-const STATUS_COPY: Record<NonNullable<ProvisioningProps['pendingPhase']>, string> = {
-  pending: 'Provisioning a fresh sandbox and warming up the agent.',
+const STATUS_COPY: Record<PendingPhase, string> = {
+  provisioning: 'Provisioning a fresh sandbox and warming up the agent.',
+  'seeding-scaffold': 'Cloning the starter template into your sandbox.',
+  'installing-deps': 'Installing dependencies for your new app.',
+  'awaiting-dev-server': 'Booting the dev server — almost there.',
   'running-pre-ingress': 'Almost ready — programming routes for your agent and preview.',
 }
 
@@ -47,7 +51,7 @@ const STEPS = [
 
 export function Provisioning() {
   return ({ sessionId, pendingPhase, sessionCreatedAt }: ProvisioningProps) => {
-    const status = pendingPhase ? STATUS_COPY[pendingPhase] : STATUS_COPY['pending']
+    const status = pendingPhase ? STATUS_COPY[pendingPhase] : STATUS_COPY['provisioning']
     return (
       <main class="stage top">
         <span class="eyebrow">

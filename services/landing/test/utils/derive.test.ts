@@ -16,7 +16,8 @@ describe('deriveView', () => {
       kind: 'provisioning',
       sessionId: SID,
       status: 'Pending',
-      pendingPhase: 'pending',
+      pendingPhase: 'provisioning',
+      activeStep: 0,
       sessionCreatedAt: undefined,
     })
   })
@@ -27,7 +28,8 @@ describe('deriveView', () => {
       kind: 'provisioning',
       sessionId: SID,
       status: 'Pending',
-      pendingPhase: 'pending',
+      pendingPhase: 'provisioning',
+      activeStep: 0,
       sessionCreatedAt: '2026-05-12T00:00:00.000Z',
     })
   })
@@ -55,6 +57,7 @@ describe('deriveView', () => {
       sessionId: SID,
       status: 'Running',
       pendingPhase: 'running-pre-ingress',
+      activeStep: 4,
       sessionCreatedAt: undefined,
     })
   })
@@ -98,5 +101,79 @@ describe('deriveView', () => {
       () => deriveView({ sessionId: SID, status: 'Restarting' as never }),
       /unknown SessionPhase: Restarting/,
     )
+  })
+
+  // U9: server now sends a real pendingPhase discriminator (per
+  // packages/protocol/main.tsp) plus a SessionError on Failed.
+  // derive.ts plumbs both through and contributes the activeStep
+  // integer the storyboard reads.
+
+  it('U9: server pendingPhase=seeding-scaffold → view.activeStep=1', () => {
+    const view = deriveView(input({ status: 'Pending', pendingPhase: 'seeding-scaffold' }))
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'seeding-scaffold')
+    assert.equal(view.activeStep, 1)
+  })
+
+  it('U9: server pendingPhase=installing-deps → view.activeStep=2', () => {
+    const view = deriveView(input({ status: 'Pending', pendingPhase: 'installing-deps' }))
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'installing-deps')
+    assert.equal(view.activeStep, 2)
+  })
+
+  it('U9: server pendingPhase=awaiting-dev-server → view.activeStep=3', () => {
+    const view = deriveView(input({ status: 'Pending', pendingPhase: 'awaiting-dev-server' }))
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'awaiting-dev-server')
+    assert.equal(view.activeStep, 3)
+  })
+
+  it('U9: server pendingPhase=running-pre-ingress on Pending → view.activeStep=4', () => {
+    // Server can emit running-pre-ingress directly (when phase reads
+    // Pending mid-ingress-programming) — landing should plumb it
+    // verbatim rather than synthesize a different value.
+    const view = deriveView(input({ status: 'Pending', pendingPhase: 'running-pre-ingress' }))
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'running-pre-ingress')
+    assert.equal(view.activeStep, 4)
+  })
+
+  it('U9: Pending without pendingPhase falls back to provisioning(step 0) for pre-U9 server responses', () => {
+    const view = deriveView(input({ status: 'Pending' }))
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'provisioning')
+    assert.equal(view.activeStep, 0)
+  })
+
+  it('U9: Failed with session.error.message → failed view carries the error message as reason', () => {
+    const view = deriveView(
+      input({
+        status: 'Failed',
+        error: { code: 'init_failed', message: 'workspace-init Error (exit 128): git push rejected' },
+      }),
+    )
+    assert.deepEqual(view, {
+      kind: 'failed',
+      sessionId: SID,
+      reason: 'workspace-init Error (exit 128): git push rejected',
+    })
+  })
+
+  it('U9: Failed prefers session.error.message over the legacy failureReason.message', () => {
+    const view = deriveView(
+      input({
+        status: 'Failed',
+        error: { code: 'agent_crashloop', message: 'agent crashlooped' },
+        failureReason: { message: 'legacy fallback' },
+      }),
+    )
+    if (view.kind !== 'failed') return assert.fail('expected failed view')
+    assert.equal(view.reason, 'agent crashlooped')
   })
 })

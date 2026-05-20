@@ -1,4 +1,4 @@
-import type { View } from './derive.ts'
+import { activeStepFor, type View } from './derive.ts'
 
 /**
  * Ingress-readiness gate. Defends against the brief window where
@@ -87,5 +87,6 @@ export async function gateOnIngressReadiness(
     sessionId: view.sessionId,
     status: 'Running',
     pendingPhase: 'running-pre-ingress',
+    activeStep: activeStepFor('running-pre-ingress'),
   }
 }

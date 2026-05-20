@@ -20,9 +20,12 @@ import { gateOnIngressReadiness } from '../../../utils/ingress.ts'
 
 const RETRY_OPTIONS = { retries: 3, backoffMs: 200 } as const
 
+import type { PendingPhase } from '../../../utils/derive.ts'
+
 export interface StatusResponse {
   kind: 'provisioning' | 'ready' | 'stopping' | 'done' | 'failed' | 'not_found'
-  pendingPhase?: 'pending' | 'running-pre-ingress' | null
+  pendingPhase?: PendingPhase | null
+  activeStep?: number | null
   agentUrl?: string | null
   previewUrl?: string | null
   reason?: string | null
@@ -56,7 +59,8 @@ export default {
           case 'provisioning':
             return jsonResponse({
               kind: 'provisioning',
-              pendingPhase: view.pendingPhase ?? null,
+              pendingPhase: view.pendingPhase,
+              activeStep: view.activeStep,
             })
           case 'ready':
             return jsonResponse({

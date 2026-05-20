@@ -25,7 +25,16 @@ describe('pollCadenceMs', () => {
 
 describe('isTerminal', () => {
   it('treats provisioning + stopping as non-terminal', () => {
-    assert.equal(isTerminal({ kind: 'provisioning', sessionId: 'x', status: 'Pending' }), false)
+    assert.equal(
+      isTerminal({
+        kind: 'provisioning',
+        sessionId: 'x',
+        status: 'Pending',
+        pendingPhase: 'provisioning',
+        activeStep: 0,
+      }),
+      false,
+    )
     assert.equal(isTerminal({ kind: 'stopping', sessionId: 'x' }), false)
   })
 

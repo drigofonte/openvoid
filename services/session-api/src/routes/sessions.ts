@@ -10,6 +10,7 @@ import {
   agentUrl,
   previewUrl,
 } from "../k8s/client.js";
+import { derivePodSessionState } from "../k8s/pod-status.js";
 import {
   type GithubClient,
   createAppRepo,
@@ -49,19 +50,6 @@ function isSessionMode(value: unknown): value is SessionMode {
 // lifecycle-only debugging.
 function sessionImage(): string {
   return process.env.OPENVOID_STUB_IMAGE ?? OPENCODE_IMAGE;
-}
-
-function podPhaseToSessionStatus(phase: string | undefined): Session["status"] {
-  switch (phase) {
-    case "Running":
-      return "Running";
-    case "Succeeded":
-      return "Stopped";
-    case "Failed":
-      return "Failed";
-    default:
-      return "Pending";
-  }
 }
 
 function isHttpsUrl(value: string): boolean {
@@ -334,9 +322,12 @@ export function sessionsRouter(
       return c.json(jsonError("not_found", `Session ${sessionId} not found`), 404);
     }
 
+    const derived = derivePodSessionState(pod);
     const session: Session = {
       sessionId,
-      status: podPhaseToSessionStatus(pod.status?.phase),
+      status: derived.status,
+      ...(derived.pendingPhase ? { pendingPhase: derived.pendingPhase } : {}),
+      ...(derived.error ? { error: derived.error } : {}),
     };
     const ip = pod.status?.podIP;
     if (ip) session.endpointUrl = `http://${ip}`;
