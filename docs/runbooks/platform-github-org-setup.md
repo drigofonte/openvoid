@@ -112,22 +112,30 @@ accordion appears below Organization permissions.
    exist yet at token-creation time (every per-app repo is created on
    demand by the Session API).
 6. **Organization permissions** — expand the **"Administration"**
-   row, set **Access** to **"Read and write"**. This is what the
-   `octokit.rest.repos.createInOrg` call (POST `/orgs/{org}/repos`)
-   needs; without it you'd get 403 on every new-app POST. It lives
-   under "Organization permissions", NOT under "Repository
-   permissions" → "Administration" (yes, both exist; the one you want
-   is the org-level one).
+   row, set **Access** to **"Read and write"**. This is half of what
+   `octokit.rest.repos.createInOrg` (POST `/orgs/{org}/repos`) needs;
+   the other half is the Repository-level Administration grant in
+   step 8 below. GitHub's REST docs list only this org-level grant as
+   required, but empirically the API still 403s with `"Resource not
+   accessible by personal access token"` until step 8 is also set —
+   so set both.
 7. **Repository permissions** — only appears after step 5. Expand
    the **"Contents"** row and set **Access** to **"Read and write"**.
    This covers both `git clone` and `git push` against per-app repos.
    The **"Metadata"** row is auto-set to Read by GitHub and cannot be
    unchecked while any other Repository permission is granted —
    that's expected; leave it.
-8. Leave everything else under both sections at **"No access"**. The
+8. **Repository permissions → Administration** — expand and set
+   **Access** to **"Read and write"**. Yes, this is a second
+   "Administration" row (the first one was step 6, under Organization
+   permissions). Without this, `createInOrg` returns 403 even when
+   step 6 is set correctly. Both Administration rows must be Read
+   and write — they grant different things and the create-repo API
+   path needs both.
+9. Leave everything else under both sections at **"No access"**. The
    PAT does not need Actions, Webhooks, Issues, Pull requests, etc.
-9. Click **"Generate token"**. Copy the token immediately — GitHub
-   will not show it again.
+10. Click **"Generate token"**. Copy the token immediately — GitHub
+    will not show it again.
 
 ## Step 4 — Populate and apply the Secret
 
