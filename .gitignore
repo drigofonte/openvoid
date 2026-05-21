@@ -1,5 +1,6 @@
 # Custom
 .ignore
+diagnose.sh
 
 # Node / TypeScript
 node_modules/
