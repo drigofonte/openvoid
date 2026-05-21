@@ -74,7 +74,7 @@ run_import_repo() {
   apply_group_writable_perms
 }
 
-# Write app/scaffold-meta.json without jq (node:20-alpine ships node
+# Write app/scaffold-meta.json without jq (node:22-alpine ships node
 # but not jq, and we don't want a node script just for one JSON
 # write). The prompt value goes through a small escape pass because
 # it can contain ", \, and newlines.
@@ -122,10 +122,16 @@ run_new_app() {
 
   # 8. Push via token-injected URL. `set -x` is never enabled, so the
   # token doesn't appear in logs; the remote stays clean because we
-  # never `remote set-url` to the auth_url form.
+  # never `remote set-url` to the auth_url form. `-u` is deliberately
+  # omitted — git's "branch '<branch>' set up to track '<upstream>'"
+  # auto-print would expose the full auth_url (token included) to
+  # container stdout, which lands in `kubectl logs`. The seed push
+  # is the only push this container ever makes; the agent and
+  # git-finalizer both re-derive auth from REPO_URL + GIT_TOKEN, so
+  # the absence of upstream tracking here is harmless.
   hp=$(host_and_path "$REPO_URL")
   auth_url="https://x-access-token:${GIT_TOKEN}@${hp}"
-  git push -u "$auth_url" main
+  git push "$auth_url" main
 
   # 9. Pre-install deps so the agent container's `pnpm dev` boots
   # without paying the install cost on first request. Running pnpm

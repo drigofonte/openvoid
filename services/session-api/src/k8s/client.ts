@@ -82,7 +82,7 @@ export const DEFAULT_BRANCH = "main";
 // realistic operator setups, OPENVOID_SCAFFOLD_TEMPLATE_URL on the
 // Session API Deployment is the seam.
 export const DEFAULT_SCAFFOLD_TEMPLATE_URL =
-  "https://github.com/openvoid-platform/scaffold-react-rr7.git";
+  "https://github.com/drigolabs/openvoid-scaffold-react.git";
 
 export function getScaffoldTemplateUrl(): string {
   return envOr("OPENVOID_SCAFFOLD_TEMPLATE_URL", DEFAULT_SCAFFOLD_TEMPLATE_URL);

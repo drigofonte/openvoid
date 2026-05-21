@@ -18,6 +18,7 @@ import {
   WORKSPACE_FS_GROUP,
   WORKSPACE_INIT_CONTAINER_NAME,
   WORKSPACE_INIT_IMAGE,
+  DEFAULT_SCAFFOLD_TEMPLATE_URL,
   GIT_CREDS_SECRET_NAME,
   GIT_CREDS_SECRET_KEY,
   GIT_CREDS_VOLUME_NAME,
@@ -204,9 +205,14 @@ describe("workspace-init image script (infra/images/workspace-init/init.sh)", ()
     expect(script).not.toMatch(/\.git\/config.*GIT_TOKEN/);
   });
 
-  it("new-app branch never persists the token: remote add origin uses REPO_URL, and the push uses the auth_url directly without `remote set-url`", () => {
+  it("new-app branch never persists the token: remote add origin uses REPO_URL, the push uses auth_url directly, and `-u` is omitted to keep the token out of stdout", () => {
     expect(script).toMatch(/git remote add origin "\$REPO_URL"/);
-    expect(script).toMatch(/git push -u "\$auth_url"/);
+    // Push uses the auth_url; `-u` is deliberately omitted because
+    // git's auto-printed "branch 'main' set up to track '<upstream>'"
+    // line would expose the full auth_url (token included) to
+    // container stdout, which lands in kubectl logs.
+    expect(script).toMatch(/git push "\$auth_url" main/);
+    expect(script).not.toMatch(/git push -u/);
     // Negative: no live git invocation of `set-url` with auth_url
     // would persist the credential into .git/config. Strip comment
     // lines first so the explanatory note in the script doesn't
@@ -639,7 +645,10 @@ describe("buildSessionPodManifest (U6: new-app branch)", () => {
       (c) => c.name === "workspace-init",
     );
     const url = init?.env?.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")?.value ?? "";
-    expect(url).toContain("openvoid-platform/scaffold-react-rr7");
+    // Asserting against the exported constant (not a string literal)
+    // so operator-tunable changes to DEFAULT_SCAFFOLD_TEMPLATE_URL
+    // don't drift the test.
+    expect(url).toBe(DEFAULT_SCAFFOLD_TEMPLATE_URL);
   });
 
   it("preserves the credential-mount discipline: agent main container still has no GIT_TOKEN env even in new-app mode", () => {
@@ -710,7 +719,7 @@ describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () 
     "utf8",
   );
 
-  it("uses bash (process substitution + wait -n require it; node:20-alpine ships ash)", () => {
+  it("uses bash (process substitution + wait -n require it; node:22-alpine ships ash)", () => {
     expect(script).toMatch(/^#!\/bin\/bash/);
   });
 

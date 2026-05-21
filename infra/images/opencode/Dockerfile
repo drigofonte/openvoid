@@ -11,7 +11,7 @@
 #   - docs/spikes/2026-05-05-opencode-auth.md (Unit 6.0 decision)
 #   - infra/images/opencode/README.md (runtime interface)
 
-ARG NODE_VERSION=20-alpine
+ARG NODE_VERSION=22-alpine
 
 FROM node:${NODE_VERSION} AS builder
 WORKDIR /opt/opencode
@@ -36,13 +36,13 @@ FROM node:${NODE_VERSION}
 
 # bash + pnpm are required by the new-app dual-process entrypoint:
 # entrypoint.sh uses `wait -n` and process substitution, both
-# bash-only; node:20-alpine ships ash, not bash. pnpm comes via
-# corepack (built into node 20+) and just needs activation. Pinning
-# pnpm@9 matches the workspace's package manager and the
+# bash-only; node:22-alpine ships ash, not bash. pnpm comes via
+# corepack (built into node 22) and just needs activation. Pinning
+# pnpm@10 matches the workspace's package manager and the
 # workspace-init image (U7).
 RUN apk add --no-cache bash \
     && corepack enable \
-    && corepack prepare pnpm@9 --activate
+    && corepack prepare pnpm@10 --activate
 
 # XDG paths pinned to absolute locations independent of $HOME. Rationale
 # is in docs/spikes/2026-05-05-opencode-auth.md: under OpenShift SCC the
