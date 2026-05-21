@@ -38,12 +38,31 @@ export const SESSION_CPU_LIMIT = "1000m";
 export const SESSION_MEMORY_REQUEST = "1Gi";
 export const SESSION_MEMORY_LIMIT = "1Gi";
 
-// Init container (clone) and sidecar (finalizer) are short-lived or
-// near-idle most of the time; small budgets are plenty.
-export const SESSION_INIT_CPU_REQUEST = "50m";
-export const SESSION_INIT_CPU_LIMIT = "200m";
-export const SESSION_INIT_MEMORY_REQUEST = "64Mi";
-export const SESSION_INIT_MEMORY_LIMIT = "128Mi";
+// workspace-init does the heavy lifting in new-app mode: anonymous
+// clone of the scaffold + `pnpm install --frozen-lockfile` on a
+// Vite + RR7 dependency tree, whose resolver + extraction peaks
+// around 600–700 MB. The pre-U7 init container was just `git clone`
+// and fit in 128 MiB comfortably; pnpm install does not. Sized to
+// 1 GiB with room for the scaffold to grow over time.
+//
+// Pod-level scheduling takes max(initContainer limits, sum(containers)),
+// and the main session container already sits at 1 GiB, so bumping
+// workspace-init's limit to 1 GiB doesn't change the pod's effective
+// memory footprint at scheduling time — it just stops the kubelet
+// from OOM-killing the init container during pnpm install.
+export const SESSION_WORKSPACE_INIT_CPU_REQUEST = "100m";
+export const SESSION_WORKSPACE_INIT_CPU_LIMIT = "500m";
+export const SESSION_WORKSPACE_INIT_MEMORY_REQUEST = "256Mi";
+export const SESSION_WORKSPACE_INIT_MEMORY_LIMIT = "1Gi";
+
+// git-finalizer is a native sidecar (initContainer with
+// restartPolicy=Always) that idles for the agent's lifetime and runs
+// a single `git push` on SIGTERM. The pre-U7 budget — 64Mi request,
+// 128Mi limit — still fits comfortably.
+export const SESSION_FINALIZER_CPU_REQUEST = "50m";
+export const SESSION_FINALIZER_CPU_LIMIT = "200m";
+export const SESSION_FINALIZER_MEMORY_REQUEST = "64Mi";
+export const SESSION_FINALIZER_MEMORY_LIMIT = "128Mi";
 
 // Workspace emptyDir cap. A user might pull a chunky repo or have the
 // agent build a sizeable artifact tree; 10Gi keeps the per-session
@@ -356,12 +375,12 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
           image: WORKSPACE_INIT_IMAGE,
           resources: {
             requests: {
-              cpu: SESSION_INIT_CPU_REQUEST,
-              memory: SESSION_INIT_MEMORY_REQUEST,
+              cpu: SESSION_WORKSPACE_INIT_CPU_REQUEST,
+              memory: SESSION_WORKSPACE_INIT_MEMORY_REQUEST,
             },
             limits: {
-              cpu: SESSION_INIT_CPU_LIMIT,
-              memory: SESSION_INIT_MEMORY_LIMIT,
+              cpu: SESSION_WORKSPACE_INIT_CPU_LIMIT,
+              memory: SESSION_WORKSPACE_INIT_MEMORY_LIMIT,
             },
           },
           env: workspaceInitEnv,
@@ -383,12 +402,12 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
           restartPolicy: "Always",
           resources: {
             requests: {
-              cpu: SESSION_INIT_CPU_REQUEST,
-              memory: SESSION_INIT_MEMORY_REQUEST,
+              cpu: SESSION_FINALIZER_CPU_REQUEST,
+              memory: SESSION_FINALIZER_MEMORY_REQUEST,
             },
             limits: {
-              cpu: SESSION_INIT_CPU_LIMIT,
-              memory: SESSION_INIT_MEMORY_LIMIT,
+              cpu: SESSION_FINALIZER_CPU_LIMIT,
+              memory: SESSION_FINALIZER_MEMORY_LIMIT,
             },
           },
           env: [

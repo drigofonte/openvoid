@@ -526,13 +526,17 @@ describe("buildSessionPodManifest (Phase 7 follow-up: per-session resource budge
     expect(main?.resources?.limits).toEqual({ cpu: "1000m", memory: "1Gi" });
   });
 
-  it("sets small bounded resources on workspace-init and git-finalizer (they're idle most of the time)", () => {
+  it("sizes workspace-init for the pnpm-install peak (1 GiB ceiling) and git-finalizer for its idle-then-push lifecycle (128 MiB ceiling)", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const inits = manifest.spec?.initContainers ?? [];
-    for (const init of inits) {
-      expect(init.resources?.limits?.memory, init.name).toBe("128Mi");
-      expect(init.resources?.limits?.cpu, init.name).toBe("200m");
-    }
+
+    const workspaceInit = inits.find((c) => c.name === "workspace-init");
+    expect(workspaceInit?.resources?.requests).toEqual({ cpu: "100m", memory: "256Mi" });
+    expect(workspaceInit?.resources?.limits).toEqual({ cpu: "500m", memory: "1Gi" });
+
+    const finalizer = inits.find((c) => c.name === "git-finalizer");
+    expect(finalizer?.resources?.requests).toEqual({ cpu: "50m", memory: "64Mi" });
+    expect(finalizer?.resources?.limits).toEqual({ cpu: "200m", memory: "128Mi" });
   });
 });
 
