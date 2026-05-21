@@ -14,12 +14,19 @@
 FROM node:22-alpine
 
 # node:22-alpine ships node but not git; pnpm comes via corepack
-# (built into node 22) and just needs activation. Pin pnpm@10 to
-# match the scaffold's `packageManager: "pnpm@10.x"` field so
-# corepack doesn't need to download a different version at runtime.
+# (built into node 22) and just needs activation. Pin the EXACT
+# pnpm version the scaffold's `packageManager` field declares so
+# corepack uses it from cache instead of downloading a different
+# patch version on every session boot (visible in `kubectl logs` as
+# a "Corepack is about to download pnpm-X.Y.Z.tgz" line + a multi-
+# second delay each time a session starts).
+#
+# Bump in lockstep with whatever `pnpm create vite` / RR7 framework
+# mode currently generates. If the scaffold's lockfile is updated,
+# update this pin too.
 RUN apk add --no-cache git \
     && corepack enable \
-    && corepack prepare pnpm@10 --activate
+    && corepack prepare pnpm@10.33.0 --activate
 
 COPY init.sh /usr/local/bin/workspace-init
 RUN chmod +x /usr/local/bin/workspace-init

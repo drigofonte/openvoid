@@ -37,12 +37,14 @@ FROM node:${NODE_VERSION}
 # bash + pnpm are required by the new-app dual-process entrypoint:
 # entrypoint.sh uses `wait -n` and process substitution, both
 # bash-only; node:22-alpine ships ash, not bash. pnpm comes via
-# corepack (built into node 22) and just needs activation. Pinning
-# pnpm@10 matches the workspace's package manager and the
-# workspace-init image (U7).
+# corepack (built into node 22) and just needs activation. Pin the
+# EXACT pnpm version the scaffold's `packageManager` field declares
+# so corepack uses it from cache; otherwise each session pays a
+# multi-second download tax at agent-container startup before
+# `pnpm dev` can boot. Must match workspace-init's pin (U7).
 RUN apk add --no-cache bash \
     && corepack enable \
-    && corepack prepare pnpm@10 --activate
+    && corepack prepare pnpm@10.33.0 --activate
 
 # XDG paths pinned to absolute locations independent of $HOME. Rationale
 # is in docs/spikes/2026-05-05-opencode-auth.md: under OpenShift SCC the
