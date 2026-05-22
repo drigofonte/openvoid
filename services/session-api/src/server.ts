@@ -1,9 +1,11 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { CoreV1Api } from "@kubernetes/client-node";
 import { sessionsRouter } from "./routes/sessions.js";
 import { mountDocs } from "./lib/scalar.js";
-import { makeSessionOps } from "./k8s/client.js";
+import { loadKubeConfig, makeSessionOps } from "./k8s/client.js";
+import { loadPlatformGithub, PLATFORM_GITHUB_ORG_ENV } from "./lib/github.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 
@@ -25,6 +27,28 @@ async function main(): Promise<void> {
   // a confusing OpenCode password prompt at first session create.
   const sessionOps = await makeSessionOps();
 
+  // The new-app entry point needs the platform GitHub PAT + org name to
+  // call repos.createInOrg. Reading lazily would surface the failure on
+  // every new-app POST rather than at boot; fail-fast keeps the
+  // operator's runbook step (see docs/runbooks/platform-github-org-setup.md)
+  // diagnosable from the Deployment's CrashLoopBackOff. When the env
+  // is unset we skip the Secret read entirely — operators running
+  // import-repo-only deployments shouldn't be forced to provision the
+  // platform creds.
+  let newAppContext: { org: string; github: Awaited<ReturnType<typeof loadPlatformGithub>>["client"] } | undefined;
+  if (process.env[PLATFORM_GITHUB_ORG_ENV]) {
+    const kc = loadKubeConfig();
+    const core = kc.makeApiClient(CoreV1Api);
+    const { org, client } = await loadPlatformGithub(core);
+    console.log(`loaded github-platform-creds for org ${org}`);
+    newAppContext = { org, github: client };
+  } else {
+    console.warn(
+      `${PLATFORM_GITHUB_ORG_ENV} unset; the new-app entry point will surface 501 until it is configured ` +
+        `(see docs/runbooks/platform-github-org-setup.md).`,
+    );
+  }
+
   const app = new Hono();
 
   app.use(
@@ -43,7 +67,7 @@ async function main(): Promise<void> {
 
   mountDocs(app);
 
-  app.route("/", sessionsRouter(sessionOps));
+  app.route("/", sessionsRouter({ sessionOps, newAppContext }));
 
   serve({ fetch: app.fetch, port: PORT }, ({ port }) => {
     console.log(`session-api listening on :${port}`);

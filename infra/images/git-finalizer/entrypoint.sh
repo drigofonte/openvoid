@@ -15,7 +15,7 @@
 #   GIT_TOKEN   — platform PAT, projected from the `git-creds` Secret
 #
 # Mount paths:
-#   /workspace        — shared with git-clone (init) + main, repo at /workspace/repo
+#   /workspace        — shared with workspace-init (init) + main, repo at /workspace/repo
 #   /etc/git-creds    — defense-in-depth file mount of the same Secret (read-only)
 
 set -u

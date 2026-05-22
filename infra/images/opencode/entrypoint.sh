@@ -1,18 +1,33 @@
-#!/bin/sh
+#!/bin/bash
 # opencode-entrypoint — OpenCode agent main-container entrypoint.
 #
-# Acts as a tiny init: stays PID 1, runs `opencode serve` as a child,
-# and forwards SIGTERM to it on container shutdown. Naive `exec` into
-# `opencode serve` does not work — the OpenCode binary does not
-# install a SIGTERM handler, and Linux ignores default-terminate
-# signals to PID 1, so the kubelet's SIGTERM during the Phase 5
-# cascade (kubelet → main → finalizer) lands on a process that does
-# nothing with it and the container only exits on SIGKILL after the
-# grace period. With this script as PID 1, SIGTERM goes to the shell,
-# the trap forwards it to the child opencode process (which is not
-# PID 1 and so honours the default Terminate disposition), and the
-# container exits cleanly within seconds — long before the
-# finalizer's grace window expires.
+# Acts as a tiny init: stays PID 1, runs the agent processes as
+# children, and forwards SIGTERM to them on container shutdown. Naive
+# `exec` into `opencode serve` does not work — the OpenCode binary
+# does not install a SIGTERM handler, and Linux ignores
+# default-terminate signals to PID 1, so the kubelet's SIGTERM during
+# the Phase 5 cascade (kubelet → main → finalizer) would land on a
+# process that does nothing with it and the container would only exit
+# on SIGKILL after the grace period. With this script as PID 1,
+# SIGTERM goes to the shell, the trap forwards it to the child
+# process(es) (which are not PID 1 and so honour the default
+# Terminate disposition), and the container exits cleanly within
+# seconds — long before the finalizer's grace window expires.
+#
+# Two run modes, selected by env:
+#
+#   import-repo (default; OPENVOID_NEW_APP unset or != "true"):
+#     Single-process — just `opencode serve`. Today's v1 behaviour
+#     for imported repos; the user repo decides whether/how to bring
+#     up a dev server (the agent can spawn one as a tool call).
+#
+#   new-app (OPENVOID_NEW_APP="true"):
+#     Dual-process — `pnpm dev` + `opencode serve` as siblings under
+#     this script. `wait -n` exits when the first child dies so a
+#     dev-server crash doesn't keep a half-broken pod alive — the
+#     readinessProbe on :3000 would catch a dev crash, but not an
+#     opencode crash. Coupling exit to the first death keeps the
+#     pod's CrashLoopBackOff faithful to either failure.
 #
 # Requires (env):
 #   OPENCODE_SERVER_PASSWORD — HTTP Basic auth password for the
@@ -34,7 +49,7 @@
 #       optional). Both Secrets must be applied out-of-band before
 #       creating sessions; the demo scripts check for this.
 
-set -eu
+set -euo pipefail
 
 # If the image is invoked with an explicit command (e.g.
 # `docker run … opencode --version` or `… id` for image validation,
@@ -50,19 +65,50 @@ if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
   exit 1
 fi
 
-# Install the trap before backgrounding the child so a SIGTERM
-# arriving during the microsecond between `&` and `trap` cannot land
-# on a signal-naïve PID 1. The `${CHILD:-}` default makes the trap
-# safe to fire before CHILD is set — `kill -TERM ""` and
-# `wait ""` are both no-ops at the redirected `2>/dev/null`. Once
-# CHILD is set, SIGTERM is forwarded to the real child process.
-#
-# `kill -TERM` is load-bearing: opencode does not catch SIGTERM as
-# PID 1 (Linux's PID-1 special case), but as a non-PID-1 child it
-# terminates on the default disposition.
-trap 'kill -TERM "${CHILD:-}" 2>/dev/null; wait "${CHILD:-}" 2>/dev/null' TERM INT
+run_import_repo() {
+  # Single-process: opencode serve only. Trap forwards SIGTERM to the
+  # single child; identical shape to the pre-U8 entrypoint.
+  trap 'kill -TERM "${CHILD:-}" 2>/dev/null; wait "${CHILD:-}" 2>/dev/null' TERM INT
+  opencode serve --hostname 0.0.0.0 --port 8080 &
+  CHILD=$!
+  wait "$CHILD"
+}
 
-opencode serve --hostname 0.0.0.0 --port 8080 &
-CHILD=$!
+run_new_app() {
+  # Dual-process: pnpm dev + opencode serve as siblings.
+  #
+  # Process substitution (`> >(sed …)`) is load-bearing: a piped
+  # `… | sed …` would make $! capture the sed PID, and the trap
+  # would forward SIGTERM to sed instead of pnpm/opencode. With
+  # process substitution, the leader (pnpm / opencode) stays the
+  # foreground job whose PID $! captures.
+  pnpm --dir /workspace/repo dev > >(sed 's/^/[dev] /') 2>&1 &
+  DEV_PID=$!
+  opencode serve --hostname 0.0.0.0 --port 8080 > >(sed 's/^/[agent] /') 2>&1 &
+  OPENCODE_PID=$!
 
-wait "$CHILD"
+  trap 'kill -TERM "$DEV_PID" "$OPENCODE_PID" 2>/dev/null || true' TERM INT
+
+  # `wait -n` blocks until one of the named children exits and
+  # returns its exit code so the pod's CrashLoopBackOff carries
+  # meaningful status (rather than always-0 from `wait`).
+  set +e
+  wait -n "$DEV_PID" "$OPENCODE_PID"
+  EXIT_CODE=$?
+  set -e
+
+  # First child died; bring down the survivor so the pod doesn't
+  # linger as half-broken. The kubelet's readinessProbe would catch
+  # a dev-server crash (probe target stops responding) but not an
+  # opencode crash (probe target keeps responding from pnpm dev).
+  # Coupling pod-exit to the first death keeps the failure visible.
+  kill -TERM "$DEV_PID" "$OPENCODE_PID" 2>/dev/null || true
+  wait 2>/dev/null || true
+  exit "$EXIT_CODE"
+}
+
+if [ "${OPENVOID_NEW_APP:-}" = "true" ]; then
+  run_new_app
+else
+  run_import_repo
+fi

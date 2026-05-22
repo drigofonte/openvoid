@@ -72,6 +72,7 @@ describe('gateOnIngressReadiness', () => {
       sessionId: SID,
       status: 'Running',
       pendingPhase: 'running-pre-ingress',
+      activeStep: 4,
     })
   })
 
@@ -90,7 +91,8 @@ describe('gateOnIngressReadiness', () => {
       kind: 'provisioning',
       sessionId: SID,
       status: 'Pending',
-      pendingPhase: 'pending',
+      pendingPhase: 'provisioning',
+      activeStep: 0,
     }
     const fetch = fakeFetch({}) // no fetches expected
 

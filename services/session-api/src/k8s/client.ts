@@ -2,6 +2,7 @@ import {
   CoreV1Api,
   KubeConfig,
   NetworkingV1Api,
+  type V1EnvVar,
   type V1Ingress,
   type V1OwnerReference,
   type V1Pod,
@@ -37,12 +38,31 @@ export const SESSION_CPU_LIMIT = "1000m";
 export const SESSION_MEMORY_REQUEST = "1Gi";
 export const SESSION_MEMORY_LIMIT = "1Gi";
 
-// Init container (clone) and sidecar (finalizer) are short-lived or
-// near-idle most of the time; small budgets are plenty.
-export const SESSION_INIT_CPU_REQUEST = "50m";
-export const SESSION_INIT_CPU_LIMIT = "200m";
-export const SESSION_INIT_MEMORY_REQUEST = "64Mi";
-export const SESSION_INIT_MEMORY_LIMIT = "128Mi";
+// workspace-init does the heavy lifting in new-app mode: anonymous
+// clone of the scaffold + `pnpm install --frozen-lockfile` on a
+// Vite + RR7 dependency tree, whose resolver + extraction peaks
+// around 600–700 MB. The pre-U7 init container was just `git clone`
+// and fit in 128 MiB comfortably; pnpm install does not. Sized to
+// 1 GiB with room for the scaffold to grow over time.
+//
+// Pod-level scheduling takes max(initContainer limits, sum(containers)),
+// and the main session container already sits at 1 GiB, so bumping
+// workspace-init's limit to 1 GiB doesn't change the pod's effective
+// memory footprint at scheduling time — it just stops the kubelet
+// from OOM-killing the init container during pnpm install.
+export const SESSION_WORKSPACE_INIT_CPU_REQUEST = "100m";
+export const SESSION_WORKSPACE_INIT_CPU_LIMIT = "500m";
+export const SESSION_WORKSPACE_INIT_MEMORY_REQUEST = "256Mi";
+export const SESSION_WORKSPACE_INIT_MEMORY_LIMIT = "1Gi";
+
+// git-finalizer is a native sidecar (initContainer with
+// restartPolicy=Always) that idles for the agent's lifetime and runs
+// a single `git push` on SIGTERM. The pre-U7 budget — 64Mi request,
+// 128Mi limit — still fits comfortably.
+export const SESSION_FINALIZER_CPU_REQUEST = "50m";
+export const SESSION_FINALIZER_CPU_LIMIT = "200m";
+export const SESSION_FINALIZER_MEMORY_REQUEST = "64Mi";
+export const SESSION_FINALIZER_MEMORY_LIMIT = "128Mi";
 
 // Workspace emptyDir cap. A user might pull a chunky repo or have the
 // agent build a sizeable artifact tree; 10Gi keeps the per-session
@@ -52,20 +72,40 @@ export const WORKSPACE_VOLUME_NAME = "workspace";
 export const WORKSPACE_SIZE_LIMIT = "10Gi";
 // Mount path on the agent main container. Matches OpenCode's WORKDIR
 // (/workspace/repo) so the agent's cwd is the cloned repo. The
-// initContainer (git-clone) and sidecar (git-finalizer) mount the same
-// volume at /workspace and see the repo at /workspace/repo.
+// initContainer (workspace-init) and sidecar (git-finalizer) mount the
+// same volume at /workspace and see the repo at /workspace/repo.
 export const WORKSPACE_MOUNT_PATH = "/workspace";
 export const WORKSPACE_FS_GROUP = 65533;
 
-export const GIT_CLONE_IMAGE = "localhost:5001/openvoid/git-clone:dev";
-export const GIT_CLONE_CONTAINER_NAME = "git-clone";
+export const WORKSPACE_INIT_IMAGE = "localhost:5001/openvoid/workspace-init:dev";
+export const WORKSPACE_INIT_CONTAINER_NAME = "workspace-init";
 export const GIT_CREDS_SECRET_NAME = "git-creds";
 export const GIT_CREDS_SECRET_KEY = "token";
 export const GIT_CREDS_VOLUME_NAME = "git-creds";
 export const GIT_CREDS_MOUNT_PATH = "/etc/git-creds";
+
+// Platform-org GitHub PAT — distinct from `git-creds`. For new-app
+// pods both the workspace-init initContainer (seed push) and the
+// git-finalizer sidecar (on-exit push) mount this Secret instead of
+// `git-creds`, because the new repo lives under the platform org and
+// a user-side PAT would 403 against it.
+export const GITHUB_PLATFORM_CREDS_SECRET_NAME = "github-platform-creds";
+export const GITHUB_PLATFORM_CREDS_SECRET_KEY = "token";
+
 export const GIT_FINALIZER_IMAGE = "localhost:5001/openvoid/git-finalizer:dev";
 export const GIT_FINALIZER_CONTAINER_NAME = "git-finalizer";
 export const DEFAULT_BRANCH = "main";
+
+// Default scaffold-template URL for the new-app entry point.
+// Overridable per session via SessionPodSpec.scaffoldTemplate; for
+// realistic operator setups, OPENVOID_SCAFFOLD_TEMPLATE_URL on the
+// Session API Deployment is the seam.
+export const DEFAULT_SCAFFOLD_TEMPLATE_URL =
+  "https://github.com/drigolabs/openvoid-scaffold-react.git";
+
+export function getScaffoldTemplateUrl(): string {
+  return envOr("OPENVOID_SCAFFOLD_TEMPLATE_URL", DEFAULT_SCAFFOLD_TEMPLATE_URL);
+}
 
 // OpenCode agent main container (Phase 6.2). The `OPENVOID_STUB_IMAGE`
 // env var on the Session API process overrides the default to keep the
@@ -92,7 +132,7 @@ export const OPENCODE_PASSWORD_SECRET_KEY = "password";
 
 // `opencode-auth` Secret — applied out-of-band, holds OpenCode's
 // `auth.json` content (LLM provider credentials). Mounted only on the
-// agent main container; never on `git-clone` or `git-finalizer`. The
+// agent main container; never on `workspace-init` or `git-finalizer`. The
 // mount path is fixed by the image's `ENV XDG_DATA_HOME` (Unit 6.1) so
 // the Secret target is independent of the runtime UID's $HOME — see
 // docs/spikes/2026-05-05-opencode-auth.md for the full rationale.
@@ -123,6 +163,16 @@ export type SessionPodSpec = {
   repo: string;
   branch?: string;
   createdAt?: string;
+  // New-app extensions (U6). When `isNewApp` is true the workspace-init
+  // script reads `OPENVOID_NEW_APP`, `SCAFFOLD_TEMPLATE_URL`, and
+  // `SCAFFOLD_PROMPT` from env and takes the scaffold-seed branch
+  // instead of the existing clone-repo branch. The Secret backing
+  // `GIT_TOKEN` swaps from `git-creds` to `github-platform-creds` on
+  // both workspace-init and git-finalizer — see
+  // GITHUB_PLATFORM_CREDS_SECRET_NAME and the manifest builder.
+  isNewApp?: boolean;
+  scaffoldTemplate?: string;
+  prompt?: string;
 };
 
 // Lightweight reference back to the parent Pod, used to build
@@ -232,6 +282,42 @@ function ownerReferenceFor(owner: PodOwner | undefined): V1OwnerReference[] | un
 export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
   const branch = spec.branch ?? DEFAULT_BRANCH;
   const createdAt = spec.createdAt ?? new Date().toISOString();
+  const isNewApp = spec.isNewApp === true;
+  // The Secret backing GIT_TOKEN differs per mode. import-repo pods
+  // use git-creds (user-side, scoped to the imported repo);
+  // new-app pods use github-platform-creds (platform PAT, can write
+  // to repos under the platform org). The volume name stays
+  // `git-creds` for both modes to keep the mount-discipline
+  // invariants and existing tests simple — the volume name is an
+  // internal handle, not a Secret identifier.
+  const gitTokenSecretName = isNewApp
+    ? GITHUB_PLATFORM_CREDS_SECRET_NAME
+    : GIT_CREDS_SECRET_NAME;
+  const gitTokenSecretKey = isNewApp
+    ? GITHUB_PLATFORM_CREDS_SECRET_KEY
+    : GIT_CREDS_SECRET_KEY;
+
+  const workspaceInitEnv: V1EnvVar[] = [
+    { name: "REPO_URL", value: spec.repo },
+    { name: "BRANCH", value: branch },
+    {
+      name: "GIT_TOKEN",
+      valueFrom: {
+        secretKeyRef: { name: gitTokenSecretName, key: gitTokenSecretKey },
+      },
+    },
+  ];
+  if (isNewApp) {
+    workspaceInitEnv.push(
+      { name: "OPENVOID_NEW_APP", value: "true" },
+      {
+        name: "SCAFFOLD_TEMPLATE_URL",
+        value: spec.scaffoldTemplate ?? getScaffoldTemplateUrl(),
+      },
+      { name: "SCAFFOLD_PROMPT", value: spec.prompt ?? "" },
+    );
+  }
+
   return {
     apiVersion: "v1",
     kind: "Pod",
@@ -265,7 +351,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         },
         {
           name: GIT_CREDS_VOLUME_NAME,
-          secret: { secretName: GIT_CREDS_SECRET_NAME },
+          secret: { secretName: gitTokenSecretName },
         },
         {
           name: OPENCODE_AUTH_VOLUME_NAME,
@@ -285,31 +371,19 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
       ],
       initContainers: [
         {
-          name: GIT_CLONE_CONTAINER_NAME,
-          image: GIT_CLONE_IMAGE,
+          name: WORKSPACE_INIT_CONTAINER_NAME,
+          image: WORKSPACE_INIT_IMAGE,
           resources: {
             requests: {
-              cpu: SESSION_INIT_CPU_REQUEST,
-              memory: SESSION_INIT_MEMORY_REQUEST,
+              cpu: SESSION_WORKSPACE_INIT_CPU_REQUEST,
+              memory: SESSION_WORKSPACE_INIT_MEMORY_REQUEST,
             },
             limits: {
-              cpu: SESSION_INIT_CPU_LIMIT,
-              memory: SESSION_INIT_MEMORY_LIMIT,
+              cpu: SESSION_WORKSPACE_INIT_CPU_LIMIT,
+              memory: SESSION_WORKSPACE_INIT_MEMORY_LIMIT,
             },
           },
-          env: [
-            { name: "REPO_URL", value: spec.repo },
-            { name: "BRANCH", value: branch },
-            {
-              name: "GIT_TOKEN",
-              valueFrom: {
-                secretKeyRef: {
-                  name: GIT_CREDS_SECRET_NAME,
-                  key: GIT_CREDS_SECRET_KEY,
-                },
-              },
-            },
-          ],
+          env: workspaceInitEnv,
           volumeMounts: [
             {
               name: WORKSPACE_VOLUME_NAME,
@@ -328,12 +402,12 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
           restartPolicy: "Always",
           resources: {
             requests: {
-              cpu: SESSION_INIT_CPU_REQUEST,
-              memory: SESSION_INIT_MEMORY_REQUEST,
+              cpu: SESSION_FINALIZER_CPU_REQUEST,
+              memory: SESSION_FINALIZER_MEMORY_REQUEST,
             },
             limits: {
-              cpu: SESSION_INIT_CPU_LIMIT,
-              memory: SESSION_INIT_MEMORY_LIMIT,
+              cpu: SESSION_FINALIZER_CPU_LIMIT,
+              memory: SESSION_FINALIZER_MEMORY_LIMIT,
             },
           },
           env: [
@@ -341,8 +415,8 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               name: "GIT_TOKEN",
               valueFrom: {
                 secretKeyRef: {
-                  name: GIT_CREDS_SECRET_NAME,
-                  key: GIT_CREDS_SECRET_KEY,
+                  name: gitTokenSecretName,
+                  key: gitTokenSecretKey,
                 },
               },
             },
@@ -383,17 +457,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               containerPort: OPENCODE_PREVIEW_PORT,
             },
           ],
-          env: [
-            {
-              name: "OPENCODE_SERVER_PASSWORD",
-              valueFrom: {
-                secretKeyRef: {
-                  name: OPENCODE_PASSWORD_SECRET_NAME,
-                  key: OPENCODE_PASSWORD_SECRET_KEY,
-                },
-              },
-            },
-          ],
+          env: buildAgentEnv(isNewApp),
           volumeMounts: [
             {
               name: WORKSPACE_VOLUME_NAME,
@@ -401,8 +465,9 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
             },
             {
               // The opencode-auth Secret is mounted **only** here, not
-              // on git-clone or git-finalizer. Symmetrically, git-creds
-              // is mounted only on the init+sidecar pair, not here.
+              // on workspace-init or git-finalizer. Symmetrically,
+              // git-creds is mounted only on the init+sidecar pair, not
+              // here.
               // Each container sees only the credentials its job
               // requires; the unit tests assert this discipline as a
               // regression guard.
@@ -412,10 +477,54 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
               readOnly: true,
             },
           ],
+          // readinessProbe is conditional on new-app: only new-app pods
+          // run `pnpm dev` on port 3000, and only they should gate
+          // Ready on its response. Import-repo pods keep today's
+          // "Ready as soon as the container is up" behaviour — they
+          // have no pre-started dev server to probe.
+          ...(isNewApp
+            ? {
+                readinessProbe: {
+                  httpGet: {
+                    port: OPENCODE_PREVIEW_PORT,
+                    path: "/",
+                  },
+                  // 5s initial delay covers OpenCode + pnpm dev cold
+                  // start; 3s × 30 = 90s ceiling before the pod is
+                  // marked NotReady, which is enough for first-time
+                  // Vite boot on a cold node.
+                  initialDelaySeconds: 5,
+                  periodSeconds: 3,
+                  timeoutSeconds: 2,
+                  failureThreshold: 30,
+                },
+              }
+            : {}),
         },
       ],
     },
   };
+}
+
+function buildAgentEnv(isNewApp: boolean): V1EnvVar[] {
+  const env: V1EnvVar[] = [
+    {
+      name: "OPENCODE_SERVER_PASSWORD",
+      valueFrom: {
+        secretKeyRef: {
+          name: OPENCODE_PASSWORD_SECRET_NAME,
+          key: OPENCODE_PASSWORD_SECRET_KEY,
+        },
+      },
+    },
+  ];
+  if (isNewApp) {
+    // Selects the dual-process branch in entrypoint.sh (pnpm dev +
+    // opencode serve). Import-repo pods omit this and get the
+    // single-process opencode-only behaviour.
+    env.push({ name: "OPENVOID_NEW_APP", value: "true" });
+  }
+  return env;
 }
 
 export function buildSessionService(

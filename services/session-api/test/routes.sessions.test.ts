@@ -16,8 +16,9 @@ import {
   WORKSPACE_VOLUME_NAME,
   WORKSPACE_MOUNT_PATH,
   WORKSPACE_FS_GROUP,
-  GIT_CLONE_CONTAINER_NAME,
-  GIT_CLONE_IMAGE,
+  WORKSPACE_INIT_CONTAINER_NAME,
+  WORKSPACE_INIT_IMAGE,
+  DEFAULT_SCAFFOLD_TEMPLATE_URL,
   GIT_CREDS_SECRET_NAME,
   GIT_CREDS_SECRET_KEY,
   GIT_CREDS_VOLUME_NAME,
@@ -114,18 +115,18 @@ describe("buildSessionPodManifest (Phase 4.1: workspace volume + fsGroup)", () =
   });
 });
 
-describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => {
+describe("buildSessionPodManifest (Phase 4.2: workspace-init container)", () => {
   const baseSpec: SessionPodSpec = {
     sessionId: "01HABCDEF",
     image: "nginx:alpine",
     repo: "https://github.com/example/x",
   };
 
-  it("declares a git-clone initContainer with the pinned alpine/git image", () => {
+  it("declares a workspace-init initContainer with the pinned alpine/git image", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const init = manifest.spec?.initContainers?.[0];
-    expect(init?.name).toBe(GIT_CLONE_CONTAINER_NAME);
-    expect(init?.image).toBe(GIT_CLONE_IMAGE);
+    expect(init?.name).toBe(WORKSPACE_INIT_CONTAINER_NAME);
+    expect(init?.image).toBe(WORKSPACE_INIT_IMAGE);
   });
 
   it("passes REPO_URL and BRANCH as plain env values, GIT_TOKEN via Secret ref", () => {
@@ -156,11 +157,11 @@ describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => 
     expect(mounts).toContainEqual({ name: WORKSPACE_VOLUME_NAME, mountPath: "/workspace" });
   });
 
-  it("does not override the image's ENTRYPOINT — git-clone container ships the script", () => {
+  it("does not override the image's ENTRYPOINT — workspace-init container ships the script", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const init = manifest.spec?.initContainers?.[0];
-    // The custom image (infra/images/git-clone/) bakes the script in as
-    // ENTRYPOINT. Setting `command` here would shadow it.
+    // The custom image (infra/images/workspace-init/) bakes the script
+    // in as ENTRYPOINT. Setting `command` here would shadow it.
     expect(init?.command).toBeUndefined();
     expect(init?.args).toBeUndefined();
   });
@@ -172,27 +173,71 @@ describe("buildSessionPodManifest (Phase 4.2: git-clone init container)", () => 
   });
 });
 
-describe("git-clone image script (infra/images/git-clone/clone.sh)", () => {
-  // The script lives in the image now (not in the manifest), so these are
-  // file-content regression guards against the same risks the inline
-  // version used to assert: token injection only at clone time, and an
-  // explicit token-stripping `remote set-url` so the PAT never lands in
-  // .git/config.
+describe("workspace-init image script (infra/images/workspace-init/init.sh)", () => {
+  // The script lives in the image now (not in the manifest), so these
+  // are file-content regression guards against the same risks the
+  // inline version used to assert: token injection only at push/clone
+  // time, and an explicit clean origin so the PAT never lands in
+  // .git/config. After U7 the same guards apply across both boot
+  // paths (import-repo and new-app).
   const script = readFileSync(
     resolve(
       dirname(fileURLToPath(import.meta.url)),
-      "../../../infra/images/git-clone/clone.sh",
+      "../../../infra/images/workspace-init/init.sh",
     ),
     "utf8",
   );
 
-  it("injects the token into the clone URL via the GIT_TOKEN env var", () => {
-    expect(script).toContain("x-access-token:${GIT_TOKEN}");
+  it("branches on OPENVOID_NEW_APP between run_new_app and run_import_repo", () => {
+    expect(script).toMatch(/run_new_app\(\)/);
+    expect(script).toMatch(/run_import_repo\(\)/);
+    expect(script).toMatch(/OPENVOID_NEW_APP/);
   });
 
-  it("rewrites origin to the clean REPO_URL after cloning (token never lands in .git/config)", () => {
-    expect(script).toMatch(/git -C \/workspace\/repo remote set-url origin "\$REPO_URL"/);
+  it("injects the token into the URL via the GIT_TOKEN env var (both branches)", () => {
+    // Once for import-repo's clone, once for new-app's push.
+    const matches = script.match(/x-access-token:\$\{GIT_TOKEN\}/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("import-repo branch rewrites origin to the clean REPO_URL after cloning (token never lands in .git/config)", () => {
+    expect(script).toMatch(/git -C "\$REPO_DIR" remote set-url origin "\$REPO_URL"/);
     expect(script).not.toMatch(/\.git\/config.*GIT_TOKEN/);
+  });
+
+  it("new-app branch never persists the token: remote add origin uses REPO_URL, the push uses auth_url directly, and `-u` is omitted to keep the token out of stdout", () => {
+    expect(script).toMatch(/git remote add origin "\$REPO_URL"/);
+    // Push uses the auth_url; `-u` is deliberately omitted because
+    // git's auto-printed "branch 'main' set up to track '<upstream>'"
+    // line would expose the full auth_url (token included) to
+    // container stdout, which lands in kubectl logs.
+    expect(script).toMatch(/git push "\$auth_url" main/);
+    expect(script).not.toMatch(/git push -u/);
+    // Negative: no live git invocation of `set-url` with auth_url
+    // would persist the credential into .git/config. Strip comment
+    // lines first so the explanatory note in the script doesn't
+    // false-positive.
+    const live = script
+      .split("\n")
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n");
+    expect(live).not.toMatch(/remote set-url[^\n]*auth_url/);
+  });
+
+  it("new-app branch strips the scaffold's history before re-initialising", () => {
+    expect(script).toMatch(/rm -rf "\$REPO_DIR\/\.git"/);
+    expect(script).toMatch(/git init -q -b main/);
+  });
+
+  it("new-app branch writes app/scaffold-meta.json with prompt + createdAt + scaffoldVersion", () => {
+    expect(script).toContain("scaffold-meta.json");
+    expect(script).toMatch(/"prompt": "%s"/);
+    expect(script).toMatch(/"createdAt": "%s"/);
+    expect(script).toMatch(/"scaffoldVersion": "%s"/);
+  });
+
+  it("new-app branch runs pnpm install --frozen-lockfile after the seed push", () => {
+    expect(script).toMatch(/pnpm install --frozen-lockfile/);
   });
 });
 
@@ -249,12 +294,12 @@ describe("buildSessionPodManifest (Phase 5.1: git-finalizer native sidecar)", ()
     expect(finalizer?.restartPolicy).toBe("Always");
   });
 
-  it("keeps git-clone as a non-restarting initContainer alongside the finalizer", () => {
+  it("keeps workspace-init as a non-restarting initContainer alongside the finalizer", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const inits = manifest.spec?.initContainers ?? [];
-    const clone = inits.find((c) => c.name === GIT_CLONE_CONTAINER_NAME);
-    expect(clone).toBeDefined();
-    expect(clone?.restartPolicy).toBeUndefined();
+    const init = inits.find((c) => c.name === WORKSPACE_INIT_CONTAINER_NAME);
+    expect(init).toBeDefined();
+    expect(init?.restartPolicy).toBeUndefined();
   });
 
   it("uses the pinned alpine/git image for the finalizer", () => {
@@ -402,14 +447,14 @@ describe("buildSessionPodManifest (Phase 6.2: OpenCode main container + Secrets)
     );
   });
 
-  it("does NOT mount opencode-auth on the git-clone init container (LLM-auth isolation)", () => {
+  it("does NOT mount opencode-auth on the workspace-init container (LLM-auth isolation)", () => {
     const manifest = buildSessionPodManifest(baseSpec);
-    const clone = manifest.spec?.initContainers?.find(
-      (c) => c.name === GIT_CLONE_CONTAINER_NAME,
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === WORKSPACE_INIT_CONTAINER_NAME,
     );
-    const mounts = clone?.volumeMounts ?? [];
+    const mounts = init?.volumeMounts ?? [];
     expect(mounts.find((m) => m.name === OPENCODE_AUTH_VOLUME_NAME)).toBeUndefined();
-    const env = clone?.env ?? [];
+    const env = init?.env ?? [];
     expect(env.find((e) => e.name === "OPENCODE_SERVER_PASSWORD")).toBeUndefined();
   });
 
@@ -481,13 +526,17 @@ describe("buildSessionPodManifest (Phase 7 follow-up: per-session resource budge
     expect(main?.resources?.limits).toEqual({ cpu: "1000m", memory: "1Gi" });
   });
 
-  it("sets small bounded resources on git-clone and git-finalizer (they're idle most of the time)", () => {
+  it("sizes workspace-init for the pnpm-install peak (1 GiB ceiling) and git-finalizer for its idle-then-push lifecycle (128 MiB ceiling)", () => {
     const manifest = buildSessionPodManifest(baseSpec);
     const inits = manifest.spec?.initContainers ?? [];
-    for (const init of inits) {
-      expect(init.resources?.limits?.memory, init.name).toBe("128Mi");
-      expect(init.resources?.limits?.cpu, init.name).toBe("200m");
-    }
+
+    const workspaceInit = inits.find((c) => c.name === "workspace-init");
+    expect(workspaceInit?.resources?.requests).toEqual({ cpu: "100m", memory: "256Mi" });
+    expect(workspaceInit?.resources?.limits).toEqual({ cpu: "500m", memory: "1Gi" });
+
+    const finalizer = inits.find((c) => c.name === "git-finalizer");
+    expect(finalizer?.resources?.requests).toEqual({ cpu: "50m", memory: "64Mi" });
+    expect(finalizer?.resources?.limits).toEqual({ cpu: "200m", memory: "128Mi" });
   });
 });
 
@@ -510,6 +559,228 @@ describe("buildSessionPodManifest (Phase 7.2: preview port on main container)", 
   });
 });
 
+describe("buildSessionPodManifest (U6: new-app branch)", () => {
+  const newAppSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/openvoid-platform/ai-flashcards-x7f2k9.git",
+    isNewApp: true,
+    prompt: "AI flashcards",
+    scaffoldTemplate: "https://github.com/openvoid-platform/scaffold-react-rr7.git",
+  };
+
+  it("sets OPENVOID_NEW_APP, SCAFFOLD_TEMPLATE_URL, SCAFFOLD_PROMPT, REPO_URL on workspace-init", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const env = init?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")?.value).toBe("true");
+    expect(env.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")?.value).toBe(
+      "https://github.com/openvoid-platform/scaffold-react-rr7.git",
+    );
+    expect(env.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("AI flashcards");
+    expect(env.find((e) => e.name === "REPO_URL")?.value).toBe(
+      "https://github.com/openvoid-platform/ai-flashcards-x7f2k9.git",
+    );
+  });
+
+  it("sources GIT_TOKEN from github-platform-creds (not git-creds) on workspace-init in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const tokenEnv = init?.env?.find((e) => e.name === "GIT_TOKEN");
+    expect(tokenEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: "github-platform-creds",
+      key: "token",
+    });
+  });
+
+  it("sources GIT_TOKEN from github-platform-creds on git-finalizer in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const finalizer = manifest.spec?.initContainers?.find(
+      (c) => c.name === "git-finalizer",
+    );
+    const tokenEnv = finalizer?.env?.find((e) => e.name === "GIT_TOKEN");
+    expect(tokenEnv?.valueFrom?.secretKeyRef).toEqual({
+      name: "github-platform-creds",
+      key: "token",
+    });
+  });
+
+  it("swaps the Pod-level git-creds volume to mount github-platform-creds in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const volume = manifest.spec?.volumes?.find((v) => v.name === GIT_CREDS_VOLUME_NAME);
+    expect(volume?.secret?.secretName).toBe("github-platform-creds");
+  });
+
+  it("does NOT expose new-app env vars when isNewApp is unset (import-repo backwards-compat)", () => {
+    const importSpec: SessionPodSpec = {
+      sessionId: "01HABCDEF",
+      image: OPENCODE_IMAGE,
+      repo: "https://github.com/example/x",
+    };
+    const manifest = buildSessionPodManifest(importSpec);
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const env = init?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")).toBeUndefined();
+    expect(env.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")).toBeUndefined();
+    expect(env.find((e) => e.name === "SCAFFOLD_PROMPT")).toBeUndefined();
+    // Secret stays git-creds in import-repo mode.
+    expect(init?.env?.find((e) => e.name === "GIT_TOKEN")?.valueFrom?.secretKeyRef?.name).toBe(
+      "git-creds",
+    );
+  });
+
+  it("emits SCAFFOLD_PROMPT='' when prompt is omitted", () => {
+    const manifest = buildSessionPodManifest({ ...newAppSpec, prompt: undefined });
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    expect(init?.env?.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("");
+  });
+
+  it("falls back to the default SCAFFOLD_TEMPLATE_URL when spec omits scaffoldTemplate", () => {
+    const manifest = buildSessionPodManifest({ ...newAppSpec, scaffoldTemplate: undefined });
+    const init = manifest.spec?.initContainers?.find(
+      (c) => c.name === "workspace-init",
+    );
+    const url = init?.env?.find((e) => e.name === "SCAFFOLD_TEMPLATE_URL")?.value ?? "";
+    // Asserting against the exported constant (not a string literal)
+    // so operator-tunable changes to DEFAULT_SCAFFOLD_TEMPLATE_URL
+    // don't drift the test.
+    expect(url).toBe(DEFAULT_SCAFFOLD_TEMPLATE_URL);
+  });
+
+  it("preserves the credential-mount discipline: agent main container still has no GIT_TOKEN env even in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const main = manifest.spec?.containers?.[0];
+    const mainEnv = main?.env ?? [];
+    // GIT_TOKEN is the load-bearing credential isolation guard — the
+    // agent must not see it. OPENVOID_NEW_APP is a non-credential
+    // mode flag that U8 deliberately plumbs onto the agent container
+    // to drive its dual-process entrypoint; that one is allowed.
+    expect(mainEnv.find((e) => e.name === "GIT_TOKEN")).toBeUndefined();
+  });
+});
+
+describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", () => {
+  const newAppSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/openvoid-platform/x-aaaaaa.git",
+    isNewApp: true,
+    prompt: "a",
+  };
+  const importRepoSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/example/x",
+  };
+
+  it("sets OPENVOID_NEW_APP=true on the agent container in new-app mode (drives entrypoint dual-process branch)", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const main = manifest.spec?.containers?.[0];
+    const env = main?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")?.value).toBe("true");
+  });
+
+  it("omits OPENVOID_NEW_APP on the agent container in import-repo mode (single-process branch)", () => {
+    const manifest = buildSessionPodManifest(importRepoSpec);
+    const main = manifest.spec?.containers?.[0];
+    const env = main?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")).toBeUndefined();
+  });
+
+  it("attaches a readinessProbe (httpGet :3000/, init=5, period=3, threshold=30) on the agent container in new-app mode", () => {
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const main = manifest.spec?.containers?.[0];
+    expect(main?.readinessProbe).toBeDefined();
+    expect(main?.readinessProbe?.httpGet?.port).toBe(OPENCODE_PREVIEW_PORT);
+    expect(main?.readinessProbe?.httpGet?.path).toBe("/");
+    expect(main?.readinessProbe?.initialDelaySeconds).toBe(5);
+    expect(main?.readinessProbe?.periodSeconds).toBe(3);
+    expect(main?.readinessProbe?.timeoutSeconds).toBe(2);
+    expect(main?.readinessProbe?.failureThreshold).toBe(30);
+  });
+
+  it("does NOT attach a readinessProbe in import-repo mode (no pre-started dev server to probe)", () => {
+    const manifest = buildSessionPodManifest(importRepoSpec);
+    const main = manifest.spec?.containers?.[0];
+    expect(main?.readinessProbe).toBeUndefined();
+  });
+});
+
+describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () => {
+  const script = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/entrypoint.sh",
+    ),
+    "utf8",
+  );
+
+  it("uses bash (process substitution + wait -n require it; node:22-alpine ships ash)", () => {
+    expect(script).toMatch(/^#!\/bin\/bash/);
+  });
+
+  it("branches on OPENVOID_NEW_APP between run_new_app and run_import_repo", () => {
+    expect(script).toMatch(/run_new_app\(\)/);
+    expect(script).toMatch(/run_import_repo\(\)/);
+    expect(script).toMatch(/OPENVOID_NEW_APP/);
+  });
+
+  it("preserves the OPENCODE_SERVER_PASSWORD precondition check (exits 1 with a clear message if unset)", () => {
+    expect(script).toMatch(/OPENCODE_SERVER_PASSWORD/);
+    expect(script).toMatch(/exit 1/);
+  });
+
+  it("new-app branch uses process substitution (not `| sed`) so $! captures pnpm/opencode, not sed", () => {
+    expect(script).toMatch(/pnpm --dir \/workspace\/repo dev > >\(sed /);
+    expect(script).toMatch(/opencode serve [^\n]*> >\(sed /);
+  });
+
+  it("new-app branch uses `wait -n` so the pod exits when the first child dies", () => {
+    expect(script).toMatch(/wait -n "\$DEV_PID" "\$OPENCODE_PID"/);
+  });
+
+  it("traps SIGTERM/INT and forwards to both children in new-app mode (avoids kubelet SIGKILL on grace expiry)", () => {
+    expect(script).toMatch(
+      /trap 'kill -TERM "\$DEV_PID" "\$OPENCODE_PID" 2>\/dev\/null \|\| true' TERM INT/,
+    );
+  });
+
+  it("preserves the explicit-command pass-through (image validation: `docker run … opencode --version`)", () => {
+    expect(script).toMatch(/exec "\$@"/);
+  });
+});
+
+describe("scaffold-extend agent instruction (infra/images/opencode/instructions/scaffold-extend.md)", () => {
+  const md = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/instructions/scaffold-extend.md",
+    ),
+    "utf8",
+  );
+
+  it("states the load-bearing 'extend, don't rebuild' rule up front", () => {
+    // The sentence wraps across lines in the markdown source; collapse
+    // whitespace before asserting so prose reflow doesn't break the test.
+    const collapsed = md.replace(/\s+/g, " ");
+    expect(collapsed).toMatch(/extend the scaffold rather than rebuild/i);
+  });
+
+  it("references the contract surfaces the agent should treat as the starting canvas", () => {
+    expect(md).toContain("app/routes/_index.tsx");
+    expect(md).toContain("app/scaffold-meta.json");
+    expect(md).toContain("vite.config.ts");
+  });
+});
+
 describe("sessionsRouter", () => {
   let ops: ReturnType<typeof makeMockOps>;
   let app: ReturnType<typeof sessionsRouter>;
@@ -524,7 +795,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
       });
 
       expect(res.status).toBe(201);
@@ -552,7 +823,7 @@ describe("sessionsRouter", () => {
         const res = await app.request("/sessions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ repo: "https://github.com/example/x" }),
+          body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
         });
         expect(res.status).toBe(201);
         const arg = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
@@ -567,6 +838,7 @@ describe("sessionsRouter", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          mode: "import-repo",
           repo: "https://github.com/example/x",
           branch: "develop",
         }),
@@ -580,7 +852,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", branch: "" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", branch: "" }),
       });
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -591,7 +863,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", branch: 42 }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", branch: 42 }),
       });
       expect(res.status).toBe(400);
     });
@@ -607,7 +879,7 @@ describe("sessionsRouter", () => {
       expect(body.code).toBe("invalid_body");
     });
 
-    it("rejects body missing `repo` with 400", async () => {
+    it("rejects body missing `mode` with 400", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -616,13 +888,64 @@ describe("sessionsRouter", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.code).toBe("invalid_request");
+      expect(body.message).toContain("mode");
     });
 
-    it("rejects empty `repo` string with 400", async () => {
+    it("rejects unknown `mode` value with 400", async () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "" }),
+        body: JSON.stringify({ mode: "fork-repo", repo: "https://github.com/example/x" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+    });
+
+    it("rejects import-repo with missing `repo` (mode-conditional rule)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "import-repo" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+    });
+
+    it("rejects new-app with a `repo` (mode-conditional rule)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "new-app",
+          repo: "https://github.com/example/x",
+        }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.code).toBe("invalid_request");
+      expect(ops.createSessionResources).not.toHaveBeenCalled();
+    });
+
+    it("rejects import-repo with a `prompt` (mode-conditional rule)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "import-repo",
+          repo: "https://github.com/example/x",
+          prompt: "but I also want…",
+        }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects empty `repo` string with 400 (import-repo)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "import-repo", repo: "" }),
       });
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -642,7 +965,7 @@ describe("sessionsRouter", () => {
         const res = await app.request("/sessions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ repo }),
+          body: JSON.stringify({ mode: "import-repo", repo }),
         });
         expect(res.status, `repo=${repo}`).toBe(400);
         const body = await res.json();
@@ -656,7 +979,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", idleTimeoutSeconds: -1 }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", idleTimeoutSeconds: -1 }),
       });
       expect(res.status).toBe(400);
     });
@@ -667,7 +990,7 @@ describe("sessionsRouter", () => {
           method: "POST",
           headers: { "content-type": "application/json" },
           // JSON cannot encode NaN/Infinity; serialize the literal text instead.
-          body: `{"repo":"https://github.com/example/x","idleTimeoutSeconds":${v}}`,
+          body: `{"mode":"import-repo","repo":"https://github.com/example/x","idleTimeoutSeconds":${v}}`,
         });
         expect(res.status, `value=${v}`).toBe(400);
       }
@@ -677,7 +1000,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x", idleTimeoutSeconds: 600 }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x", idleTimeoutSeconds: 600 }),
       });
       expect(res.status).toBe(201);
     });
@@ -687,7 +1010,7 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
       });
       expect(res.status).toBe(503);
       const body = await res.json();
@@ -700,12 +1023,33 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repo: "https://github.com/example/x" }),
+        body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
       });
       expect(res.status).toBe(503);
       const body = await res.json();
       expect(body.code).toBe("k8s_unavailable");
       expect(body.message).not.toContain("undefined");
+    });
+
+    it("returns 501 for new-app when the router has no newAppContext (operator hasn't run the runbook)", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "new-app", prompt: "todo list with reminders" }),
+      });
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.code).toBe("not_implemented_yet");
+      expect(ops.createSessionResources).not.toHaveBeenCalled();
+    });
+
+    it("rejects new-app with a non-string `prompt` with 400", async () => {
+      const res = await app.request("/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "new-app", prompt: 42 }),
+      });
+      expect(res.status).toBe(400);
     });
   });
 
@@ -846,5 +1190,232 @@ describe("sessionsRouter", () => {
       const res = await app.request("/sessions/x", { method: "DELETE" });
       expect(res.status).toBe(503);
     });
+  });
+});
+
+describe("sessionsRouter (U6: new-app POST + idempotency)", () => {
+  let ops: ReturnType<typeof makeMockOps>;
+  let createInOrg: ReturnType<typeof vi.fn>;
+  let github: { rest: { repos: { createInOrg: typeof createInOrg } } };
+  let app: ReturnType<typeof sessionsRouter>;
+
+  beforeEach(() => {
+    ops = makeMockOps();
+    createInOrg = vi.fn(async (params: { name: string }) => ({
+      data: {
+        name: params.name,
+        html_url: `https://github.com/openvoid-platform/${params.name}`,
+        clone_url: `https://github.com/openvoid-platform/${params.name}.git`,
+      },
+    }));
+    github = { rest: { repos: { createInOrg } } };
+    app = sessionsRouter({
+      sessionOps: ops,
+      newAppContext: { org: "openvoid-platform", github: github as never },
+    });
+  });
+
+  it("happy path: slugifies prompt, calls createInOrg, creates pod with new-app env (AE1)", async () => {
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "abc" },
+      body: JSON.stringify({ mode: "new-app", prompt: "todo list with reminders" }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.status).toBe("Pending");
+    expect(body.pendingPhase).toBe("provisioning");
+    expect(body.repo).toMatch(
+      /^https:\/\/github\.com\/openvoid-platform\/todo-list-with-reminders-[a-z0-9]{6}\.git$/,
+    );
+
+    expect(createInOrg).toHaveBeenCalledOnce();
+    const callArg = createInOrg.mock.calls[0][0] as { org: string; name: string };
+    expect(callArg.org).toBe("openvoid-platform");
+    expect(callArg.name).toMatch(/^todo-list-with-reminders-[a-z0-9]{6}$/);
+
+    expect(ops.createSessionResources).toHaveBeenCalledOnce();
+    const spec = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
+    expect(spec.isNewApp).toBe(true);
+    expect(spec.prompt).toBe("todo list with reminders");
+    expect(spec.repo).toMatch(/^https:\/\/github\.com\/openvoid-platform\/.+\.git$/);
+
+    const manifest = buildSessionPodManifest(spec);
+    const init = manifest.spec?.initContainers?.find((c) => c.name === "workspace-init");
+    const env = init?.env ?? [];
+    expect(env.find((e) => e.name === "OPENVOID_NEW_APP")?.value).toBe("true");
+    expect(env.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("todo list with reminders");
+    expect(env.find((e) => e.name === "REPO_URL")?.value).toBe(spec.repo);
+  });
+
+  it("idempotency: same key within TTL returns the cached sessionId; github called once total", async () => {
+    const first = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "dedupe-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    const firstBody = await first.json();
+
+    const second = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "dedupe-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    expect(second.status).toBe(201);
+    expect(await second.json()).toEqual(firstBody);
+    expect(createInOrg).toHaveBeenCalledTimes(1);
+    expect(ops.createSessionResources).toHaveBeenCalledTimes(1);
+  });
+
+  it("different idempotency keys produce different sessions (random suffix yields different slugs)", async () => {
+    const first = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "k1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    const second = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "k2" },
+      body: JSON.stringify({ mode: "new-app", prompt: "fizzbuzz" }),
+    });
+    const a = await first.json();
+    const b = await second.json();
+    expect(a.sessionId).not.toBe(b.sessionId);
+    expect(createInOrg).toHaveBeenCalledTimes(2);
+    const names = createInOrg.mock.calls.map((call) => (call[0] as { name: string }).name);
+    expect(names[0]).not.toBe(names[1]);
+  });
+
+  it("empty prompt: slug starts with `app-`, SCAFFOLD_PROMPT env is empty", async () => {
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app" }),
+    });
+    expect(res.status).toBe(201);
+    const callArg = createInOrg.mock.calls[0][0] as { name: string };
+    expect(callArg.name).toMatch(/^app-[a-z0-9]{6}$/);
+    const spec = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
+    const manifest = buildSessionPodManifest(spec);
+    const init = manifest.spec?.initContainers?.find((c) => c.name === "workspace-init");
+    expect(init?.env?.find((e) => e.name === "SCAFFOLD_PROMPT")?.value).toBe("");
+  });
+
+  it("import-repo path is preserved unchanged when the router is configured with newAppContext", async () => {
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "import-repo", repo: "https://github.com/example/x" }),
+    });
+    expect(res.status).toBe(201);
+    expect(createInOrg).not.toHaveBeenCalled();
+    const spec = ops.createSessionResources.mock.calls[0][0] as SessionPodSpec;
+    expect(spec.isNewApp).toBeUndefined();
+    expect(spec.repo).toBe("https://github.com/example/x");
+  });
+
+  it("GithubRateLimited → 503 with Retry-After; pod is NOT created", async () => {
+    createInOrg.mockRejectedValueOnce(
+      Object.assign(new Error("API rate limit exceeded"), {
+        status: 403,
+        response: {
+          headers: {
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 90),
+          },
+        },
+      }),
+    );
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "x" }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe("github_rate_limited");
+    const retryAfter = Number(res.headers.get("retry-after"));
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(ops.createSessionResources).not.toHaveBeenCalled();
+  });
+
+  it("RepoNameCollision retries up to 3x then surfaces 500 (repo_name_collision)", async () => {
+    const collision = () =>
+      Object.assign(new Error("name already exists on this account"), { status: 422 });
+    createInOrg.mockRejectedValueOnce(collision());
+    createInOrg.mockRejectedValueOnce(collision());
+    createInOrg.mockRejectedValueOnce(collision());
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "popular name" }),
+    });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe("repo_name_collision");
+    expect(createInOrg).toHaveBeenCalledTimes(3);
+    expect(ops.createSessionResources).not.toHaveBeenCalled();
+  });
+
+  it("RepoNameCollision on the first attempt then succeeds → 201", async () => {
+    createInOrg.mockRejectedValueOnce(
+      Object.assign(new Error("name already exists on this account"), { status: 422 }),
+    );
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "ok" }),
+    });
+    expect(res.status).toBe(201);
+    expect(createInOrg).toHaveBeenCalledTimes(2);
+    expect(ops.createSessionResources).toHaveBeenCalledOnce();
+  });
+
+  it("GitHub succeeds but pod-create fails → 503 k8s_unavailable; repo orphan documented (v1)", async () => {
+    ops.createSessionResources.mockRejectedValueOnce(new Error("apiserver unreachable"));
+    const res = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "new-app", prompt: "test" }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe("k8s_unavailable");
+    expect(createInOrg).toHaveBeenCalledOnce();
+  });
+
+  it("idempotency: 409 in-flight when the same key arrives while the prior call is still running", async () => {
+    let resolveFirst: () => void = () => {};
+    createInOrg.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = () =>
+            resolve({
+              data: {
+                name: "x-aaaaaa",
+                html_url: "https://github.com/openvoid-platform/x-aaaaaa",
+                clone_url: "https://github.com/openvoid-platform/x-aaaaaa.git",
+              },
+            });
+        }),
+    );
+    const firstPromise = app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "race-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "x" }),
+    });
+    // Allow the first request to enter the handler and reserve the key.
+    await new Promise((r) => setImmediate(r));
+    const second = await app.request("/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": "race-1" },
+      body: JSON.stringify({ mode: "new-app", prompt: "x" }),
+    });
+    expect(second.status).toBe(409);
+    expect((await second.json()).code).toBe("idempotency_in_flight");
+    resolveFirst();
+    const first = await firstPromise;
+    expect(first.status).toBe(201);
   });
 });

@@ -2,89 +2,60 @@ import * as assert from 'remix/assert'
 import { describe, it } from 'remix/test'
 
 import {
-  computeStepIndex,
-  cumulativeSum,
-  hashString,
-  seededShuffle,
+  STUCK_THRESHOLD_MS,
+  TOTAL_STEPS,
+  barFillPctForStep,
+  stepClassFor,
 } from '../../../../app/actions/sessions/client/provisioning-storyboard.tsx'
 
 describe('provisioning-storyboard pure helpers', () => {
-  describe('cumulativeSum', () => {
-    it('computes prefix sums', () => {
-      assert.deepEqual(cumulativeSum([3, 4, 5, 6, 7]), [3, 7, 12, 18, 25])
+  describe('stepClassFor', () => {
+    it('marks earlier steps as `step done`', () => {
+      assert.equal(stepClassFor(0, 2), 'step done')
+      assert.equal(stepClassFor(1, 2), 'step done')
     })
 
-    it('handles single-element input', () => {
-      assert.deepEqual(cumulativeSum([42]), [42])
-    })
-  })
-
-  describe('computeStepIndex', () => {
-    const cumulative = [3, 7, 12, 18, 25]
-
-    it('maps elapsed < first cumulative to step 0', () => {
-      assert.equal(computeStepIndex(0, cumulative), 0)
-      assert.equal(computeStepIndex(2.9, cumulative), 0)
+    it('marks the current step as `step active`', () => {
+      assert.equal(stepClassFor(2, 2), 'step active')
     })
 
-    it('advances to step 1 at the first boundary', () => {
-      assert.equal(computeStepIndex(3, cumulative), 1)
-      assert.equal(computeStepIndex(6.9, cumulative), 1)
-    })
-
-    it('advances through interior steps', () => {
-      assert.equal(computeStepIndex(7, cumulative), 2)
-      assert.equal(computeStepIndex(12, cumulative), 3)
-    })
-
-    it('plateaus on the last step past the total', () => {
-      assert.equal(computeStepIndex(18, cumulative), 4)
-      assert.equal(computeStepIndex(25, cumulative), 4)
-      assert.equal(computeStepIndex(120, cumulative), 4) // no overflow
+    it('marks future steps as `step`', () => {
+      assert.equal(stepClassFor(3, 2), 'step')
+      assert.equal(stepClassFor(4, 0), 'step')
     })
   })
 
-  describe('hashString', () => {
-    it('is deterministic — same input produces same hash', () => {
-      assert.equal(hashString('01HABCDEF'), hashString('01HABCDEF'))
+  describe('barFillPctForStep', () => {
+    it('grows monotonically as activeStep advances', () => {
+      const widths = [0, 1, 2, 3, 4].map((s) => barFillPctForStep(s))
+      for (let i = 1; i < widths.length; i += 1) {
+        assert.ok(widths[i]! > widths[i - 1]!)
+      }
     })
 
-    it('produces a non-zero uint32', () => {
-      const h = hashString('01HABCDEFGHJKMNPQRSTVWXYZ0')
-      assert.ok(h >= 0)
-      assert.ok(h <= 0xffffffff)
+    it('caps at 95% on the final step (the page-replace lands the user on Ready)', () => {
+      assert.equal(barFillPctForStep(TOTAL_STEPS - 1), 95)
     })
 
-    it('different inputs produce different hashes', () => {
-      // FNV-1a has reasonable distribution; two arbitrary ULIDs
-      // should differ.
-      assert.notEqual(hashString('01HAAAAAA'), hashString('01HBBBBBB'))
+    it('clamps negative or out-of-range steps', () => {
+      assert.equal(barFillPctForStep(-1), barFillPctForStep(0))
+      assert.equal(barFillPctForStep(99), barFillPctForStep(TOTAL_STEPS - 1))
+    })
+
+    it('returns 0 when totalSteps is 0 (defensive — never happens in real usage)', () => {
+      assert.equal(barFillPctForStep(2, 0), 0)
     })
   })
 
-  describe('seededShuffle', () => {
-    it('returns a permutation of the input', () => {
-      const out = seededShuffle([3, 4, 5, 6, 7], hashString('s1'))
-      assert.equal(out.length, 5)
-      assert.deepEqual(out.toSorted(), [3, 4, 5, 6, 7])
+  describe('STUCK_THRESHOLD_MS', () => {
+    it('is 60s — preserves the pre-U10 "taking longer than usual" cadence', () => {
+      assert.equal(STUCK_THRESHOLD_MS, 60_000)
     })
+  })
 
-    it('preserves the input sum (so storyboard total stays 25s)', () => {
-      const out = seededShuffle([3, 4, 5, 6, 7], hashString('session-x'))
-      const sum = out.reduce((a, b) => a + b, 0)
-      assert.equal(sum, 25)
-    })
-
-    it('is deterministic — same seed reproduces same permutation', () => {
-      const a = seededShuffle([3, 4, 5, 6, 7], hashString('01HRETRY'))
-      const b = seededShuffle([3, 4, 5, 6, 7], hashString('01HRETRY'))
-      assert.deepEqual(a, b)
-    })
-
-    it('does not mutate the input', () => {
-      const input = [3, 4, 5, 6, 7]
-      seededShuffle(input, 42)
-      assert.deepEqual(input, [3, 4, 5, 6, 7])
+  describe('TOTAL_STEPS', () => {
+    it('matches the 5 server-side PendingPhase values mapped via derive.activeStepFor', () => {
+      assert.equal(TOTAL_STEPS, 5)
     })
   })
 })

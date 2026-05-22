@@ -37,13 +37,18 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["create", "get", "list", "delete"]
-  # Read-only, scoped to a single resourceName — least privilege. The
-  # Session API only needs the password value at boot to compute the
-  # `Basic <base64>` header that ingress-nginx injects on the agent
-  # ingress. It must not be able to enumerate or read other Secrets.
+  # Read-only, scoped to named Secrets — least privilege. The Session
+  # API needs:
+  #   - opencode-server-password: to compute the `Basic <base64>`
+  #     header that ingress-nginx injects on the agent ingress.
+  #   - github-platform-creds: to read the platform GitHub org PAT at
+  #     boot for the new-app entry point (creating per-app repos under
+  #     the platform org). See
+  #     docs/runbooks/platform-github-org-setup.md.
+  # It must not be able to enumerate or read other Secrets.
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: ["opencode-server-password"]
+    resourceNames: ["opencode-server-password", "github-platform-creds"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -100,6 +105,16 @@ spec:
               value: "http"
             - name: OPENVOID_LANDING_ORIGIN
               value: "http://app.127.0.0.1.nip.io"
+            # GitHub org under which the new-app entry point creates
+            # per-app repos. The PAT lives in the github-platform-creds
+            # Secret in openvoid-sessions; this env names which org
+            # that token has permission against. Kubernetes does not
+            # support cross-namespace secretKeyRef, so the Session API
+            # reads the Secret at boot via the K8s API (RBAC on the
+            # session-api-pods Role grants `get` on this Secret) —
+            # mirroring the loadOpencodeAuthHeader pattern.
+            - name: OPENVOID_PLATFORM_GITHUB_ORG
+              value: "drigolabs"
           readinessProbe:
             httpGet:
               path: /healthz

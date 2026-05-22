@@ -277,7 +277,12 @@ function Composer() {
             <span class="kbd">↵</span>
             <span mix={css({ marginLeft: '4px' })}>to start</span>
           </span>
-          <StartSessionButton targetId={PROMPT_ID} initialPrompt={previousPrompt} />
+          <StartSessionButton
+            targetId={PROMPT_ID}
+            initialPrompt={previousPrompt}
+            label="Start a new app"
+            pendingLabel="Starting your app…"
+          />
         </span>
       </div>
       <AutoGrowTextarea targetId={PROMPT_ID} maxHeight={360} />

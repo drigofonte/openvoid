@@ -29,15 +29,6 @@ function extractIdempotencyKey(html: string): string {
   return match[1]!
 }
 
-// Default repo/branch the controller injects server-side. Mirrors
-// the constants in `app/actions/home/controller.tsx`. Tests assert
-// the upstream `createSession` body carries these regardless of
-// what the form posts (the form no longer renders those inputs;
-// the controller overwrites them via `formData.set` even if a
-// rogue request includes them).
-const DEFAULT_REPO = 'https://github.com/drigofonte/openvoid-test.git'
-const DEFAULT_BRANCH = 'main'
-
 function validForm(): URLSearchParams {
   return new URLSearchParams({
     idempotencyKey: 'idem-test-1',
@@ -110,7 +101,7 @@ describe('home / index', () => {
 })
 
 describe('home / create', () => {
-  it('redirects to /sessions/:id on a successful create', async (t) => {
+  it('redirects to /sessions/:id on a successful create with mode=new-app + prompt', async (t) => {
     const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
       jsonResponse({ sessionId: SID, status: 'Pending' as const }, { status: 201 }),
     )
@@ -126,16 +117,20 @@ describe('home / create', () => {
     const headers = init.headers as Record<string, string>
     assert.equal(headers['Idempotency-Key'], 'idem-test-1')
     const body = JSON.parse(init.body as string)
-    // Controller injects DEFAULT_REPO / DEFAULT_BRANCH via
-    // formData.set — repo/branch never come from user input in v1.
-    assert.equal(body.repo, DEFAULT_REPO)
-    assert.equal(body.branch, DEFAULT_BRANCH)
+    // U10: controller drops the legacy OPENVOID_DEFAULT_REPO injection
+    // and forwards the prompt verbatim. Session API slugifies it +
+    // creates the per-app repo under the platform org.
+    assert.equal(body.mode, 'new-app')
+    assert.equal(body.prompt, 'Add a /health endpoint')
+    assert.equal(body.repo, undefined)
   })
 
-  it('overrides any user-submitted repo/branch with the server-side defaults', async (t) => {
-    // Belt-and-suspenders: even if a rogue form posts repo/branch,
-    // the controller's formData.set wins. The form no longer
-    // renders these inputs (U4), so this is purely defensive.
+  it('ignores any user-submitted repo/branch — controller only forwards prompt + mode', async (t) => {
+    // Defence-in-depth: even if a rogue form posts repo/branch, the
+    // controller no longer reads or forwards them. The session-api
+    // type-guard would also reject a repo on a new-app POST, but
+    // having the controller never send one keeps the failure mode
+    // off the wire entirely.
     const fetchMock = t.mock.method(globalThis, 'fetch', async () =>
       jsonResponse({ sessionId: SID, status: 'Pending' as const }, { status: 201 }),
     )
@@ -151,8 +146,10 @@ describe('home / create', () => {
 
     const init = fetchMock.mock.calls[0]!.arguments[1] as RequestInit
     const upstreamBody = JSON.parse(init.body as string)
-    assert.equal(upstreamBody.repo, DEFAULT_REPO)
-    assert.equal(upstreamBody.branch, DEFAULT_BRANCH)
+    assert.equal(upstreamBody.mode, 'new-app')
+    assert.equal(upstreamBody.prompt, 'Make something')
+    assert.equal(upstreamBody.repo, undefined)
+    assert.equal(upstreamBody.branch, 'main') // openapi-required default; harmless on new-app
   })
 
   it('re-renders with status 400 when prompt is empty', async () => {

@@ -123,6 +123,6 @@ def session_pod_image(name, dir):
         labels=["images"],
     )
 
-session_pod_image("git-clone",     "infra/images/git-clone")
+session_pod_image("workspace-init", "infra/images/workspace-init")
 session_pod_image("git-finalizer", "infra/images/git-finalizer")
 session_pod_image("opencode",      "infra/images/opencode")
