@@ -875,6 +875,32 @@ describe("seed-agent script (infra/images/opencode/seed-agent.sh)", () => {
   });
 });
 
+describe("opencode.json instructions array (infra/images/opencode/opencode.json)", () => {
+  const config = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/opencode.json",
+    ),
+    "utf8",
+  );
+
+  it("loads dev-server-bind.md at its baked path", () => {
+    expect(config).toContain('"/var/opencode-config/opencode/instructions/dev-server-bind.md"');
+  });
+
+  it("loads scaffold-extend.md at its baked path (U2: the instruction is wired, not just shipped)", () => {
+    // JSON-syntax validation alone wouldn't catch a typo in the path
+    // — and the bug U2 fixes is exactly "the instruction file isn't
+    // loaded", which a path typo would silently re-introduce. Assert
+    // on the exact path string verbatim.
+    expect(config).toContain('"/var/opencode-config/opencode/instructions/scaffold-extend.md"');
+  });
+
+  it("opencode.json parses as valid JSON", () => {
+    expect(() => JSON.parse(config)).not.toThrow();
+  });
+});
+
 describe("scaffold-extend agent instruction (infra/images/opencode/instructions/scaffold-extend.md)", () => {
   const md = readFileSync(
     resolve(
