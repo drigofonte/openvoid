@@ -34,15 +34,19 @@ RUN npm install --omit=dev --no-audit --no-fund --no-package-lock opencode-ai@1.
 
 FROM node:${NODE_VERSION}
 
-# bash + pnpm are required by the new-app dual-process entrypoint:
-# entrypoint.sh uses `wait -n` and process substitution, both
-# bash-only; node:22-alpine ships ash, not bash. pnpm comes via
-# corepack (built into node 22) and just needs activation. Pin the
-# EXACT pnpm version the scaffold's `packageManager` field declares
-# so corepack uses it from cache; otherwise each session pays a
-# multi-second download tax at agent-container startup before
-# `pnpm dev` can boot. Must match workspace-init's pin (U7).
-RUN apk add --no-cache bash \
+# bash + pnpm + jq are required by the new-app dual-process entrypoint
+# and the seed-agent script:
+# - bash: entrypoint.sh uses `wait -n` and process substitution, both
+#   bash-only; node:22-alpine ships ash, not bash.
+# - pnpm: comes via corepack (built into node 22). Pin the EXACT
+#   version the scaffold's `packageManager` field declares so
+#   corepack uses it from cache; otherwise each session pays a
+#   multi-second download tax at agent-container startup before
+#   `pnpm dev` can boot. Must match workspace-init's pin.
+# - jq: read by seed-agent for JSON parse/write against OpenCode's
+#   session API and the scaffold's app/scaffold-meta.json. Avoids
+#   hand-rolled shell JSON handling for non-trivial parses.
+RUN apk add --no-cache bash jq \
     && corepack enable \
     && corepack prepare pnpm@10.33.0 --activate
 
@@ -93,7 +97,8 @@ COPY opencode.json /var/opencode-config/opencode/opencode.json
 COPY instructions /var/opencode-config/opencode/instructions
 RUN node -e 'JSON.parse(require("fs").readFileSync("/var/opencode-config/opencode/opencode.json","utf8"))'
 COPY entrypoint.sh /usr/local/bin/opencode-entrypoint
-RUN chmod +x /usr/local/bin/opencode-entrypoint
+COPY seed-agent.sh /usr/local/bin/seed-agent
+RUN chmod +x /usr/local/bin/opencode-entrypoint /usr/local/bin/seed-agent
 
 # SCC-friendly ownership: owner UID 1000 (the default kind/DOKS path)
 # AND group 0 with user-equivalent permissions (the OpenShift SCC path,

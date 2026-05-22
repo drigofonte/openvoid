@@ -758,6 +758,123 @@ describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () 
   });
 });
 
+describe("seed-agent script (infra/images/opencode/seed-agent.sh)", () => {
+  // Shell-content guards for the auto-seed orchestration. Mirrors the
+  // pattern from the scaffold-bootstrap PR's entrypoint + workspace-init
+  // guards in this same file: read the script as text, assert on its
+  // content. No native shell-test harness today.
+  const script = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/seed-agent.sh",
+    ),
+    "utf8",
+  );
+
+  // Strip comment lines once; reused by several "no leak / no contradiction"
+  // negative assertions where the explanatory comments would otherwise
+  // false-positive against the rules they document.
+  const liveScript = script
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+
+  it("uses bash (set -euo pipefail + arrays + parameter defaults rely on it)", () => {
+    expect(script).toMatch(/^#!\/bin\/bash/);
+    expect(script).toMatch(/set -euo pipefail/);
+  });
+
+  it("fast-paths on the sentinel file before any other work", () => {
+    // Sentinel check must come before the OPENCODE_SERVER_PASSWORD check
+    // and before reading the prompt file, otherwise a restart after
+    // seed success would pay the full health-poll cost on every
+    // entrypoint restart.
+    const sentinelIdx = script.indexOf('if [ -f "$SENTINEL_PATH" ]');
+    const passwordIdx = script.indexOf('OPENCODE_SERVER_PASSWORD:-');
+    expect(sentinelIdx).toBeGreaterThan(0);
+    expect(passwordIdx).toBeGreaterThan(sentinelIdx);
+  });
+
+  it("guards the prompt-file read with [ -f ] so a missing file doesn't crash under set -e", () => {
+    expect(script).toMatch(/if \[ ! -f "\$PROMPT_PATH" \]/);
+  });
+
+  it("uses curl -u opencode:\"$OPENCODE_SERVER_PASSWORD\" for HTTP Basic, never URL-embedded", () => {
+    // The discipline that keeps the PAT out of stdout (Trap 4 in
+    // docs/solutions/best-practices/per-session-pod-pnpm-dev-boot-traps-2026-05-22.md).
+    // Allow -u/-sfu/-sS+-u shapes; reject any https://user:pass@host form.
+    expect(script).toMatch(/curl[^\n]*-u "?opencode:\$\{?OPENCODE_SERVER_PASSWORD/);
+    expect(liveScript).not.toMatch(/https?:\/\/[^\s\/]+:[^\s\/@]+@/);
+  });
+
+  it("targets 127.0.0.1 loopback by default — never the public agent URL", () => {
+    // The OPENCODE_URL default is 127.0.0.1:8080. Operators can override
+    // via env, but the in-script default must be loopback per the
+    // May-09 pod-loopback / nip.io learning.
+    expect(script).toMatch(/OPENVOID_SEED_OPENCODE_URL[^\n]*127\.0\.0\.1:8080/);
+    // Negative: no .nip.io or *.agent. host appears as a fallback default.
+    expect(liveScript).not.toMatch(/\.nip\.io/);
+    expect(liveScript).not.toMatch(/\.agent\./);
+  });
+
+  it("polls OpenCode /global/health, not the K8s readinessProbe target on :3000", () => {
+    expect(script).toMatch(/\/global\/health/);
+    // Negative: never polls the Vite preview port.
+    expect(liveScript).not.toMatch(/:3000\/?"?[^\n]*health/);
+  });
+
+  it("hits POST /session for create and POST /session/{id}/message for the seed turn (not /prompt_async)", () => {
+    // Decision per ce-work clarifying question: use /message (already
+    // verified by docs/spikes/2026-05-02-opencode-endpoints.md), not
+    // /prompt_async whose existence in v1.14.33 was unverified.
+    expect(script).toMatch(/\${OPENCODE_URL}\/session"/);
+    expect(script).toMatch(/\${OPENCODE_URL}\/session\/\${session_id}\/message/);
+    expect(liveScript).not.toMatch(/prompt_async/);
+  });
+
+  it("queries existing sessions by title for idempotency (defends against sentinel loss)", () => {
+    // GET /session + jq filter by .title; double-protects sentinel.
+    // The curl call may wrap across lines so don't require curl + URL
+    // on the same line — just check both pieces appear.
+    expect(script).toContain('"${OPENCODE_URL}/session"');
+    expect(script).toMatch(/select\(\.title==\$t\)/);
+  });
+
+  it("differentiates transient vs permanent failures: sentinel only on permanent", () => {
+    // Transient (health timeout, 5xx, network failures) leaves sentinel
+    // absent so the next entrypoint restart retries. Permanent (auth/4xx)
+    // writes sentinel so we don't loop. Body checks: the giveup messages
+    // explicitly label which is which, and write_sentinel only appears
+    // alongside the permanent branches.
+    expect(script).toMatch(/giving up[^\n]*never became healthy[^\n]*transient/);
+    expect(script).toMatch(/permanent — auth misconfig or API contract drift/);
+    // 401/403/404/422 cases must include write_sentinel; 5xx (catch-all *) must not.
+    const permanentCases = script.match(/401\|403\|404\|422\)[\s\S]*?;;/g) ?? [];
+    expect(permanentCases.length).toBeGreaterThan(0);
+    for (const block of permanentCases) {
+      expect(block).toMatch(/write_sentinel/);
+    }
+  });
+
+  it("enforces a length bound on the prompt to mitigate unbounded prompt-injection payloads", () => {
+    expect(script).toMatch(/OPENVOID_SEED_PROMPT_MAX_BYTES[^\n]*4096/);
+    expect(script).toMatch(/head -c "\$PROMPT_MAX_BYTES"/);
+  });
+
+  it("wraps the raw prompt with the extend-don't-rebuild reinforcement", () => {
+    expect(script).toMatch(/Extend the existing scaffold rather than rebuilding it from scratch/);
+  });
+
+  it("uses agent: build mode (autonomous + edit-capable), not plan", () => {
+    expect(script).toMatch(/"agent":"build"|agent:"build"/);
+    expect(liveScript).not.toMatch(/"agent":"plan"|agent:"plan"/);
+  });
+
+  it("logs are [seed]-prefixed for distinguishability from [dev] / [agent] in kubectl logs", () => {
+    expect(script).toMatch(/\[seed\] %s/);
+  });
+});
+
 describe("scaffold-extend agent instruction (infra/images/opencode/instructions/scaffold-extend.md)", () => {
   const md = readFileSync(
     resolve(
