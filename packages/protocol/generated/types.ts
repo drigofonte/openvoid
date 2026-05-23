@@ -74,7 +74,7 @@ export interface components {
          * @description Boot sub-phase the session is currently in. Populated only when `status == Pending`; surfaces real init/agent progress to the Provisioning storyboard instead of a synthetic timer.
          * @enum {string}
          */
-        PendingPhase: "provisioning" | "seeding-scaffold" | "installing-deps" | "awaiting-dev-server" | "running-pre-ingress";
+        PendingPhase: "provisioning" | "seeding-scaffold" | "installing-deps" | "awaiting-dev-server" | "running-pre-ingress" | "awaiting-agent-session";
         /** @description A coding session resource as exposed by the API. */
         Session: {
             /** @description ULID identifying the session. Stable for the session's lifetime. */
@@ -97,6 +97,8 @@ export interface components {
              * @description Public URL of the user's live preview (typically port 3000). Populated when status is Running. Unauthenticated — anyone with the URL can reach the user's app.
              */
             previewUrl?: string;
+            /** @description OpenCode session ID for the auto-seeded `Main` conversation, used to construct the agent-UI deep-link URL. Populated only when `status == Running` AND the pod was created with `mode == new-app` AND the in-cluster session-list probe has resolved the session. Absent on import-repo pods (those never auto-seed) and during the brief `awaiting-agent-session` window after pod boot. */
+            agentSessionId?: string;
             /** @description Git URL of the workspace cloned at session start. */
             repo?: string;
             /** @description Branch checked out at session start. */

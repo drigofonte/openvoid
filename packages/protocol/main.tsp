@@ -44,6 +44,9 @@ enum PendingPhase {
 
   @doc("Pod is Ready inside the cluster but the per-session ingress URLs are not yet populated (Service endpoints or ingress-nginx programming lag).")
   runningPreIngress: "running-pre-ingress",
+
+  @doc("Pod is Running and is in new-app mode, but the auto-seeded `Main` OpenCode session is not yet readable from the in-cluster `GET /session` probe — landing keeps the user in provisioning so the deep-link URL is always fully constructible at click time. Never emitted for import-repo pods.")
+  awaitingAgentSession: "awaiting-agent-session",
 }
 
 @doc("Request body for creating a new coding session.")
@@ -96,6 +99,9 @@ model Session {
 
   @doc("Public URL of the user's live preview (typically port 3000). Populated when status is Running. Unauthenticated — anyone with the URL can reach the user's app.")
   previewUrl?: url;
+
+  @doc("OpenCode session ID for the auto-seeded `Main` conversation, used to construct the agent-UI deep-link URL. Populated only when `status == Running` AND the pod was created with `mode == new-app` AND the in-cluster session-list probe has resolved the session. Absent on import-repo pods (those never auto-seed) and during the brief `awaiting-agent-session` window after pod boot.")
+  agentSessionId?: string;
 
   @doc("Git URL of the workspace cloned at session start.")
   repo?: string;

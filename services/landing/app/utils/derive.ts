@@ -62,6 +62,7 @@ const ACTIVE_STEP: Record<PendingPhase, number> = {
   'installing-deps': 2,
   'awaiting-dev-server': 3,
   'running-pre-ingress': 4,
+  'awaiting-agent-session': 4,
 }
 
 export function activeStepFor(phase: PendingPhase): number {
