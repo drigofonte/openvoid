@@ -102,31 +102,71 @@ script.
 | `OPENVOID_SEED_PROMPT_PATH` | `/workspace/repo/app/scaffold-meta.json` | Where the script reads the user's prompt from. |
 | `OPENVOID_SEED_SENTINEL_PATH` | `/workspace/.openvoid-seeded` | Idempotency marker for this pod's lifetime. |
 | `OPENVOID_SEED_OPENCODE_URL` | `http://127.0.0.1:8080` | Loopback target — never the public agent URL. |
-| `OPENVOID_SEED_HEALTH_TIMEOUT_S` | `120` | How long to wait for OpenCode `/global/health` before giving up (transient — entrypoint restart will retry). |
+| `OPENVOID_SEED_HEALTH_TIMEOUT_S` | `120` | How long to wait for OpenCode `/global/health` before giving up (transient — entrypoint restart will retry). Must be a non-negative integer; non-numeric values fail the script with a configuration error. |
 | `OPENVOID_SEED_SESSION_TITLE` | `openvoid auto-seed` | Title used to find/create the OpenCode session for idempotency. |
-| `OPENVOID_SEED_PROMPT_MAX_BYTES` | `4096` | Length bound applied to the prompt before sending. Defense-in-depth against unbounded prompt-injection payloads (see "Prompt-injection acknowledgment" below). |
+| `OPENVOID_SEED_PROMPT_MAX_CHARS` | `4096` | Character bound applied to the prompt before sending (sliced UTF-8-safely via `jq`). Defense-in-depth against unbounded prompt-injection payloads (see "Prompt-injection acknowledgment" below). Must be a non-negative integer. |
 
 Override any of these by setting the same name on the Session API
 Deployment's env — `buildAgentEnv` forwards the value through to
 new-app agent containers.
 
-**Failure handling.** The script differentiates transient from
-permanent failures:
+**Failure handling.** The script classifies failures into transient
+(retry on next entrypoint restart, sentinel absent) and permanent
+(write the sentinel, don't loop):
 
-- **Transient** (health timeout, network blip, HTTP 5xx, SIGTERM
-  during execution): logs `[seed] giving up: ... (transient — entrypoint
-  restart will retry)` and exits without writing the sentinel. The
-  next time the entrypoint restarts inside the same pod (e.g., from a
-  `pnpm dev` crash), the seed retries.
-- **Permanent** (auth misconfig, 4xx, OpenCode API contract drift):
-  logs `[seed] giving up: ... (permanent — auth misconfig or API contract
-  drift)` and writes the sentinel anyway, so the pod doesn't loop
-  forever on something a retry can't fix.
+- **Transient — no sentinel.** Health timeout, HTTP 5xx, network
+  errors, SIGTERM mid-flight, missing/empty `scaffold-meta.json`,
+  missing `OPENCODE_SERVER_PASSWORD`, **and `401`/`403` on any
+  OpenCode call**. Auth misconfig is transient on purpose: the
+  operator's fix path is `kubectl set env` / Secret edit + in-place
+  container restart, which preserves the emptyDir — a sentinel
+  written here would survive the fix and silently block the retry.
+- **Permanent — write sentinel.** `404`/`422` (API contract drift —
+  needs a code or image change), session-create returned 2xx without
+  an `.id` field (also contract drift), the seed POST returned 2xx
+  but the SSE response body was empty (the "agent up but cannot
+  reach LLM" mode — provider rejected upstream auth and produced no
+  stream), and the catch-up case where an existing session with our
+  title already has messages (a prior attempt POSTed but never wrote
+  the sentinel).
 
-Double-protection against double-seeding: even if the sentinel file
-is somehow cleared mid-pod-lifetime, the script first hits
-`GET /session` and reuses any existing session whose title matches
-`OPENVOID_SEED_SESSION_TITLE` rather than creating a new one.
+Idempotency is layered:
+
+1. **Local sentinel** — fast-path for "this pod already seeded to a
+   permanent outcome." Lives at `$OPENVOID_SEED_SENTINEL_PATH`.
+2. **Session-by-title check** — even if the sentinel is missing, the
+   script hits `GET /session` to find any session whose title matches
+   `OPENVOID_SEED_SESSION_TITLE`. If found, it calls `GET /session/<id>/message`
+   and skips the POST when the session already has any messages.
+   This catches mid-stream crashes between a successful POST and the
+   sentinel write — without it, the next entrypoint restart would
+   inject a duplicate user turn.
+
+**Response-shape guards.** Two hardenings reflect documented OpenCode
+behavior (see `docs/spikes/2026-05-02-opencode-endpoints.md`):
+
+- The `/global/health` poll requires the body to parse as JSON with
+  `healthy:true`. OpenCode's HTTP server returns the SPA HTML shell
+  with status 200 for any unknown path; the JSON-shape check defends
+  against routing or SPA-fallback surprises that a status-code-only
+  check would miss.
+- The seed POST captures the SSE response body (not `/dev/null`) and
+  treats a 200-with-empty-body as a permanent silent failure —
+  catches the case where the LLM provider rejects upstream auth and
+  produces no stream.
+
+**SIGTERM discipline.** The blocking `POST /session/<id>/message`
+runs in the background with `wait`, and the script's own `TERM/INT`
+trap forwards the signal to the in-flight `curl` PID. Without this,
+`curl` would outlive the script's bash PID (bash defers signals
+while blocked in `$(...)` command substitution) and extend the pod's
+effective shutdown past the kubelet's grace window.
+
+**Env validation.** Numeric env knobs (`OPENVOID_SEED_HEALTH_TIMEOUT_S`,
+`OPENVOID_SEED_PROMPT_MAX_CHARS`) are validated as non-negative
+integers at script start. A typo like `"300s"` (Kubernetes-style
+timeout) fails with a clear configuration error rather than crashing
+mid-flight under `set -euo pipefail`.
 
 **Diagnostic recipe** when "agent didn't start":
 

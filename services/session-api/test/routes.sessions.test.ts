@@ -729,14 +729,28 @@ describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", ()
     }
   });
 
-  it("U4: forwards OPENVOID_SEED_SESSION_TITLE + OPENVOID_SEED_PROMPT_MAX_BYTES when both are set", () => {
+  it("U4: forwards OPENVOID_SEED_SESSION_TITLE + OPENVOID_SEED_PROMPT_MAX_CHARS when both are set", () => {
     vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
-    vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_BYTES", "2048");
+    vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_CHARS", "2048");
     try {
       const manifest = buildSessionPodManifest(newAppSpec);
       const env = manifest.spec?.containers?.[0]?.env ?? [];
       expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")?.value).toBe("smoke-test");
-      expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_BYTES")?.value).toBe("2048");
+      expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_CHARS")?.value).toBe("2048");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: passthrough names PROMPT_MAX_CHARS (the post-review semantic — character slice via jq), not the legacy BYTES name", () => {
+    // Regression guard: the env name reflects what the seed actually
+    // does. head -c byte truncation was replaced with jq character
+    // slicing to avoid mid-codepoint truncation on multi-byte UTF-8.
+    vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_BYTES", "should-not-forward");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_BYTES")).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }
@@ -937,25 +951,114 @@ describe("seed-agent script (infra/images/opencode/seed-agent.sh)", () => {
     expect(script).toMatch(/select\(\.title==\$t\)/);
   });
 
-  it("differentiates transient vs permanent failures: sentinel only on permanent", () => {
-    // Transient (health timeout, 5xx, network failures) leaves sentinel
-    // absent so the next entrypoint restart retries. Permanent (auth/4xx)
-    // writes sentinel so we don't loop. Body checks: the giveup messages
-    // explicitly label which is which, and write_sentinel only appears
-    // alongside the permanent branches.
+  it("differentiates transient vs permanent failures with the post-review classification", () => {
+    // Transient (no sentinel — retry on next entrypoint restart):
+    //   health timeout, 5xx, network failures, 401/403 (auth fixable),
+    //   missing password, missing/empty prompt.
+    // Permanent (write sentinel):
+    //   404/422 (contract drift), 2xx-without-.id, 2xx-with-empty-body
+    //   on /message (silent upstream auth fail), session-already-has-messages.
     expect(script).toMatch(/giving up[^\n]*never became healthy[^\n]*transient/);
-    expect(script).toMatch(/permanent — auth misconfig or API contract drift/);
-    // 401/403/404/422 cases must include write_sentinel; 5xx (catch-all *) must not.
-    const permanentCases = script.match(/401\|403\|404\|422\)[\s\S]*?;;/g) ?? [];
-    expect(permanentCases.length).toBeGreaterThan(0);
-    for (const block of permanentCases) {
+    // 401/403 must NOT write a sentinel anywhere — operator's fix path
+    // is Secret edit + in-place restart, and a sentinel on the
+    // emptyDir would survive that fix and block the retry. The match
+    // groups the literal `401|403` pattern and any case-arm body up to
+    // `;;` — every such block must lack write_sentinel.
+    const authBlocks = script.match(/401\|403\)[\s\S]*?;;/g) ?? [];
+    expect(authBlocks.length).toBeGreaterThan(0);
+    for (const block of authBlocks) {
+      expect(block).not.toMatch(/write_sentinel/);
+      expect(block).toMatch(/auth misconfig — no sentinel/);
+    }
+    // 404/422 IS permanent contract drift — must sentinel.
+    const contractBlocks = script.match(/404\|422\)[\s\S]*?;;/g) ?? [];
+    expect(contractBlocks.length).toBeGreaterThan(0);
+    for (const block of contractBlocks) {
       expect(block).toMatch(/write_sentinel/);
     }
+    // Empty prompt and missing password are transient (no sentinel)
+    // — see header comment for the operator-fix-path rationale.
+    expect(script).toMatch(/prompt is empty[^\n]*transient/);
+    expect(script).toMatch(/OPENCODE_SERVER_PASSWORD unset[^\n]*transient/);
   });
 
-  it("enforces a length bound on the prompt to mitigate unbounded prompt-injection payloads", () => {
-    expect(script).toMatch(/OPENVOID_SEED_PROMPT_MAX_BYTES[^\n]*4096/);
-    expect(script).toMatch(/head -c "\$PROMPT_MAX_BYTES"/);
+  it("enforces a character-count bound on the prompt via jq slicing (UTF-8-safe)", () => {
+    // Post-review fix: head -c truncated by bytes and could slice
+    // mid-codepoint on multi-byte UTF-8 (Japanese, emoji), producing
+    // invalid UTF-8 that jq's --arg rejects — looping forever under
+    // set -euo pipefail. jq's `.[:$n]` slices by Unicode characters.
+    expect(script).toMatch(/OPENVOID_SEED_PROMPT_MAX_CHARS[^\n]*4096/);
+    expect(script).toMatch(/jq -r --argjson n "\$PROMPT_MAX_CHARS"/);
+    expect(script).toMatch(/\.\[:\$n\]/);
+    // Regression: no byte-truncation form anywhere in the live script.
+    expect(liveScript).not.toMatch(/head -c[^\n]*PROMPT_MAX/);
+    expect(liveScript).not.toMatch(/PROMPT_MAX_BYTES/);
+  });
+
+  it("validates numeric env knobs as non-negative integers before doing any work", () => {
+    // Post-review fix: a typo like OPENVOID_SEED_HEALTH_TIMEOUT_S="300s"
+    // would crash bash arithmetic mid-flight under set -e, with a
+    // misleading "never became healthy" log on every restart.
+    expect(script).toMatch(/validate_numeric\(\)/);
+    expect(script).toMatch(/validate_numeric "\$HEALTH_TIMEOUT_S" OPENVOID_SEED_HEALTH_TIMEOUT_S/);
+    expect(script).toMatch(/validate_numeric "\$PROMPT_MAX_CHARS" OPENVOID_SEED_PROMPT_MAX_CHARS/);
+    expect(script).toMatch(/\[\[ "\$val" =~ \^\[0-9\]\+\$ \]\]/);
+  });
+
+  it("installs an internal SIGTERM trap that signals an in-flight blocking curl", () => {
+    // Post-review fix: bash defers signals while blocked in $(...)
+    // command substitution, so the entrypoint's trap (which signals
+    // only the seed-agent's bash PID) leaves the in-flight curl
+    // running past the pod's grace window. The blocking POST /message
+    // therefore runs through run_blocking_curl (background + wait)
+    // and the trap forwards SIGTERM to the captured CURL_PID.
+    expect(script).toMatch(/run_blocking_curl\(\)/);
+    expect(script).toMatch(/CURL_PID=\$!/);
+    expect(script).toMatch(/wait "\$CURL_PID"/);
+    expect(script).toMatch(/trap '[\s\S]*kill -TERM "\$CURL_PID"[\s\S]*' TERM INT/);
+  });
+
+  it("validates JSON shape on /global/health (defends against the SPA-fallback trap)", () => {
+    // Per docs/spikes/2026-05-02-opencode-endpoints.md, OpenCode's HTTP
+    // server returns the SPA HTML shell with status 200 for any
+    // unknown path. The health poll must verify {healthy:true} in the
+    // body — status-code-only would false-positive on a misroute.
+    expect(script).toMatch(/jq -e '\.healthy == true'/);
+    // The health-poll case arm explicitly checks shape before
+    // breaking out of the wait loop.
+    expect(script).toMatch(/likely SPA fallback/);
+  });
+
+  it("uses session-by-title + message-count for idempotency (not sentinel alone)", () => {
+    // Post-review fix: a sentinel-loss + reuse-existing-session path
+    // would double-seed the user turn after a mid-stream crash. The
+    // script now GETs /session/<id>/message and skips POST if any
+    // messages exist.
+    expect(script).toMatch(/GET \/session\/\$\{existing_id\}\/message|\$\{OPENCODE_URL\}\/session\/\$\{existing_id\}\/message/);
+    expect(script).toMatch(/msg_count=\$\(jq 'length'/);
+    expect(script).toMatch(/already has \$msg_count message\(s\); already seeded/);
+  });
+
+  it("treats POST /message 2xx with empty body as permanent silent failure (writes sentinel)", () => {
+    // Post-review fix: 200 is body-blind. When OpenCode returns 200
+    // but the LLM provider rejected upstream auth, the SSE stream is
+    // empty — the user sees their prompt with no response. Capturing
+    // the body and checking wc -c lets us classify this honestly.
+    expect(script).toMatch(/response_bytes=\$\(wc -c < "\$message_response"/);
+    expect(script).toMatch(/empty body[^\n]*permanent[^\n]*upstream LLM/);
+    // The empty-body branch must write_sentinel (else the pod loops
+    // forever on something a retry can't fix).
+    const emptyBodyBlock = script.match(/if \[ "\$response_bytes" -eq 0 \][\s\S]*?fi/);
+    expect(emptyBodyBlock?.[0] ?? "").toMatch(/write_sentinel/);
+  });
+
+  it("does not redirect curl -sS stderr to /dev/null (would neuter the -S flag)", () => {
+    // Post-review fix: `curl -sS ... 2>/dev/null` was constructible —
+    // -S routes errors to stderr, then 2>/dev/null discards them.
+    // Removing the redirect lets curl's network-error messages flow
+    // into the [seed]-prefixed log stream via the entrypoint's
+    // process-substitution wrapper.
+    expect(liveScript).not.toMatch(/curl -sS[^\n]*2>\/dev\/null/);
   });
 
   it("wraps the raw prompt with the extend-don't-rebuild reinforcement", () => {
