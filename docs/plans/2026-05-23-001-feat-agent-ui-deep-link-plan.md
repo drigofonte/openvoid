@@ -1,7 +1,7 @@
 ---
 title: "feat: Deep-link agent UI past project + session pickers"
 type: feat
-status: active
+status: completed
 date: 2026-05-23
 deepened: 2026-05-23
 ---
