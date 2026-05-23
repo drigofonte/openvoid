@@ -712,6 +712,72 @@ describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", ()
     const main = manifest.spec?.containers?.[0];
     expect(main?.readinessProbe).toBeUndefined();
   });
+
+  // U4: seed-tuning env passthrough — enumerate-known-keys, not
+  // prefix-scan. When the Session API process sets an OPENVOID_SEED_*
+  // env, forward it to new-app agent containers; otherwise leave
+  // seed-agent.sh's defaults in effect.
+
+  it("U4: forwards OPENVOID_SEED_HEALTH_TIMEOUT_S when set on the Session API process (new-app)", () => {
+    vi.stubEnv("OPENVOID_SEED_HEALTH_TIMEOUT_S", "300");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_HEALTH_TIMEOUT_S")?.value).toBe("300");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: forwards OPENVOID_SEED_SESSION_TITLE + OPENVOID_SEED_PROMPT_MAX_BYTES when both are set", () => {
+    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
+    vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_BYTES", "2048");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")?.value).toBe("smoke-test");
+      expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_BYTES")?.value).toBe("2048");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: omits OPENVOID_SEED_* envs when nothing is set on the Session API process (leave seed-agent defaults in effect)", () => {
+    // Defensive: clear any inherited environment that might leak in.
+    vi.unstubAllEnvs();
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const env = manifest.spec?.containers?.[0]?.env ?? [];
+    const seedEnvs = env.filter((e) => e.name?.startsWith("OPENVOID_SEED_"));
+    // The test environment shouldn't have any OPENVOID_SEED_* vars set.
+    expect(seedEnvs).toEqual([]);
+  });
+
+  it("U4: import-repo pods get NO seed envs even when the Session API has them set (no seed-agent invocation in run_import_repo)", () => {
+    vi.stubEnv("OPENVOID_SEED_HEALTH_TIMEOUT_S", "300");
+    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "should-not-leak");
+    try {
+      const manifest = buildSessionPodManifest(importRepoSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      const seedEnvs = env.filter((e) => e.name?.startsWith("OPENVOID_SEED_"));
+      expect(seedEnvs).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: enumerate-not-prefix-scan — unknown OPENVOID_SEED_* keys are NOT forwarded", () => {
+    // Defends against accidentally widening the passthrough surface.
+    // A future contributor adding a new seed env must add it to
+    // SEED_PASSTHROUGH_ENV_NAMES in lockstep with the seed-agent script.
+    vi.stubEnv("OPENVOID_SEED_UNKNOWN_KNOB", "should-not-forward");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_UNKNOWN_KNOB")).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () => {

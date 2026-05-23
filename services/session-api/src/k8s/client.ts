@@ -506,6 +506,24 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
   };
 }
 
+// Enumerate-known-keys passthrough for the seed-agent script (U4 of
+// the auto-seed plan). When any of these env vars is set on the
+// Session API process, forward it onto new-app agent pods so operators
+// can tune seed behaviour per-cluster without rebuilding the image.
+// Defaults live in seed-agent.sh; the Session API only injects when
+// an override is explicitly set. Enumerate (rather than prefix-scan
+// `OPENVOID_SEED_*`) so adding a new knob requires a code change in
+// lockstep with the seed-agent script — no accidental forwarding of
+// unintended env vars.
+const SEED_PASSTHROUGH_ENV_NAMES = [
+  "OPENVOID_SEED_PROMPT_PATH",
+  "OPENVOID_SEED_SENTINEL_PATH",
+  "OPENVOID_SEED_OPENCODE_URL",
+  "OPENVOID_SEED_HEALTH_TIMEOUT_S",
+  "OPENVOID_SEED_SESSION_TITLE",
+  "OPENVOID_SEED_PROMPT_MAX_BYTES",
+] as const;
+
 function buildAgentEnv(isNewApp: boolean): V1EnvVar[] {
   const env: V1EnvVar[] = [
     {
@@ -523,6 +541,16 @@ function buildAgentEnv(isNewApp: boolean): V1EnvVar[] {
     // opencode serve). Import-repo pods omit this and get the
     // single-process opencode-only behaviour.
     env.push({ name: "OPENVOID_NEW_APP", value: "true" });
+    // Forward seed-tuning overrides only when explicitly set —
+    // unset envs leave seed-agent.sh's own defaults in effect.
+    // Import-repo pods get no seed envs (no seed-agent invocation
+    // happens in run_import_repo).
+    for (const name of SEED_PASSTHROUGH_ENV_NAMES) {
+      const value = process.env[name];
+      if (value !== undefined && value.length > 0) {
+        env.push({ name, value });
+      }
+    }
   }
   return env;
 }
