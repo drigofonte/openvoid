@@ -86,12 +86,23 @@ run_new_app() {
   DEV_PID=$!
   opencode serve --hostname 0.0.0.0 --port 8080 > >(sed 's/^/[agent] /') 2>&1 &
   OPENCODE_PID=$!
+  # seed-agent fires the user's landing-form prompt to OpenCode as
+  # the agent's first user message, so the conversation is already
+  # in progress when the user opens the agent UI. Backgrounded with
+  # the same process-substitution log-prefix pattern; deliberately
+  # NOT named in `wait -n` below — a successful seed exit must not
+  # collapse the pod. The trap below covers the seed PID so SIGTERM
+  # during the seed's health-poll doesn't leave an orphaned curl
+  # outliving the pod's grace window.
+  seed-agent > >(sed 's/^/[seed] /') 2>&1 &
+  SEED_PID=$!
 
-  trap 'kill -TERM "$DEV_PID" "$OPENCODE_PID" 2>/dev/null || true' TERM INT
+  trap 'kill -TERM "$DEV_PID" "$OPENCODE_PID" "$SEED_PID" 2>/dev/null || true' TERM INT
 
   # `wait -n` blocks until one of the named children exits and
   # returns its exit code so the pod's CrashLoopBackOff carries
-  # meaningful status (rather than always-0 from `wait`).
+  # meaningful status (rather than always-0 from `wait`). $SEED_PID
+  # is intentionally absent from this list — see comment above.
   set +e
   wait -n "$DEV_PID" "$OPENCODE_PID"
   EXIT_CODE=$?
@@ -102,7 +113,8 @@ run_new_app() {
   # a dev-server crash (probe target stops responding) but not an
   # opencode crash (probe target keeps responding from pnpm dev).
   # Coupling pod-exit to the first death keeps the failure visible.
-  kill -TERM "$DEV_PID" "$OPENCODE_PID" 2>/dev/null || true
+  # Seed is also killed defensively in case it's still mid-execution.
+  kill -TERM "$DEV_PID" "$OPENCODE_PID" "$SEED_PID" 2>/dev/null || true
   wait 2>/dev/null || true
   exit "$EXIT_CODE"
 }

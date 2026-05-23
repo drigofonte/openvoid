@@ -199,6 +199,30 @@ that returns 201 with a `sessionId` and creates a repo under the org;
 you can verify by listing the org's repos in the GitHub UI after the
 session starts.
 
+## Troubleshooting — seed-on-boot not firing
+
+When a new-app session shows an empty agent conversation after the
+user clicks "Open agent" (the seed didn't run, or ran and failed),
+walk these checks before opening a new investigation. Full behavior
+is documented in `infra/images/opencode/README.md` "Seed-on-boot".
+
+| Symptom | Likely cause | Check |
+|---|---|---|
+| No `[seed]` lines in `kubectl logs <pod> -c session` | `OPENVOID_NEW_APP=true` not set on the agent container (script doesn't run in import-repo mode) | `kubectl describe pod <pod>` → look for `OPENVOID_NEW_APP` in the session container's env |
+| `[seed] configuration error: ... must be a non-negative integer` | A numeric `OPENVOID_SEED_*` env (e.g., `HEALTH_TIMEOUT_S`, `PROMPT_MAX_CHARS`) was set to something like `"300s"` or `"4kb"` | Fix the value on the Session API Deployment, restart the session pod. |
+| `[seed] prompt is empty` or `[seed] prompt file absent ...` | workspace-init hasn't fully written `scaffold-meta.json` yet, OR the user submitted an empty prompt | Transient — sentinel not written, next entrypoint restart will retry. `kubectl exec <pod> -c session -- cat /workspace/repo/app/scaffold-meta.json` to inspect. |
+| `[seed] giving up: ... (auth misconfig — no sentinel; operator must fix Secret + restart)` | `OPENCODE_SERVER_PASSWORD` Secret value doesn't match what OpenCode booted with | Fix the `opencode-server-password` Secret in `openvoid-sessions`, then `kubectl delete pod <pod>` (in-place container restart preserves the emptyDir; pod-recreate is the clean retry path). |
+| `[seed] giving up: ... (permanent — API contract drift)` | OpenCode version drift broke an endpoint shape (404/422), or session-create returned 2xx without an `.id` | Check the `opencode-ai` version pin in `infra/images/opencode/Dockerfile` against the running container; consult `docs/spikes/2026-05-02-opencode-endpoints.md` for the expected endpoint surface. |
+| `[seed] giving up: send-message returned 2xx with empty body (permanent — upstream LLM auth/provider failure ...)` | OpenCode accepted the user message but the LLM provider rejected the call (bad `auth.json`, expired API key, provider outage) — the SSE stream closed empty | Inspect the `opencode-auth` Secret content; check the provider's status page. Sentinel is written so the pod doesn't loop — `kubectl delete pod <pod>` after fixing. |
+| `[seed] giving up: ... (transient ...)` (any other transient) | OpenCode health timeout, HTTP 5xx, network blip — sentinel intentionally NOT written | Next entrypoint restart will retry. To force a retry now: `kubectl delete pod <pod>` (the session-api will recreate it). |
+| `[seed] sentinel present at ...; skipping` followed by an empty agent UI | Prior attempt hit a permanent outcome (likely the 200-with-empty-body case above) and wrote the sentinel | Check earlier `[seed]` lines from the same pod for the original giveup reason; if the operator has since fixed the underlying issue, delete the pod to recreate (sentinel lives on the per-pod emptyDir and is cleared by pod recreation). |
+| `[seed] session ... already has N message(s); already seeded` | The session-by-title idempotency check found a prior, successful seed turn | Working as designed. No action — the agent UI should show that conversation. |
+
+The seed is best-effort by design: a failure of the seed never blocks
+agent UI access. The user can always type their prompt manually into
+the agent UI. The seed exists to reduce friction, not to be a hard
+dependency.
+
 ## Rotation
 
 1. Generate a new PAT (step 3 of this runbook — the org-policy step 2

@@ -2,7 +2,8 @@
   "$schema": "https://opencode.ai/config.json",
   "model": "openrouter/anthropic/claude-sonnet-4.5",
   "instructions": [
-    "/var/opencode-config/opencode/instructions/dev-server-bind.md"
+    "/var/opencode-config/opencode/instructions/dev-server-bind.md",
+    "/var/opencode-config/opencode/instructions/scaffold-extend.md"
   ],
   "permission": {
     "bash": "allow",

@@ -712,6 +712,86 @@ describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", ()
     const main = manifest.spec?.containers?.[0];
     expect(main?.readinessProbe).toBeUndefined();
   });
+
+  // U4: seed-tuning env passthrough — enumerate-known-keys, not
+  // prefix-scan. When the Session API process sets an OPENVOID_SEED_*
+  // env, forward it to new-app agent containers; otherwise leave
+  // seed-agent.sh's defaults in effect.
+
+  it("U4: forwards OPENVOID_SEED_HEALTH_TIMEOUT_S when set on the Session API process (new-app)", () => {
+    vi.stubEnv("OPENVOID_SEED_HEALTH_TIMEOUT_S", "300");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_HEALTH_TIMEOUT_S")?.value).toBe("300");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: forwards OPENVOID_SEED_SESSION_TITLE + OPENVOID_SEED_PROMPT_MAX_CHARS when both are set", () => {
+    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
+    vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_CHARS", "2048");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")?.value).toBe("smoke-test");
+      expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_CHARS")?.value).toBe("2048");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: passthrough names PROMPT_MAX_CHARS (the post-review semantic — character slice via jq), not the legacy BYTES name", () => {
+    // Regression guard: the env name reflects what the seed actually
+    // does. head -c byte truncation was replaced with jq character
+    // slicing to avoid mid-codepoint truncation on multi-byte UTF-8.
+    vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_BYTES", "should-not-forward");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_BYTES")).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: omits OPENVOID_SEED_* envs when nothing is set on the Session API process (leave seed-agent defaults in effect)", () => {
+    // Defensive: clear any inherited environment that might leak in.
+    vi.unstubAllEnvs();
+    const manifest = buildSessionPodManifest(newAppSpec);
+    const env = manifest.spec?.containers?.[0]?.env ?? [];
+    const seedEnvs = env.filter((e) => e.name?.startsWith("OPENVOID_SEED_"));
+    // The test environment shouldn't have any OPENVOID_SEED_* vars set.
+    expect(seedEnvs).toEqual([]);
+  });
+
+  it("U4: import-repo pods get NO seed envs even when the Session API has them set (no seed-agent invocation in run_import_repo)", () => {
+    vi.stubEnv("OPENVOID_SEED_HEALTH_TIMEOUT_S", "300");
+    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "should-not-leak");
+    try {
+      const manifest = buildSessionPodManifest(importRepoSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      const seedEnvs = env.filter((e) => e.name?.startsWith("OPENVOID_SEED_"));
+      expect(seedEnvs).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U4: enumerate-not-prefix-scan — unknown OPENVOID_SEED_* keys are NOT forwarded", () => {
+    // Defends against accidentally widening the passthrough surface.
+    // A future contributor adding a new seed env must add it to
+    // SEED_PASSTHROUGH_ENV_NAMES in lockstep with the seed-agent script.
+    vi.stubEnv("OPENVOID_SEED_UNKNOWN_KNOB", "should-not-forward");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_UNKNOWN_KNOB")).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () => {
@@ -744,17 +824,305 @@ describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () 
   });
 
   it("new-app branch uses `wait -n` so the pod exits when the first child dies", () => {
-    expect(script).toMatch(/wait -n "\$DEV_PID" "\$OPENCODE_PID"/);
+    // SEED_PID is deliberately absent from `wait -n` — a successful
+    // seed exit must not collapse the pod (regression guard for U3).
+    expect(script).toMatch(/wait -n "\$DEV_PID" "\$OPENCODE_PID"\s*$/m);
+    expect(script).not.toMatch(/wait -n[^\n]*\$SEED_PID/);
   });
 
-  it("traps SIGTERM/INT and forwards to both children in new-app mode (avoids kubelet SIGKILL on grace expiry)", () => {
+  it("U3: backgrounds seed-agent with process-sub log prefix and captures SEED_PID after the other two PIDs", () => {
+    expect(script).toMatch(/seed-agent > >\(sed 's\/\^\/\[seed\] \/'\) 2>&1 &/);
+    // SEED_PID must be assigned after OPENCODE_PID so the trap below
+    // sees a non-empty value at SIGTERM-arrival time.
+    const opencodeIdx = script.indexOf("OPENCODE_PID=$!");
+    const seedIdx = script.indexOf("SEED_PID=$!");
+    expect(opencodeIdx).toBeGreaterThan(0);
+    expect(seedIdx).toBeGreaterThan(opencodeIdx);
+  });
+
+  it("U3: trap kill list includes SEED_PID so the seed doesn't outlive the pod's SIGTERM window", () => {
     expect(script).toMatch(
-      /trap 'kill -TERM "\$DEV_PID" "\$OPENCODE_PID" 2>\/dev\/null \|\| true' TERM INT/,
+      /trap 'kill -TERM "\$DEV_PID" "\$OPENCODE_PID" "\$SEED_PID" 2>\/dev\/null \|\| true' TERM INT/,
     );
+  });
+
+  it("U3: post-wait cleanup also kills the seed defensively", () => {
+    // The kill that runs after wait -n returns brings down both
+    // siblings AND the seed if it's still mid-execution.
+    expect(script).toMatch(
+      /kill -TERM "\$DEV_PID" "\$OPENCODE_PID" "\$SEED_PID" 2>\/dev\/null \|\| true\s*\n\s*wait 2>\/dev\/null/,
+    );
+  });
+
+  it("U3: import-repo branch is unchanged — no seed invocation, no SEED_PID", () => {
+    // Carve out the run_import_repo block and verify it doesn't
+    // reference the seed at all.
+    const importBlockMatch = script.match(/run_import_repo\(\) \{[\s\S]*?\n\}/);
+    expect(importBlockMatch).toBeTruthy();
+    const importBlock = importBlockMatch?.[0] ?? "";
+    expect(importBlock).not.toMatch(/seed-agent/);
+    expect(importBlock).not.toMatch(/SEED_PID/);
   });
 
   it("preserves the explicit-command pass-through (image validation: `docker run … opencode --version`)", () => {
     expect(script).toMatch(/exec "\$@"/);
+  });
+});
+
+describe("seed-agent script (infra/images/opencode/seed-agent.sh)", () => {
+  // Shell-content guards for the auto-seed orchestration. Mirrors the
+  // pattern from the scaffold-bootstrap PR's entrypoint + workspace-init
+  // guards in this same file: read the script as text, assert on its
+  // content. No native shell-test harness today.
+  const script = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/seed-agent.sh",
+    ),
+    "utf8",
+  );
+
+  // Strip comment lines once; reused by several "no leak / no contradiction"
+  // negative assertions where the explanatory comments would otherwise
+  // false-positive against the rules they document.
+  const liveScript = script
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+
+  it("uses bash (set -euo pipefail + arrays + parameter defaults rely on it)", () => {
+    expect(script).toMatch(/^#!\/bin\/bash/);
+    expect(script).toMatch(/set -euo pipefail/);
+  });
+
+  it("fast-paths on the sentinel file before any other work", () => {
+    // Sentinel check must come before the OPENCODE_SERVER_PASSWORD check
+    // and before reading the prompt file, otherwise a restart after
+    // seed success would pay the full health-poll cost on every
+    // entrypoint restart.
+    const sentinelIdx = script.indexOf('if [ -f "$SENTINEL_PATH" ]');
+    const passwordIdx = script.indexOf('OPENCODE_SERVER_PASSWORD:-');
+    expect(sentinelIdx).toBeGreaterThan(0);
+    expect(passwordIdx).toBeGreaterThan(sentinelIdx);
+  });
+
+  it("guards the prompt-file read with [ -f ] so a missing file doesn't crash under set -e", () => {
+    expect(script).toMatch(/if \[ ! -f "\$PROMPT_PATH" \]/);
+  });
+
+  it("uses curl -u opencode:\"$OPENCODE_SERVER_PASSWORD\" for HTTP Basic, never URL-embedded", () => {
+    // The discipline that keeps the PAT out of stdout (Trap 4 in
+    // docs/solutions/best-practices/per-session-pod-pnpm-dev-boot-traps-2026-05-22.md).
+    // Allow -u/-sfu/-sS+-u shapes; reject any https://user:pass@host form.
+    expect(script).toMatch(/curl[^\n]*-u "?opencode:\$\{?OPENCODE_SERVER_PASSWORD/);
+    expect(liveScript).not.toMatch(/https?:\/\/[^\s\/]+:[^\s\/@]+@/);
+  });
+
+  it("targets 127.0.0.1 loopback by default — never the public agent URL", () => {
+    // The OPENCODE_URL default is 127.0.0.1:8080. Operators can override
+    // via env, but the in-script default must be loopback per the
+    // May-09 pod-loopback / nip.io learning.
+    expect(script).toMatch(/OPENVOID_SEED_OPENCODE_URL[^\n]*127\.0\.0\.1:8080/);
+    // Negative: no .nip.io or *.agent. host appears as a fallback default.
+    expect(liveScript).not.toMatch(/\.nip\.io/);
+    expect(liveScript).not.toMatch(/\.agent\./);
+  });
+
+  it("polls OpenCode /global/health, not the K8s readinessProbe target on :3000", () => {
+    expect(script).toMatch(/\/global\/health/);
+    // Negative: never polls the Vite preview port.
+    expect(liveScript).not.toMatch(/:3000\/?"?[^\n]*health/);
+  });
+
+  it("hits POST /session for create and POST /session/{id}/message for the seed turn (not /prompt_async)", () => {
+    // Decision per ce-work clarifying question: use /message (already
+    // verified by docs/spikes/2026-05-02-opencode-endpoints.md), not
+    // /prompt_async whose existence in v1.14.33 was unverified.
+    expect(script).toMatch(/\${OPENCODE_URL}\/session"/);
+    expect(script).toMatch(/\${OPENCODE_URL}\/session\/\${session_id}\/message/);
+    expect(liveScript).not.toMatch(/prompt_async/);
+  });
+
+  it("queries existing sessions by title for idempotency (defends against sentinel loss)", () => {
+    // GET /session + jq filter by .title; double-protects sentinel.
+    // The curl call may wrap across lines so don't require curl + URL
+    // on the same line — just check both pieces appear.
+    expect(script).toContain('"${OPENCODE_URL}/session"');
+    expect(script).toMatch(/select\(\.title==\$t\)/);
+  });
+
+  it("differentiates transient vs permanent failures with the post-review classification", () => {
+    // Transient (no sentinel — retry on next entrypoint restart):
+    //   health timeout, 5xx, network failures, 401/403 (auth fixable),
+    //   missing password, missing/empty prompt.
+    // Permanent (write sentinel):
+    //   404/422 (contract drift), 2xx-without-.id, 2xx-with-empty-body
+    //   on /message (silent upstream auth fail), session-already-has-messages.
+    expect(script).toMatch(/giving up[^\n]*never became healthy[^\n]*transient/);
+    // 401/403 must NOT write a sentinel anywhere — operator's fix path
+    // is Secret edit + in-place restart, and a sentinel on the
+    // emptyDir would survive that fix and block the retry. The match
+    // groups the literal `401|403` pattern and any case-arm body up to
+    // `;;` — every such block must lack write_sentinel.
+    const authBlocks = script.match(/401\|403\)[\s\S]*?;;/g) ?? [];
+    expect(authBlocks.length).toBeGreaterThan(0);
+    for (const block of authBlocks) {
+      expect(block).not.toMatch(/write_sentinel/);
+      expect(block).toMatch(/auth misconfig — no sentinel/);
+    }
+    // 404/422 IS permanent contract drift — must sentinel.
+    const contractBlocks = script.match(/404\|422\)[\s\S]*?;;/g) ?? [];
+    expect(contractBlocks.length).toBeGreaterThan(0);
+    for (const block of contractBlocks) {
+      expect(block).toMatch(/write_sentinel/);
+    }
+    // Empty prompt and missing password are transient (no sentinel)
+    // — see header comment for the operator-fix-path rationale.
+    expect(script).toMatch(/prompt is empty[^\n]*transient/);
+    expect(script).toMatch(/OPENCODE_SERVER_PASSWORD unset[^\n]*transient/);
+  });
+
+  it("enforces a character-count bound on the prompt via jq slicing (UTF-8-safe)", () => {
+    // Post-review fix: head -c truncated by bytes and could slice
+    // mid-codepoint on multi-byte UTF-8 (Japanese, emoji), producing
+    // invalid UTF-8 that jq's --arg rejects — looping forever under
+    // set -euo pipefail. jq's `.[:$n]` slices by Unicode characters.
+    expect(script).toMatch(/OPENVOID_SEED_PROMPT_MAX_CHARS[^\n]*4096/);
+    expect(script).toMatch(/jq -r --argjson n "\$PROMPT_MAX_CHARS"/);
+    expect(script).toMatch(/\.\[:\$n\]/);
+    // Regression: no byte-truncation form anywhere in the live script.
+    expect(liveScript).not.toMatch(/head -c[^\n]*PROMPT_MAX/);
+    expect(liveScript).not.toMatch(/PROMPT_MAX_BYTES/);
+  });
+
+  it("validates numeric env knobs as non-negative integers before doing any work", () => {
+    // Post-review fix: a typo like OPENVOID_SEED_HEALTH_TIMEOUT_S="300s"
+    // would crash bash arithmetic mid-flight under set -e, with a
+    // misleading "never became healthy" log on every restart.
+    expect(script).toMatch(/validate_numeric\(\)/);
+    expect(script).toMatch(/validate_numeric "\$HEALTH_TIMEOUT_S" OPENVOID_SEED_HEALTH_TIMEOUT_S/);
+    expect(script).toMatch(/validate_numeric "\$PROMPT_MAX_CHARS" OPENVOID_SEED_PROMPT_MAX_CHARS/);
+    expect(script).toMatch(/\[\[ "\$val" =~ \^\[0-9\]\+\$ \]\]/);
+  });
+
+  it("installs an internal SIGTERM trap that signals an in-flight blocking curl", () => {
+    // Post-review fix: bash defers signals while blocked in $(...)
+    // command substitution, so the entrypoint's trap (which signals
+    // only the seed-agent's bash PID) leaves the in-flight curl
+    // running past the pod's grace window. The blocking POST /message
+    // therefore runs through run_blocking_curl (background + wait)
+    // and the trap forwards SIGTERM to the captured CURL_PID.
+    expect(script).toMatch(/run_blocking_curl\(\)/);
+    expect(script).toMatch(/CURL_PID=\$!/);
+    expect(script).toMatch(/wait "\$CURL_PID"/);
+    expect(script).toMatch(/trap '[\s\S]*kill -TERM "\$CURL_PID"[\s\S]*' TERM INT/);
+  });
+
+  it("validates JSON shape on /global/health (defends against the SPA-fallback trap)", () => {
+    // Per docs/spikes/2026-05-02-opencode-endpoints.md, OpenCode's HTTP
+    // server returns the SPA HTML shell with status 200 for any
+    // unknown path. The health poll must verify {healthy:true} in the
+    // body — status-code-only would false-positive on a misroute.
+    expect(script).toMatch(/jq -e '\.healthy == true'/);
+    // The health-poll case arm explicitly checks shape before
+    // breaking out of the wait loop.
+    expect(script).toMatch(/likely SPA fallback/);
+  });
+
+  it("uses session-by-title + message-count for idempotency (not sentinel alone)", () => {
+    // Post-review fix: a sentinel-loss + reuse-existing-session path
+    // would double-seed the user turn after a mid-stream crash. The
+    // script now GETs /session/<id>/message and skips POST if any
+    // messages exist.
+    expect(script).toMatch(/GET \/session\/\$\{existing_id\}\/message|\$\{OPENCODE_URL\}\/session\/\$\{existing_id\}\/message/);
+    expect(script).toMatch(/msg_count=\$\(jq 'length'/);
+    expect(script).toMatch(/already has \$msg_count message\(s\); already seeded/);
+  });
+
+  it("treats POST /message 2xx with empty body as permanent silent failure (writes sentinel)", () => {
+    // Post-review fix: 200 is body-blind. When OpenCode returns 200
+    // but the LLM provider rejected upstream auth, the SSE stream is
+    // empty — the user sees their prompt with no response. Capturing
+    // the body and checking wc -c lets us classify this honestly.
+    expect(script).toMatch(/response_bytes=\$\(wc -c < "\$message_response"/);
+    expect(script).toMatch(/empty body[^\n]*permanent[^\n]*upstream LLM/);
+    // The empty-body branch must write_sentinel (else the pod loops
+    // forever on something a retry can't fix).
+    const emptyBodyBlock = script.match(/if \[ "\$response_bytes" -eq 0 \][\s\S]*?fi/);
+    expect(emptyBodyBlock?.[0] ?? "").toMatch(/write_sentinel/);
+  });
+
+  it("does not redirect curl -sS stderr to /dev/null (would neuter the -S flag)", () => {
+    // Post-review fix: `curl -sS ... 2>/dev/null` was constructible —
+    // -S routes errors to stderr, then 2>/dev/null discards them.
+    // Removing the redirect lets curl's network-error messages flow
+    // into the [seed]-prefixed log stream via the entrypoint's
+    // process-substitution wrapper.
+    expect(liveScript).not.toMatch(/curl -sS[^\n]*2>\/dev\/null/);
+  });
+
+  it("wraps the raw prompt with the extend-don't-rebuild reinforcement", () => {
+    expect(script).toMatch(/Extend the existing scaffold rather than rebuilding it from scratch/);
+  });
+
+  it("uses agent: build mode (autonomous + edit-capable), not plan", () => {
+    expect(script).toMatch(/"agent":"build"|agent:"build"/);
+    expect(liveScript).not.toMatch(/"agent":"plan"|agent:"plan"/);
+  });
+
+  it("logs are [seed]-prefixed for distinguishability from [dev] / [agent] in kubectl logs", () => {
+    expect(script).toMatch(/\[seed\] %s/);
+  });
+});
+
+describe("opencode.json instructions array (infra/images/opencode/opencode.json)", () => {
+  const config = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/opencode.json",
+    ),
+    "utf8",
+  );
+
+  it("loads dev-server-bind.md at its baked path", () => {
+    expect(config).toContain('"/var/opencode-config/opencode/instructions/dev-server-bind.md"');
+  });
+
+  it("loads scaffold-extend.md at its baked path (U2: the instruction is wired, not just shipped)", () => {
+    // JSON-syntax validation alone wouldn't catch a typo in the path
+    // — and the bug U2 fixes is exactly "the instruction file isn't
+    // loaded", which a path typo would silently re-introduce. Assert
+    // on the exact path string verbatim.
+    expect(config).toContain('"/var/opencode-config/opencode/instructions/scaffold-extend.md"');
+  });
+
+  it("opencode.json parses as valid JSON", () => {
+    expect(() => JSON.parse(config)).not.toThrow();
+  });
+});
+
+describe("opencode Dockerfile (infra/images/opencode/Dockerfile)", () => {
+  const dockerfile = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/Dockerfile",
+    ),
+    "utf8",
+  );
+
+  it("installs the runtime tools seed-agent + entrypoint depend on (bash, curl, jq)", () => {
+    // node:22-alpine ships ash + busybox utilities — it does NOT include
+    // bash, curl, or jq. The seed-agent script uses curl-specific flags
+    // (-u, -w '%{http_code}', -o) and jq for JSON parsing; the entrypoint
+    // needs bash for `wait -n` and process substitution. Missing any of
+    // these results in "command not found" inside the pod at boot
+    // (real failure observed before this guard existed).
+    const apkLine = dockerfile.match(/apk add[^\n]*--no-cache[^\n]*/);
+    expect(apkLine, "expected an `apk add --no-cache …` line").toBeTruthy();
+    const installed = apkLine?.[0] ?? "";
+    expect(installed).toMatch(/\bbash\b/);
+    expect(installed).toMatch(/\bcurl\b/);
+    expect(installed).toMatch(/\bjq\b/);
   });
 });
 
