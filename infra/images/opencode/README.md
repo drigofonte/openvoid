@@ -103,7 +103,7 @@ script.
 | `OPENVOID_SEED_SENTINEL_PATH` | `/workspace/.openvoid-seeded` | Idempotency marker for this pod's lifetime. |
 | `OPENVOID_SEED_OPENCODE_URL` | `http://127.0.0.1:8080` | Loopback target — never the public agent URL. |
 | `OPENVOID_SEED_HEALTH_TIMEOUT_S` | `120` | How long to wait for OpenCode `/global/health` before giving up (transient — entrypoint restart will retry). Must be a non-negative integer; non-numeric values fail the script with a configuration error. |
-| `OPENVOID_SEED_SESSION_TITLE` | `openvoid auto-seed` | Title used to find/create the OpenCode session for idempotency. |
+| `OPENVOID_SEED_SESSION_TITLE` | `Main` | Title used to find/create the OpenCode session for idempotency. Visible to the user in the OpenCode session list. |
 | `OPENVOID_SEED_PROMPT_MAX_CHARS` | `4096` | Character bound applied to the prompt before sending (sliced UTF-8-safely via `jq`). Defense-in-depth against unbounded prompt-injection payloads (see "Prompt-injection acknowledgment" below). Must be a non-negative integer. |
 
 Override any of these by setting the same name on the Session API
@@ -183,7 +183,7 @@ kubectl logs -n $NS $POD -c session --tail=200 | grep '^\[seed\]'
 kubectl exec -n $NS $POD -c session -- ls -la /workspace/.openvoid-seeded 2>&1
 
 # 3. Hit OpenCode's session list from inside the pod to confirm the
-#    seed call landed (look for title="openvoid auto-seed").
+#    seed call landed (look for title="Main").
 kubectl exec -n $NS $POD -c session -- sh -c \
   'curl -sfu "opencode:$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:8080/session | head -c 500'
 ```
