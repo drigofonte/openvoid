@@ -34,19 +34,23 @@ RUN npm install --omit=dev --no-audit --no-fund --no-package-lock opencode-ai@1.
 
 FROM node:${NODE_VERSION}
 
-# bash + pnpm + jq are required by the new-app dual-process entrypoint
-# and the seed-agent script:
+# bash + curl + jq + pnpm are required by the new-app dual-process
+# entrypoint and the seed-agent script:
 # - bash: entrypoint.sh uses `wait -n` and process substitution, both
 #   bash-only; node:22-alpine ships ash, not bash.
+# - curl: seed-agent's HTTP client for OpenCode's REST API.
+#   node:22-alpine does NOT ship curl — busybox provides wget but
+#   the seed relies on curl-specific flags (-u for Basic auth,
+#   -w '%{http_code}' for status capture, -o for body capture).
+# - jq: read by seed-agent for JSON parse/write against OpenCode's
+#   session API and the scaffold's app/scaffold-meta.json. Avoids
+#   hand-rolled shell JSON handling for non-trivial parses.
 # - pnpm: comes via corepack (built into node 22). Pin the EXACT
 #   version the scaffold's `packageManager` field declares so
 #   corepack uses it from cache; otherwise each session pays a
 #   multi-second download tax at agent-container startup before
 #   `pnpm dev` can boot. Must match workspace-init's pin.
-# - jq: read by seed-agent for JSON parse/write against OpenCode's
-#   session API and the scaffold's app/scaffold-meta.json. Avoids
-#   hand-rolled shell JSON handling for non-trivial parses.
-RUN apk add --no-cache bash jq \
+RUN apk add --no-cache bash curl jq \
     && corepack enable \
     && corepack prepare pnpm@10.33.0 --activate
 

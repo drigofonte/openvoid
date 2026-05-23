@@ -1101,6 +1101,31 @@ describe("opencode.json instructions array (infra/images/opencode/opencode.json)
   });
 });
 
+describe("opencode Dockerfile (infra/images/opencode/Dockerfile)", () => {
+  const dockerfile = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../infra/images/opencode/Dockerfile",
+    ),
+    "utf8",
+  );
+
+  it("installs the runtime tools seed-agent + entrypoint depend on (bash, curl, jq)", () => {
+    // node:22-alpine ships ash + busybox utilities — it does NOT include
+    // bash, curl, or jq. The seed-agent script uses curl-specific flags
+    // (-u, -w '%{http_code}', -o) and jq for JSON parsing; the entrypoint
+    // needs bash for `wait -n` and process substitution. Missing any of
+    // these results in "command not found" inside the pod at boot
+    // (real failure observed before this guard existed).
+    const apkLine = dockerfile.match(/apk add[^\n]*--no-cache[^\n]*/);
+    expect(apkLine, "expected an `apk add --no-cache …` line").toBeTruthy();
+    const installed = apkLine?.[0] ?? "";
+    expect(installed).toMatch(/\bbash\b/);
+    expect(installed).toMatch(/\bcurl\b/);
+    expect(installed).toMatch(/\bjq\b/);
+  });
+});
+
 describe("scaffold-extend agent instruction (infra/images/opencode/instructions/scaffold-extend.md)", () => {
   const md = readFileSync(
     resolve(
