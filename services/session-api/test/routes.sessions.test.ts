@@ -2236,6 +2236,12 @@ describe("sessionsRouter GET /sessions/:id (U3: findMainSessionId gate + awaitin
     expect(body).not.toHaveProperty("agentUrl");
     expect(body).not.toHaveProperty("previewUrl");
     expect(body).not.toHaveProperty("agentSessionId");
+    // endpointUrl was set unconditionally from podIP further up in the
+    // handler; the awaiting-agent-session downgrade must clear it so
+    // the Pending response doesn't carry a Running-only field
+    // (protocol contracts endpointUrl as "Reachable URL of the agent
+    // (when status is Running)").
+    expect(body).not.toHaveProperty("endpointUrl");
     expect(ops.findMainSessionId).toHaveBeenCalledTimes(1);
   });
 

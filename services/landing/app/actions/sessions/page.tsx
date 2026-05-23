@@ -78,7 +78,7 @@ export function SessionPage() {
             initialPendingPhase={view.kind === 'provisioning' ? (view.pendingPhase ?? null) : null}
             initialAgentUrl={view.kind === 'ready' ? view.agentUrl : null}
             initialPreviewUrl={view.kind === 'ready' ? view.previewUrl : null}
-            initialAgentSessionId={view.kind === 'ready' ? view.agentSessionId : null}
+            initialAgentSessionId={view.kind === 'ready' ? (view.agentSessionId ?? null) : null}
           />
         )}
       </Layout>

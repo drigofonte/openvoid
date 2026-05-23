@@ -355,6 +355,12 @@ export function sessionsRouter(
           session.status = "Pending";
           session.pendingPhase = "awaiting-agent-session";
           delete session.error;
+          // endpointUrl was set above from pod.status.podIP, but the
+          // protocol contracts it as Running-only ("Reachable URL of
+          // the agent (when status is Running)") — clear it here so
+          // the downgraded Pending response doesn't carry a
+          // Running-only field.
+          delete session.endpointUrl;
         } else {
           session.agentSessionId = agentSessionId;
           session.agentUrl = agentUrl(sessionId);

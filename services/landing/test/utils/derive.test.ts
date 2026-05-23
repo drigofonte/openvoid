@@ -78,11 +78,15 @@ describe('deriveView', () => {
     assert.equal(view.kind, 'provisioning')
   })
 
-  // U4: ready view gates on `agentSessionId` so the deep-link URL is
-  // fully constructible at promotion time (R2). Running-with-URLs-but-
-  // no-session-id stays provisioning under `awaiting-agent-session`.
+  // Ready gating is `agentUrl && previewUrl` only. `agentSessionId` is
+  // orthogonal: present → deep-link form; absent → bare agentUrl
+  // fallback (import-repo pods, which never auto-seed). The server
+  // holds new-app pods in the `awaiting-agent-session` Pending phase
+  // until the Main session resolves, so a Running response with both
+  // URLs and no agentSessionId is the import-repo steady state (R7),
+  // not a new-app pre-resolution intermediate.
 
-  it('U4: Running with agentUrl + previewUrl but NO agentSessionId stays provisioning (R2)', () => {
+  it('Running with both URLs but NO agentSessionId promotes to ready (import-repo case, R7)', () => {
     const view = deriveView(
       input({
         status: 'Running',
@@ -90,12 +94,16 @@ describe('deriveView', () => {
         previewUrl: 'http://01habcdef.preview.example/',
       }),
     )
-    assert.equal(view.kind, 'provisioning')
-    if (view.kind !== 'provisioning') return
-    assert.equal(view.pendingPhase, 'running-pre-ingress')
+    assert.deepEqual(view, {
+      kind: 'ready',
+      sessionId: SID,
+      agentUrl: 'http://01habcdef.agent.example/',
+      previewUrl: 'http://01habcdef.preview.example/',
+      agentSessionId: undefined,
+    })
   })
 
-  it('U4: Running with agentUrl + agentSessionId but NO previewUrl stays provisioning', () => {
+  it('Running with agentUrl + agentSessionId but NO previewUrl stays provisioning', () => {
     const view = deriveView(
       input({
         status: 'Running',
