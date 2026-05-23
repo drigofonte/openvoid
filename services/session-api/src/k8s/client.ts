@@ -17,6 +17,12 @@ export const MANAGED_BY_VALUE = "session-api";
 export const REPO_ANNOTATION = "openvoid.io/repo";
 export const BRANCH_ANNOTATION = "openvoid.io/branch";
 export const CREATED_AT_ANNOTATION = "openvoid.io/created-at";
+// Set on new-app pod manifests so the GET /sessions/:id handler can
+// gate findMainSessionId on the right pod class — import-repo pods
+// never auto-seed and must not be subjected to the deep-link gate
+// (KD9). Annotation is preferred over a label here because nothing
+// selects on it; it's metadata read off pod.metadata.annotations.
+export const NEW_APP_ANNOTATION = "openvoid.io/new-app";
 
 export const ACTIVE_DEADLINE_SECONDS = 14400;
 // Sized for the slowest realistic git push over a flaky network.
@@ -157,6 +163,15 @@ export const DEFAULT_URL_SCHEME = "http";
 // browser never sees a password prompt.
 export const OPENCODE_BASIC_USER = "opencode";
 
+// Title of the auto-seeded OpenCode session created by seed-agent at
+// pod boot. Lockstep contract with infra/images/opencode/seed-agent.sh
+// (KD3, KD6): the value is hardcoded on both ends — no env knob — so
+// the deep-link gate in routes/sessions.ts can match the seed session
+// by title without drift risk. A content-guard test in the seed-agent
+// describe block of routes.sessions.test.ts asserts the literal string
+// is present in the script.
+export const MAIN_SESSION_TITLE = "Main";
+
 export type SessionPodSpec = {
   sessionId: string;
   image: string;
@@ -205,6 +220,12 @@ export interface SessionOps {
   createSessionResources(spec: SessionPodSpec): Promise<SessionResources>;
   getSessionPod(sessionId: string): Promise<V1Pod | null>;
   deleteSessionResources(sessionId: string): Promise<boolean>;
+  // Resolves the auto-seeded "Main" OpenCode session id for a new-app
+  // pod, hitting the per-session pod over cluster-internal Service DNS
+  // and caching the result for the pod's lifetime (KD2). Returns
+  // `undefined` on every documented transient failure so the route
+  // handler can downgrade to `awaiting-agent-session` without flapping.
+  findMainSessionId(sessionId: string, pod: V1Pod): Promise<string | undefined>;
 }
 
 function envOr(name: string, fallback: string): string {
@@ -329,6 +350,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         [REPO_ANNOTATION]: spec.repo,
         [BRANCH_ANNOTATION]: branch,
         [CREATED_AT_ANNOTATION]: createdAt,
+        ...(isNewApp ? { [NEW_APP_ANNOTATION]: "true" } : {}),
       },
     },
     spec: {
@@ -515,12 +537,18 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
 // `OPENVOID_SEED_*`) so adding a new knob requires a code change in
 // lockstep with the seed-agent script — no accidental forwarding of
 // unintended env vars.
+//
+// OPENVOID_SEED_SESSION_TITLE is deliberately absent (KD3): the
+// title is a hard-baked lockstep contract with MAIN_SESSION_TITLE
+// and the literal "Main" in seed-agent.sh, because the deep-link
+// gate in routes/sessions.ts matches sessions by title. An operator
+// override would silently break the gate and strand every new-app
+// session in awaiting-agent-session.
 const SEED_PASSTHROUGH_ENV_NAMES = [
   "OPENVOID_SEED_PROMPT_PATH",
   "OPENVOID_SEED_SENTINEL_PATH",
   "OPENVOID_SEED_OPENCODE_URL",
   "OPENVOID_SEED_HEALTH_TIMEOUT_S",
-  "OPENVOID_SEED_SESSION_TITLE",
   "OPENVOID_SEED_PROMPT_MAX_CHARS",
 ] as const;
 
@@ -719,12 +747,174 @@ export async function loadOpencodeAuthHeader(api: CoreV1Api): Promise<string> {
   return `Basic ${Buffer.from(`${OPENCODE_BASIC_USER}:${password}`).toString("base64")}`;
 }
 
+// Cache entry for findMainSessionId. podUid is tracked alongside the
+// session id so cache lookups can verify the entry belongs to the
+// current pod and invalidate-and-refetch on a pod-recreate that
+// happened to preserve the sid (KD2). Map<sid, entry>.
+export type MainSessionIdCacheEntry = {
+  agentSessionId: string;
+  podUid: string;
+};
+export type MainSessionIdCache = Map<string, MainSessionIdCacheEntry>;
+
+export function createMainSessionIdCache(): MainSessionIdCache {
+  return new Map();
+}
+
+export type FindMainSessionIdDeps = {
+  fetch?: typeof globalThis.fetch;
+  authHeaderValue: string;
+  cache: MainSessionIdCache;
+  timeoutMs?: number;
+};
+
+// Short-of-poll timeout. The status poll cadence in landing is 1s → 5s
+// → 10s; 3s leaves headroom for a single retry-by-poll without lagging
+// the user-visible Ready transition. Mirrors
+// services/landing/app/utils/ingress.ts:41.
+const FIND_MAIN_SESSION_TIMEOUT_MS = 3000;
+
+type OpencodeSessionSummary = {
+  id: string;
+  title: string;
+  time: { created: number };
+};
+
+function isOpencodeSession(value: unknown): value is OpencodeSessionSummary {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.id !== "string" || typeof v.title !== "string") return false;
+  if (!v.time || typeof v.time !== "object") return false;
+  const t = v.time as Record<string, unknown>;
+  return typeof t.created === "number";
+}
+
+// Finds the OpenCode session id assigned to the auto-seeded "Main"
+// session by hitting the per-session pod over cluster-internal Service
+// DNS, then caches the result keyed by `(sid, podUid)` so subsequent
+// status polls don't re-fetch (KD2). Returns `undefined` on every
+// documented transient failure (network error, abort/timeout, 5xx,
+// 401, non-JSON response, SPA-fallback 200, missing match) so the
+// caller can downgrade to Pending without losing already-cached
+// progress on other sessions.
+//
+// `authHeaderValue` stays scoped to this function invocation — never
+// assigned to wider scopes a structured logger could serialize (F3).
+// Error logs include only `{sid, error}`; 401 fires a distinct
+// operator-facing warning with a recovery path (F4).
+export async function findMainSessionId(
+  sid: string,
+  pod: V1Pod,
+  deps: FindMainSessionIdDeps,
+): Promise<string | undefined> {
+  const podUid = pod.metadata?.uid;
+  if (!podUid) return undefined;
+
+  const cached = deps.cache.get(sid);
+  if (cached && cached.podUid === podUid) {
+    return cached.agentSessionId;
+  }
+  if (cached && cached.podUid !== podUid) {
+    deps.cache.delete(sid);
+  }
+
+  const fetchFn = deps.fetch ?? globalThis.fetch;
+  const timeoutMs = deps.timeoutMs ?? FIND_MAIN_SESSION_TIMEOUT_MS;
+  const url =
+    `http://session-${sidLower(sid)}.${SESSION_NAMESPACE}` +
+    `.svc.cluster.local:${OPENCODE_AGENT_PORT}/session`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof (timer as { unref?: () => void }).unref === "function") {
+    (timer as { unref: () => void }).unref();
+  }
+
+  let response: Response;
+  try {
+    response = await fetchFn(url, {
+      method: "GET",
+      headers: {
+        Authorization: deps.authHeaderValue,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[findMainSessionId] fetch failed ${JSON.stringify({ sid, error: message })}`,
+    );
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (response.status === 401) {
+    console.warn(
+      `Authorization rejected by agent pod (sid=${sid}); ` +
+        `opencode-server-password may be stale — restart Session API after rotation`,
+    );
+    return undefined;
+  }
+
+  if (!response.ok) {
+    console.error(
+      `[findMainSessionId] non-ok response ${JSON.stringify({ sid, status: response.status })}`,
+    );
+    return undefined;
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return undefined;
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return undefined;
+  }
+
+  if (!Array.isArray(body)) return undefined;
+
+  let best: OpencodeSessionSummary | undefined;
+  for (const item of body) {
+    if (!isOpencodeSession(item)) continue;
+    if (item.title !== MAIN_SESSION_TITLE) continue;
+    if (!best || item.time.created < best.time.created) best = item;
+  }
+
+  if (!best) return undefined;
+
+  deps.cache.set(sid, { agentSessionId: best.id, podUid });
+  return best.id;
+}
+
 export class K8sSessionOps implements SessionOps {
+  // Process-singleton cache: instantiated once in the constructor so
+  // entries persist across status-poll requests for the Session API
+  // process's lifetime. UID-tracked invalidation (KD2) lives inside
+  // findMainSessionId itself.
+  private readonly mainSessionIdCache: MainSessionIdCache =
+    createMainSessionIdCache();
+
   constructor(
     private readonly core: CoreV1Api,
     private readonly networking: NetworkingV1Api,
     private readonly authHeaderValue: string,
   ) {}
+
+  async findMainSessionId(
+    sessionId: string,
+    pod: V1Pod,
+  ): Promise<string | undefined> {
+    return findMainSessionId(sessionId, pod, {
+      authHeaderValue: this.authHeaderValue,
+      cache: this.mainSessionIdCache,
+    });
+  }
 
   async createSessionResources(spec: SessionPodSpec): Promise<SessionResources> {
     // Step 1: Pod first — its UID becomes the ownerRef target for the

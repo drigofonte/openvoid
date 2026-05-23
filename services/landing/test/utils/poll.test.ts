@@ -40,7 +40,7 @@ describe('isTerminal', () => {
 
   it('treats ready + done + failed as terminal', () => {
     assert.equal(
-      isTerminal({ kind: 'ready', sessionId: 'x', agentUrl: 'http://a', previewUrl: 'http://p' }),
+      isTerminal({ kind: 'ready', sessionId: 'x', agentUrl: 'http://a', previewUrl: 'http://p', agentSessionId: 'ses_x' }),
       true,
     )
     assert.equal(isTerminal({ kind: 'done', sessionId: 'x' }), true)

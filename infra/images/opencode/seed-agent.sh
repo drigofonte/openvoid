@@ -60,13 +60,17 @@
 # Without this, curl would outlive the script's bash PID (bash defers
 # signals while blocked in $(...) command substitution).
 #
+# SESSION_TITLE is hardcoded to "Main" — lockstep contract with
+# MAIN_SESSION_TITLE in services/session-api/src/k8s/client.ts (KD3).
+# The Session API's deep-link gate (findMainSessionId) matches sessions
+# by this exact title. An env knob would silently break the gate.
+#
 # Required env (with defaults):
 #   OPENCODE_SERVER_PASSWORD               (no default; required)
 #   OPENVOID_SEED_PROMPT_PATH              /workspace/repo/app/scaffold-meta.json
 #   OPENVOID_SEED_SENTINEL_PATH            /workspace/.openvoid-seeded
 #   OPENVOID_SEED_OPENCODE_URL             http://127.0.0.1:8080
 #   OPENVOID_SEED_HEALTH_TIMEOUT_S         120
-#   OPENVOID_SEED_SESSION_TITLE            Main
 #   OPENVOID_SEED_PROMPT_MAX_CHARS         4096
 
 set -euo pipefail
@@ -85,7 +89,7 @@ PROMPT_PATH="${OPENVOID_SEED_PROMPT_PATH:-/workspace/repo/app/scaffold-meta.json
 SENTINEL_PATH="${OPENVOID_SEED_SENTINEL_PATH:-/workspace/.openvoid-seeded}"
 OPENCODE_URL="${OPENVOID_SEED_OPENCODE_URL:-http://127.0.0.1:8080}"
 HEALTH_TIMEOUT_S="${OPENVOID_SEED_HEALTH_TIMEOUT_S:-120}"
-SESSION_TITLE="${OPENVOID_SEED_SESSION_TITLE:-Main}"
+SESSION_TITLE="Main"
 PROMPT_MAX_CHARS="${OPENVOID_SEED_PROMPT_MAX_CHARS:-4096}"
 
 # Reject non-numeric env input early. Without this, a typo like

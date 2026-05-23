@@ -78,6 +78,7 @@ export function SessionPage() {
             initialPendingPhase={view.kind === 'provisioning' ? (view.pendingPhase ?? null) : null}
             initialAgentUrl={view.kind === 'ready' ? view.agentUrl : null}
             initialPreviewUrl={view.kind === 'ready' ? view.previewUrl : null}
+            initialAgentSessionId={view.kind === 'ready' ? (view.agentSessionId ?? null) : null}
           />
         )}
       </Layout>
@@ -122,9 +123,9 @@ function phaseAnnouncement(view: View, confirmStop: boolean): string {
   if (confirmStop && view.kind === 'ready') return 'Stop session — confirm dialog'
   switch (view.kind) {
     case 'provisioning':
-      return view.pendingPhase === 'running-pre-ingress'
-        ? 'Almost ready — programming routes'
-        : 'Provisioning your session'
+      if (view.pendingPhase === 'running-pre-ingress') return 'Almost ready — programming routes'
+      if (view.pendingPhase === 'awaiting-agent-session') return 'Starting up your coding agent'
+      return 'Provisioning your session'
     case 'ready':
       return 'Session ready — agent and preview links available'
     case 'stopping':
@@ -178,6 +179,7 @@ function renderView(view: View, confirmStop: boolean) {
           sessionId={view.sessionId}
           agentUrl={view.agentUrl}
           previewUrl={view.previewUrl}
+          agentSessionId={view.agentSessionId}
         />
       )
     case 'stopping':

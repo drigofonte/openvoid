@@ -41,6 +41,7 @@ const STATUS_COPY: Record<PendingPhase, string> = {
   'installing-deps': 'Installing dependencies for your new app.',
   'awaiting-dev-server': 'Booting the dev server — almost there.',
   'running-pre-ingress': 'Almost ready — programming routes for your agent and preview.',
+  'awaiting-agent-session': 'Starting up your coding agent — your prompt is already running.',
 }
 
 const STEPS = [

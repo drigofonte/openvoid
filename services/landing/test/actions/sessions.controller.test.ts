@@ -64,6 +64,27 @@ afterEach(() => {
 })
 
 describe('GET /sessions/:id', () => {
+  it('U4: renders awaiting-agent-session Provisioning with sr-only copy and step-4 active', async (t) => {
+    const session: SessionShape = {
+      sessionId: SID,
+      status: 'Pending',
+      pendingPhase: 'awaiting-agent-session',
+    }
+    t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
+
+    const router = createLandingRouter()
+    const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
+
+    assert.equal(response.status, 200)
+    const html = await response.text()
+    // sr-only announcement (page.tsx phaseAnnouncement arm)
+    assert.match(html, /Starting up your coding agent/)
+    // Provisioning STATUS_COPY for awaiting-agent-session
+    assert.match(html, /Starting up your coding agent — your prompt is already running/)
+    // Step 4 (Starting preview server) is the active step indicator
+    assert.match(html, /<li id="step-4" class="step active">/)
+  })
+
   it('renders Provisioning for a Pending session', async (t) => {
     const session: SessionShape = { sessionId: SID, status: 'Pending' }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
@@ -92,6 +113,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -113,6 +135,26 @@ describe('GET /sessions/:id', () => {
     // Done-line is now the prose link, not a separate "Stop & save" button
     assert.match(html, /Come back here and end the session/)
     assert.doesNotMatch(html, /Stop &amp; save/)
+    // U5: "Open chat" anchor href is the deep-link, carrying both
+    // the AGENT_PROJECT_PATH_B64 segment and the agentSessionId.
+    const openChatHref = html.match(
+      /href="([^"]+)"[^>]*>\s*Open chat/,
+    )
+    assert.notEqual(openChatHref, null, 'expected an "Open chat" anchor with href')
+    assert.match(openChatHref![1], /L3dvcmtzcGFjZS9yZXBv/)
+    assert.match(openChatHref![1], /\/session\/ses_x/)
+    // U5: the CopyButton's serialized `value` prop on the chat card
+    // is the full deep-link, not the raw agentUrl — the link users
+    // share/bookmark must skip the picker. clientEntry serializes
+    // props into a `<script type="application/json">` block adjacent
+    // to the SSR fallback markup, so assert the deep-link appears
+    // as a JSON-quoted string in the rendered HTML.
+    const expectedDeepLink =
+      `${AGENT_URL.replace(/\/$/, '')}/L3dvcmtzcGFjZS9yZXBv/session/ses_x`
+    assert.match(
+      html,
+      new RegExp(`"value":\\s*"${expectedDeepLink.replace(/[/.]/g, '\\$&')}"`),
+    )
   })
 
   it('renders Ready chrome — crumbs mode (8-char id-prefix), Session live pill', async (t) => {
@@ -121,6 +163,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -165,6 +208,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(
       globalThis,
@@ -186,6 +230,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -288,6 +333,7 @@ describe('POST /sessions/:id (intent=stop)', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
       repo: 'https://github.com/example/x',
       branch: 'main',
     }
@@ -329,6 +375,7 @@ describe('POST /sessions/:id (intent=stop)', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
       repo: 'https://github.com/example/x',
       branch: 'main',
     }

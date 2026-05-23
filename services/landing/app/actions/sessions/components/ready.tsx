@@ -8,6 +8,7 @@ import { Switcher } from '../../../ui/layout/switcher.tsx'
 import { Connector } from '../../../ui/connector.tsx'
 import { ShortcutHint } from '../../../ui/client/shortcut-hint.tsx'
 import { UrlRow } from '../../../ui/url-row.tsx'
+import { agentLinkUrl } from '../../../utils/agent-url.ts'
 import { CopyButton } from '../client/copy-button.tsx'
 import { OpenLinkShortcuts } from '../client/open-link-shortcuts.tsx'
 import { StopButton } from '../client/stop-button.tsx'
@@ -49,37 +50,47 @@ export interface ReadyProps {
   sessionId: string
   agentUrl: string
   previewUrl: string
+  /** OpenCode session id for the auto-seeded `Main` conversation.
+   *  Present on new-app pods (gates the deep-link URL form), absent
+   *  on import-repo pods (which fall back to the bare `agentUrl`). */
+  agentSessionId?: string
 }
 
 export function Ready() {
-  return ({ sessionId, agentUrl, previewUrl }: ReadyProps) => (
-    <Cover
-      minHeight="calc(100vh - var(--h-header))"
-      space="var(--sp-10)"
-      centered={
-        // 920px matches the Two-Links Hi-Fi reference's stage width.
-        // Wider than --w-stage (760, the canonical composer width)
-        // because the Ready hero is an editorial stage, not a
-        // composer surface.
-        <div
-          mix={css({
-            maxWidth: '920px',
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            width: '100%',
-          })}
-        >
-          <Stack space="var(--sp-10)">
-            <Hero />
-            <Duo agentUrl={agentUrl} previewUrl={previewUrl} />
-            <SplitTip />
-            <StopButton sessionId={sessionId} />
-            <OpenLinkShortcuts chatHref={agentUrl} previewHref={previewUrl} />
-          </Stack>
-        </div>
-      }
-    />
-  )
+  return ({ sessionId, agentUrl, previewUrl, agentSessionId }: ReadyProps) => {
+    // Composed once at the top of the tree so every consumer (UrlRow,
+    // CopyButton, Open-chat <a>, OpenLinkShortcuts) hands the user the
+    // same URL — what's displayed equals what's copied and clicked.
+    const chatUrl = agentLinkUrl(agentUrl, agentSessionId)
+    return (
+      <Cover
+        minHeight="calc(100vh - var(--h-header))"
+        space="var(--sp-10)"
+        centered={
+          // 920px matches the Two-Links Hi-Fi reference's stage width.
+          // Wider than --w-stage (760, the canonical composer width)
+          // because the Ready hero is an editorial stage, not a
+          // composer surface.
+          <div
+            mix={css({
+              maxWidth: '920px',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              width: '100%',
+            })}
+          >
+            <Stack space="var(--sp-10)">
+              <Hero />
+              <Duo previewUrl={previewUrl} chatUrl={chatUrl} />
+              <SplitTip />
+              <StopButton sessionId={sessionId} />
+              <OpenLinkShortcuts chatHref={chatUrl} previewHref={previewUrl} />
+            </Stack>
+          </div>
+        }
+      />
+    )
+  }
 }
 
 function Hero() {
@@ -130,12 +141,12 @@ function Hero() {
 }
 
 interface DuoProps {
-  agentUrl: string
   previewUrl: string
+  chatUrl: string
 }
 
 function Duo() {
-  return ({ agentUrl, previewUrl }: DuoProps) => (
+  return ({ previewUrl, chatUrl }: DuoProps) => (
     <div class="wf-connector-host">
       <Connector />
       {/* threshold=45rem (720px) — matches the Two-Links Hi-Fi
@@ -144,7 +155,7 @@ function Duo() {
           viewport, which is too narrow for two card-shaped
           children carrying URL rows + action buttons. */}
       <Switcher limit={2} space="var(--sp-9)" threshold="45rem">
-        <ChatCard agentUrl={agentUrl} />
+        <ChatCard chatUrl={chatUrl} />
         <PreviewCard previewUrl={previewUrl} />
       </Switcher>
     </div>
@@ -152,7 +163,7 @@ function Duo() {
 }
 
 function ChatCard() {
-  return ({ agentUrl }: { agentUrl: string }) => (
+  return ({ chatUrl }: { chatUrl: string }) => (
     <Card variant="elevated" accentTop>
       <Stack space="var(--sp-7)">
         {/* `stack-split` on the top block absorbs the card's free
@@ -195,13 +206,13 @@ function ChatCard() {
             </div>
           </Cluster>
         </div>
-        <UrlRow url={agentUrl}>
-          <CopyButton value={agentUrl} />
+        <UrlRow url={chatUrl}>
+          <CopyButton value={chatUrl} />
         </UrlRow>
         <Cluster justify="flex-start">
           <a
             class="btn-pri"
-            href={agentUrl}
+            href={chatUrl}
             target="_blank"
             rel="noopener noreferrer"
           >

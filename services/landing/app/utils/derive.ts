@@ -51,7 +51,18 @@ export type View =
        *  this by no-oping rather than animating against NaN. */
       sessionCreatedAt?: string
     }
-  | { kind: 'ready'; sessionId: string; agentUrl: string; previewUrl: string }
+  | {
+      kind: 'ready'
+      sessionId: string
+      agentUrl: string
+      previewUrl: string
+      /** Present on new-app pods once the Session API has resolved
+       *  the auto-seeded `Main` session; absent on import-repo pods
+       *  (those never auto-seed). The Ready surfaces use this via
+       *  `agentLinkUrl` to compose the deep-link form when present
+       *  or fall back to the bare `agentUrl` when not. */
+      agentSessionId?: string
+    }
   | { kind: 'stopping'; sessionId: string }
   | { kind: 'done'; sessionId: string }
   | { kind: 'failed'; sessionId: string; reason: string; retryHref: string }
@@ -62,6 +73,7 @@ const ACTIVE_STEP: Record<PendingPhase, number> = {
   'installing-deps': 2,
   'awaiting-dev-server': 3,
   'running-pre-ingress': 4,
+  'awaiting-agent-session': 4,
 }
 
 export function activeStepFor(phase: PendingPhase): number {
@@ -118,12 +130,22 @@ export function deriveView(session: DeriveInput): View {
       }
     }
     case 'Running': {
+      // Ready gating is on `agentUrl && previewUrl` — the two URLs the
+      // Ready view needs to render. `agentSessionId` is orthogonal:
+      // present on new-app pods (gates the deep-link form) and absent
+      // on import-repo pods (which never auto-seed and use the bare
+      // agentUrl). For new-app pods the Session API holds them in the
+      // `awaiting-agent-session` Pending phase until the Main session
+      // resolves, so a Running response with both URLs but no
+      // agentSessionId is the import-repo steady state (R7), not a
+      // new-app pre-resolution intermediate. See agent-url.ts:agentLinkUrl.
       if (session.agentUrl && session.previewUrl) {
         return {
           kind: 'ready',
           sessionId,
           agentUrl: session.agentUrl,
           previewUrl: session.previewUrl,
+          agentSessionId: session.agentSessionId,
         }
       }
       return {

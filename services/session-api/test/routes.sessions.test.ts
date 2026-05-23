@@ -10,6 +10,9 @@ import {
   type SessionResources,
   buildSessionPodManifest,
   buildSessionResources,
+  createMainSessionIdCache,
+  findMainSessionId,
+  MAIN_SESSION_TITLE,
   SESSION_LABEL,
   MANAGED_BY_LABEL,
   MANAGED_BY_VALUE,
@@ -30,6 +33,7 @@ import {
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
+  NEW_APP_ANNOTATION,
   ACTIVE_DEADLINE_SECONDS,
   OPENCODE_IMAGE,
   OPENCODE_AGENT_PORT,
@@ -50,6 +54,7 @@ function makeMockOps(): SessionOps & {
   createSessionResources: ReturnType<typeof vi.fn>;
   getSessionPod: ReturnType<typeof vi.fn>;
   deleteSessionResources: ReturnType<typeof vi.fn>;
+  findMainSessionId: ReturnType<typeof vi.fn>;
 } {
   return {
     createSessionResources: vi.fn(
@@ -58,6 +63,7 @@ function makeMockOps(): SessionOps & {
     ),
     getSessionPod: vi.fn(async () => null),
     deleteSessionResources: vi.fn(async () => false),
+    findMainSessionId: vi.fn(async () => undefined),
   };
 }
 
@@ -729,14 +735,23 @@ describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", ()
     }
   });
 
-  it("U4: forwards OPENVOID_SEED_SESSION_TITLE + OPENVOID_SEED_PROMPT_MAX_CHARS when both are set", () => {
-    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
+  it("U4: forwards OPENVOID_SEED_PROMPT_MAX_CHARS when set (paired forward survives the U3 title-knob drop)", () => {
     vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_CHARS", "2048");
     try {
       const manifest = buildSessionPodManifest(newAppSpec);
       const env = manifest.spec?.containers?.[0]?.env ?? [];
-      expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")?.value).toBe("smoke-test");
       expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_CHARS")?.value).toBe("2048");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U3 / KD3: OPENVOID_SEED_SESSION_TITLE is NOT forwarded even when set on the Session API process (lockstep contract — title is hardcoded in seed-agent.sh and MAIN_SESSION_TITLE)", () => {
+    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }
@@ -1785,5 +1800,543 @@ describe("sessionsRouter (U6: new-app POST + idempotency)", () => {
     resolveFirst();
     const first = await firstPromise;
     expect(first.status).toBe(201);
+  });
+});
+
+describe("findMainSessionId (U2)", () => {
+  const SID = "01HABCDEF";
+  const POD_UID = "pod-uid-1";
+
+  function podWithUid(uid: string): V1Pod {
+    return {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: { name: `session-${SID.toLowerCase()}`, namespace: "openvoid-sessions", uid },
+    };
+  }
+
+  function jsonResponse(body: unknown, init: { status?: number; contentType?: string } = {}): Response {
+    return new Response(JSON.stringify(body), {
+      status: init.status ?? 200,
+      headers: { "content-type": init.contentType ?? "application/json" },
+    });
+  }
+
+  it("happy path: returns the id of the Main session and caches the result (single fetch across two calls)", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([
+        { id: "ses_abc", title: "Main", time: { created: 1000 } },
+      ]),
+    );
+    const cache = createMainSessionIdCache();
+    const pod = podWithUid(POD_UID);
+
+    const a = await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    const b = await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+
+    expect(a).toBe("ses_abc");
+    expect(b).toBe("ses_abc");
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("picks the only Main session when the array contains other-titled siblings", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([
+        { id: "ses_other", title: "Scratch", time: { created: 500 } },
+        { id: "ses_main", title: "Main", time: { created: 1200 } },
+        { id: "ses_third", title: "Notes", time: { created: 100 } },
+      ]),
+    );
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    expect(result).toBe("ses_main");
+  });
+
+  it("KD10: two Main sessions → returns the one with the smallest time.created regardless of array order", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([
+        { id: "ses_late", title: "Main", time: { created: 9000 } },
+        { id: "ses_seed", title: "Main", time: { created: 1000 } },
+        { id: "ses_mid", title: "Main", time: { created: 5000 } },
+      ]),
+    );
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    expect(result).toBe("ses_seed");
+  });
+
+  it("no Main in array → undefined, cache not written, next call re-fetches", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([{ id: "ses_x", title: "Scratch", time: { created: 1 } }]),
+    );
+    const cache = createMainSessionIdCache();
+    const pod = podWithUid(POD_UID);
+
+    const first = await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(first).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+
+    await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("empty array → undefined, cache not written", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse([]));
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("KD2: cache hit with mismatched podUid drops the stale entry and refetches", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "ses_old", title: "Main", time: { created: 1000 } }]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "ses_new", title: "Main", time: { created: 2000 } }]),
+      );
+    const cache = createMainSessionIdCache();
+
+    const a = await findMainSessionId(SID, podWithUid("uid-1"), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(a).toBe("ses_old");
+    expect(cache.get(SID)).toEqual({ agentSessionId: "ses_old", podUid: "uid-1" });
+
+    const b = await findMainSessionId(SID, podWithUid("uid-2"), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(b).toBe("ses_new");
+    expect(cache.get(SID)).toEqual({ agentSessionId: "ses_new", podUid: "uid-2" });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("network error (TypeError) → undefined, no cache write, auth header value not in console output", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const networkErr = new TypeError("connection refused");
+    const fetchFn = vi.fn(async () => {
+      throw networkErr;
+    });
+    const cache = createMainSessionIdCache();
+
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+    for (const call of errSpy.mock.calls) {
+      for (const arg of call) {
+        expect(String(arg)).not.toContain(TEST_AUTH_HEADER);
+      }
+    }
+    errSpy.mockRestore();
+  });
+
+  it("response 500 → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(async () => new Response("boom", { status: 500 }));
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("F4: response 401 → undefined, distinct operator-facing warning, no header value in log", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchFn = vi.fn(async () => new Response("nope", { status: 401 }));
+    const cache = createMainSessionIdCache();
+
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const logged = warnSpy.mock.calls[0]?.join(" ") ?? "";
+    expect(logged).toContain(`sid=${SID}`);
+    expect(logged).toContain("opencode-server-password may be stale");
+    expect(logged).toContain("restart Session API after rotation");
+    expect(logged).not.toContain(TEST_AUTH_HEADER);
+    warnSpy.mockRestore();
+  });
+
+  it("KD5: response 200 with text/html (SPA fallback) → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response("<!doctype html><html>…</html>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+    );
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("response 200 with invalid JSON body → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response("not json", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("response 200 with JSON object instead of array → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ id: "ses_x", title: "Main" }));
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("F3: abort fires when the timeout is exceeded → undefined, no cache write, auth header not in any log/error path", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const fetchFn: typeof globalThis.fetch = ((_url, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        signal?.addEventListener("abort", () =>
+          reject(new DOMException("Aborted", "AbortError")),
+        );
+      })) as typeof globalThis.fetch;
+
+    const cache = createMainSessionIdCache();
+    const start = Date.now();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+      timeoutMs: 30,
+    });
+    const elapsed = Date.now() - start;
+
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+    expect(elapsed).toBeLessThan(500);
+    for (const spy of [errSpy, warnSpy]) {
+      for (const call of spy.mock.calls) {
+        for (const arg of call) {
+          expect(String(arg)).not.toContain(TEST_AUTH_HEADER);
+        }
+      }
+    }
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it("URL matches session-<sid-lower>.openvoid-sessions.svc.cluster.local:8080/session exactly (sid lower-cased even for mixed-case input)", async () => {
+    const mixedSid = "01HabCdEf";
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([{ id: "ses_x", title: "Main", time: { created: 1 } }]),
+    );
+    await findMainSessionId(mixedSid, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const calledUrl = String(fetchFn.mock.calls[0]?.[0] ?? "");
+    expect(calledUrl).toBe(
+      "http://session-01habcdef.openvoid-sessions.svc.cluster.local:8080/session",
+    );
+  });
+
+  it("Authorization header passed to fetch equals the injected authHeaderValue", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([{ id: "ses_x", title: "Main", time: { created: 1 } }]),
+    );
+    await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    const init = fetchFn.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization).toBe(TEST_AUTH_HEADER);
+    expect(headers.Accept).toBe("application/json");
+  });
+
+  it("returns undefined when the pod has no metadata.uid (defensive)", async () => {
+    const fetchFn = vi.fn();
+    const result = await findMainSessionId(
+      SID,
+      { apiVersion: "v1", kind: "Pod", metadata: { name: "session-x" } },
+      {
+        fetch: fetchFn,
+        authHeaderValue: TEST_AUTH_HEADER,
+        cache: createMainSessionIdCache(),
+      },
+    );
+    expect(result).toBeUndefined();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("MAIN_SESSION_TITLE is 'Main' (lockstep contract with seed-agent.sh)", () => {
+    expect(MAIN_SESSION_TITLE).toBe("Main");
+  });
+});
+
+describe("buildSessionPodManifest (U3: NEW_APP_ANNOTATION)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/openvoid-platform/x.git",
+  };
+
+  it("sets metadata.annotations[NEW_APP_ANNOTATION]='true' when isNewApp is true", () => {
+    const manifest = buildSessionPodManifest({ ...baseSpec, isNewApp: true });
+    expect(manifest.metadata?.annotations?.[NEW_APP_ANNOTATION]).toBe("true");
+  });
+
+  it("omits NEW_APP_ANNOTATION entirely when isNewApp is false / unset (import-repo)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    expect(manifest.metadata?.annotations).toBeDefined();
+    expect(manifest.metadata?.annotations).not.toHaveProperty(NEW_APP_ANNOTATION);
+  });
+
+  it("NEW_APP_ANNOTATION exported constant matches the documented annotation key", () => {
+    expect(NEW_APP_ANNOTATION).toBe("openvoid.io/new-app");
+  });
+});
+
+describe("SEED_PASSTHROUGH_ENV_NAMES (U3 / KD3: regression guard on title-knob removal)", () => {
+  it("seed-agent.sh: SESSION_TITLE is hardcoded to 'Main' and OPENVOID_SEED_SESSION_TITLE is absent (F6)", () => {
+    const script = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../infra/images/opencode/seed-agent.sh",
+      ),
+      "utf8",
+    );
+    expect(script).toContain('SESSION_TITLE="Main"');
+    // Belt + braces: no ${OPENVOID_SEED_SESSION_TITLE} interpolation
+    // anywhere in the script (the comment-block reference was removed
+    // by U3 too).
+    expect(script).not.toMatch(/OPENVOID_SEED_SESSION_TITLE/);
+  });
+});
+
+describe("sessionsRouter GET /sessions/:id (U3: findMainSessionId gate + awaiting-agent-session)", () => {
+  const SID = "01HABCDEF";
+
+  function podWithAnnotations(
+    phase: string,
+    annotations?: Record<string, string>,
+    podIP?: string,
+  ): V1Pod {
+    return {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: {
+        name: `session-${SID.toLowerCase()}`,
+        namespace: "openvoid-sessions",
+        uid: "pod-uid-1",
+        annotations,
+      },
+      status: { phase, podIP },
+    };
+  }
+
+  let ops: ReturnType<typeof makeMockOps>;
+  let app: ReturnType<typeof sessionsRouter>;
+
+  beforeEach(() => {
+    ops = makeMockOps();
+    app = sessionsRouter(ops);
+  });
+
+  it("new-app Running + findMainSessionId resolves → Running with agentUrl, previewUrl, agentSessionId", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+    );
+    ops.findMainSessionId.mockResolvedValueOnce("ses_x");
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Running");
+    expect(body.agentSessionId).toBe("ses_x");
+    expect(body.agentUrl).toBe("http://01habcdef.agent.127.0.0.1.nip.io/");
+    expect(body.previewUrl).toBe("http://01habcdef.preview.127.0.0.1.nip.io/");
+    expect(ops.findMainSessionId).toHaveBeenCalledTimes(1);
+  });
+
+  it("new-app Running + findMainSessionId returns undefined → Pending with awaiting-agent-session, no URL fields", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+    );
+    ops.findMainSessionId.mockResolvedValueOnce(undefined);
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Pending");
+    expect(body.pendingPhase).toBe("awaiting-agent-session");
+    expect(body).not.toHaveProperty("agentUrl");
+    expect(body).not.toHaveProperty("previewUrl");
+    expect(body).not.toHaveProperty("agentSessionId");
+    // endpointUrl was set unconditionally from podIP further up in the
+    // handler; the awaiting-agent-session downgrade must clear it so
+    // the Pending response doesn't carry a Running-only field
+    // (protocol contracts endpointUrl as "Reachable URL of the agent
+    // (when status is Running)").
+    expect(body).not.toHaveProperty("endpointUrl");
+    expect(ops.findMainSessionId).toHaveBeenCalledTimes(1);
+  });
+
+  it("D1/R7 regression: pod Running with annotation absent (import-repo) → findMainSessionId NOT called, Running with agentUrl/previewUrl, no agentSessionId", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Running", undefined, "10.244.0.5"),
+    );
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Running");
+    expect(body.agentUrl).toBe("http://01habcdef.agent.127.0.0.1.nip.io/");
+    expect(body.previewUrl).toBe("http://01habcdef.preview.127.0.0.1.nip.io/");
+    expect(body).not.toHaveProperty("agentSessionId");
+    expect(ops.findMainSessionId).not.toHaveBeenCalled();
+  });
+
+  it("pod Pending → findMainSessionId NOT called (no wasted HTTP per status poll)", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Pending", { [NEW_APP_ANNOTATION]: "true" }),
+    );
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Pending");
+    expect(ops.findMainSessionId).not.toHaveBeenCalled();
+  });
+
+  it("pod Failed → findMainSessionId NOT called", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Failed", { [NEW_APP_ANNOTATION]: "true" }),
+    );
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Failed");
+    expect(ops.findMainSessionId).not.toHaveBeenCalled();
+  });
+
+  it("two consecutive Running polls on a new-app pod that resolve → findMainSessionId invoked once per poll (cache lives on SessionOps; mock fakes the cache hit)", async () => {
+    // The route handler calls SessionOps.findMainSessionId for every
+    // Running new-app poll — the cache lives inside that helper.
+    // Simulate the cache by stubbing the mock to always return the
+    // same id; both polls land in Running with agentSessionId.
+    ops.getSessionPod
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      )
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      );
+    ops.findMainSessionId.mockResolvedValue("ses_cached");
+
+    const first = await app.request(`/sessions/${SID}`);
+    const firstBody = await first.json();
+    expect(firstBody.status).toBe("Running");
+    expect(firstBody.agentSessionId).toBe("ses_cached");
+
+    const second = await app.request(`/sessions/${SID}`);
+    const secondBody = await second.json();
+    expect(secondBody.status).toBe("Running");
+    expect(secondBody.agentSessionId).toBe("ses_cached");
+    // Both polls invoke findMainSessionId; the production cache
+    // (in K8sSessionOps.findMainSessionId) collapses these to a
+    // single outbound HTTP. The dedicated findMainSessionId (U2)
+    // tests cover the cache-hit-is-one-fetch invariant directly.
+    expect(ops.findMainSessionId).toHaveBeenCalledTimes(2);
+  });
+
+  it("status sequence: first poll Running + undefined → Pending awaiting-agent-session; second poll Running + 'ses_x' → Running with agentSessionId", async () => {
+    ops.getSessionPod
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      )
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      );
+    ops.findMainSessionId
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce("ses_x");
+
+    const first = await app.request(`/sessions/${SID}`);
+    const firstBody = await first.json();
+    expect(firstBody.status).toBe("Pending");
+    expect(firstBody.pendingPhase).toBe("awaiting-agent-session");
+    expect(firstBody).not.toHaveProperty("agentSessionId");
+
+    const second = await app.request(`/sessions/${SID}`);
+    const secondBody = await second.json();
+    expect(secondBody.status).toBe("Running");
+    expect(secondBody.agentSessionId).toBe("ses_x");
+    expect(secondBody.agentUrl).toBeDefined();
+    expect(secondBody.previewUrl).toBeDefined();
   });
 });
