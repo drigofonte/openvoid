@@ -64,6 +64,27 @@ afterEach(() => {
 })
 
 describe('GET /sessions/:id', () => {
+  it('U4: renders awaiting-agent-session Provisioning with sr-only copy and step-4 active', async (t) => {
+    const session: SessionShape = {
+      sessionId: SID,
+      status: 'Pending',
+      pendingPhase: 'awaiting-agent-session',
+    }
+    t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
+
+    const router = createLandingRouter()
+    const response = await router.fetch(new Request(`${ORIGIN}/sessions/${SID}`))
+
+    assert.equal(response.status, 200)
+    const html = await response.text()
+    // sr-only announcement (page.tsx phaseAnnouncement arm)
+    assert.match(html, /Starting up your coding agent/)
+    // Provisioning STATUS_COPY for awaiting-agent-session
+    assert.match(html, /Starting up your coding agent — your prompt is already running/)
+    // Step 4 (Starting preview server) is the active step indicator
+    assert.match(html, /<li id="step-4" class="step active">/)
+  })
+
   it('renders Provisioning for a Pending session', async (t) => {
     const session: SessionShape = { sessionId: SID, status: 'Pending' }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
@@ -92,6 +113,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -121,6 +143,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -165,6 +188,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(
       globalThis,
@@ -186,6 +210,7 @@ describe('GET /sessions/:id', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
     }
     t.mock.method(globalThis, 'fetch', makeFetchMock({ apiResponses: [jsonResponse(session)] }))
 
@@ -288,6 +313,7 @@ describe('POST /sessions/:id (intent=stop)', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
       repo: 'https://github.com/example/x',
       branch: 'main',
     }
@@ -329,6 +355,7 @@ describe('POST /sessions/:id (intent=stop)', () => {
       status: 'Running',
       agentUrl: AGENT_URL,
       previewUrl: PREVIEW_URL,
+      agentSessionId: 'ses_x',
       repo: 'https://github.com/example/x',
       branch: 'main',
     }

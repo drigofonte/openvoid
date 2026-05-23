@@ -34,12 +34,13 @@ describe('deriveView', () => {
     })
   })
 
-  it('Running with both URLs → ready', () => {
+  it('Running with both URLs + agentSessionId → ready', () => {
     const view = deriveView(
       input({
         status: 'Running',
         agentUrl: 'http://01habcdef.agent.example/',
         previewUrl: 'http://01habcdef.preview.example/',
+        agentSessionId: 'ses_x',
       }),
     )
     assert.deepEqual(view, {
@@ -47,6 +48,7 @@ describe('deriveView', () => {
       sessionId: SID,
       agentUrl: 'http://01habcdef.agent.example/',
       previewUrl: 'http://01habcdef.preview.example/',
+      agentSessionId: 'ses_x',
     })
   })
 
@@ -74,6 +76,59 @@ describe('deriveView', () => {
       input({ status: 'Running', previewUrl: 'http://01habcdef.preview.example/' }),
     )
     assert.equal(view.kind, 'provisioning')
+  })
+
+  // U4: ready view gates on `agentSessionId` so the deep-link URL is
+  // fully constructible at promotion time (R2). Running-with-URLs-but-
+  // no-session-id stays provisioning under `awaiting-agent-session`.
+
+  it('U4: Running with agentUrl + previewUrl but NO agentSessionId stays provisioning (R2)', () => {
+    const view = deriveView(
+      input({
+        status: 'Running',
+        agentUrl: 'http://01habcdef.agent.example/',
+        previewUrl: 'http://01habcdef.preview.example/',
+      }),
+    )
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'running-pre-ingress')
+  })
+
+  it('U4: Running with agentUrl + agentSessionId but NO previewUrl stays provisioning', () => {
+    const view = deriveView(
+      input({
+        status: 'Running',
+        agentUrl: 'http://01habcdef.agent.example/',
+        agentSessionId: 'ses_x',
+      }),
+    )
+    assert.equal(view.kind, 'provisioning')
+  })
+
+  it('U4: Pending with pendingPhase=awaiting-agent-session → activeStep 4', () => {
+    const view = deriveView(input({ status: 'Pending', pendingPhase: 'awaiting-agent-session' }))
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'awaiting-agent-session')
+    assert.equal(view.activeStep, 4)
+  })
+
+  it('U4: Pending stays pending regardless of agentSessionId presence (defensive)', () => {
+    // The server should never emit agentSessionId alongside Pending,
+    // but if it did, derive must not silently promote to ready.
+    const view = deriveView(
+      input({
+        status: 'Pending',
+        pendingPhase: 'awaiting-agent-session',
+        agentUrl: 'http://01habcdef.agent.example/',
+        previewUrl: 'http://01habcdef.preview.example/',
+        agentSessionId: 'ses_x',
+      } as DeriveInput),
+    )
+    assert.equal(view.kind, 'provisioning')
+    if (view.kind !== 'provisioning') return
+    assert.equal(view.pendingPhase, 'awaiting-agent-session')
   })
 
   it('Stopping → stopping', () => {

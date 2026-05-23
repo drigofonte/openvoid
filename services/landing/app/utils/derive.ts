@@ -51,7 +51,7 @@ export type View =
        *  this by no-oping rather than animating against NaN. */
       sessionCreatedAt?: string
     }
-  | { kind: 'ready'; sessionId: string; agentUrl: string; previewUrl: string }
+  | { kind: 'ready'; sessionId: string; agentUrl: string; previewUrl: string; agentSessionId: string }
   | { kind: 'stopping'; sessionId: string }
   | { kind: 'done'; sessionId: string }
   | { kind: 'failed'; sessionId: string; reason: string; retryHref: string }
@@ -119,12 +119,13 @@ export function deriveView(session: DeriveInput): View {
       }
     }
     case 'Running': {
-      if (session.agentUrl && session.previewUrl) {
+      if (session.agentUrl && session.previewUrl && session.agentSessionId) {
         return {
           kind: 'ready',
           sessionId,
           agentUrl: session.agentUrl,
           previewUrl: session.previewUrl,
+          agentSessionId: session.agentSessionId,
         }
       }
       return {

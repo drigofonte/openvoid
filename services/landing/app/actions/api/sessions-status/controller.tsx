@@ -28,6 +28,7 @@ export interface StatusResponse {
   activeStep?: number | null
   agentUrl?: string | null
   previewUrl?: string | null
+  agentSessionId?: string | null
   reason?: string | null
 }
 
@@ -67,6 +68,7 @@ export default {
               kind: 'ready',
               agentUrl: view.agentUrl,
               previewUrl: view.previewUrl,
+              agentSessionId: view.agentSessionId,
             })
           case 'stopping':
             return jsonResponse({ kind: 'stopping' })

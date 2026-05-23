@@ -26,12 +26,13 @@ import type { StatusResponse } from '../../api/sessions-status/controller.tsx'
  * `commit 4ab930e` for full rationale.
  */
 
-function signature(payload: Pick<StatusResponse, 'kind' | 'pendingPhase' | 'agentUrl' | 'previewUrl'>): string {
+export function signature(payload: Pick<StatusResponse, 'kind' | 'pendingPhase' | 'agentUrl' | 'previewUrl' | 'agentSessionId'>): string {
   return [
     payload.kind,
     payload.pendingPhase ?? '',
     payload.agentUrl ?? '',
     payload.previewUrl ?? '',
+    payload.agentSessionId ?? '',
   ].join('|')
 }
 
@@ -53,6 +54,7 @@ export const StatusPoller = clientEntry(
       initialPendingPhase: string | null
       initialAgentUrl: string | null
       initialPreviewUrl: string | null
+      initialAgentSessionId: string | null
     }>,
   ) {
     const start = Date.now()
@@ -66,6 +68,7 @@ export const StatusPoller = clientEntry(
       handle.props.initialPendingPhase ?? '',
       handle.props.initialAgentUrl ?? '',
       handle.props.initialPreviewUrl ?? '',
+      handle.props.initialAgentSessionId ?? '',
     ].join('|')
     let timer: ReturnType<typeof setTimeout> | undefined
 

@@ -11,6 +11,7 @@ const READY_VIEW: View = {
   sessionId: SID,
   agentUrl: 'http://01habcdef.agent.example/',
   previewUrl: 'http://01habcdef.preview.example/',
+  agentSessionId: 'ses_x',
 }
 
 function fakeFetch(
