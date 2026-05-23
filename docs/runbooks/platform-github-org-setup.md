@@ -199,6 +199,26 @@ that returns 201 with a `sessionId` and creates a repo under the org;
 you can verify by listing the org's repos in the GitHub UI after the
 session starts.
 
+## Troubleshooting — seed-on-boot not firing
+
+When a new-app session shows an empty agent conversation after the
+user clicks "Open agent" (the seed didn't run, or ran and failed),
+walk these checks before opening a new investigation. Full behavior
+is documented in `infra/images/opencode/README.md` "Seed-on-boot".
+
+| Symptom | Likely cause | Check |
+|---|---|---|
+| No `[seed]` lines in `kubectl logs <pod> -c session` | `OPENVOID_NEW_APP=true` not set on the agent container (script doesn't run in import-repo mode) | `kubectl describe pod <pod>` → look for `OPENVOID_NEW_APP` in the session container's env |
+| `[seed] prompt is empty` | User submitted the form with no prompt, OR workspace-init wrote an empty `scaffold-meta.json` | `kubectl exec <pod> -c session -- cat /workspace/repo/app/scaffold-meta.json` |
+| `[seed] giving up: ... (transient ...)` | OpenCode health timeout, network blip, or HTTP 5xx — sentinel intentionally NOT written | Next entrypoint restart will retry. To force a retry now: `kubectl delete pod <pod>` (the session-api will recreate it). |
+| `[seed] giving up: ... (permanent — auth misconfig or API contract drift)` | `OPENCODE_SERVER_PASSWORD` Secret value doesn't match what OpenCode booted with, OR OpenCode version drift broke the endpoint shape | Check the `opencode-server-password` Secret in `openvoid-sessions`; check the `opencode-ai` version pin in `infra/images/opencode/Dockerfile` against the running container. |
+| `[seed] sentinel present at ...; skipping` on the wrong session | Sentinel persisted across pod restart (shouldn't be possible — workspace is `emptyDir`) | `kubectl exec <pod> -c session -- ls -la /workspace/.openvoid-seeded` and confirm the volume mount is genuinely emptyDir. |
+
+The seed is best-effort by design: a failure of the seed never blocks
+agent UI access. The user can always type their prompt manually into
+the agent UI. The seed exists to reduce friction, not to be a hard
+dependency.
+
 ## Rotation
 
 1. Generate a new PAT (step 3 of this runbook — the org-policy step 2
