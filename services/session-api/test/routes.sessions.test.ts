@@ -744,13 +744,44 @@ describe("opencode entrypoint script (infra/images/opencode/entrypoint.sh)", () 
   });
 
   it("new-app branch uses `wait -n` so the pod exits when the first child dies", () => {
-    expect(script).toMatch(/wait -n "\$DEV_PID" "\$OPENCODE_PID"/);
+    // SEED_PID is deliberately absent from `wait -n` — a successful
+    // seed exit must not collapse the pod (regression guard for U3).
+    expect(script).toMatch(/wait -n "\$DEV_PID" "\$OPENCODE_PID"\s*$/m);
+    expect(script).not.toMatch(/wait -n[^\n]*\$SEED_PID/);
   });
 
-  it("traps SIGTERM/INT and forwards to both children in new-app mode (avoids kubelet SIGKILL on grace expiry)", () => {
+  it("U3: backgrounds seed-agent with process-sub log prefix and captures SEED_PID after the other two PIDs", () => {
+    expect(script).toMatch(/seed-agent > >\(sed 's\/\^\/\[seed\] \/'\) 2>&1 &/);
+    // SEED_PID must be assigned after OPENCODE_PID so the trap below
+    // sees a non-empty value at SIGTERM-arrival time.
+    const opencodeIdx = script.indexOf("OPENCODE_PID=$!");
+    const seedIdx = script.indexOf("SEED_PID=$!");
+    expect(opencodeIdx).toBeGreaterThan(0);
+    expect(seedIdx).toBeGreaterThan(opencodeIdx);
+  });
+
+  it("U3: trap kill list includes SEED_PID so the seed doesn't outlive the pod's SIGTERM window", () => {
     expect(script).toMatch(
-      /trap 'kill -TERM "\$DEV_PID" "\$OPENCODE_PID" 2>\/dev\/null \|\| true' TERM INT/,
+      /trap 'kill -TERM "\$DEV_PID" "\$OPENCODE_PID" "\$SEED_PID" 2>\/dev\/null \|\| true' TERM INT/,
     );
+  });
+
+  it("U3: post-wait cleanup also kills the seed defensively", () => {
+    // The kill that runs after wait -n returns brings down both
+    // siblings AND the seed if it's still mid-execution.
+    expect(script).toMatch(
+      /kill -TERM "\$DEV_PID" "\$OPENCODE_PID" "\$SEED_PID" 2>\/dev\/null \|\| true\s*\n\s*wait 2>\/dev\/null/,
+    );
+  });
+
+  it("U3: import-repo branch is unchanged — no seed invocation, no SEED_PID", () => {
+    // Carve out the run_import_repo block and verify it doesn't
+    // reference the seed at all.
+    const importBlockMatch = script.match(/run_import_repo\(\) \{[\s\S]*?\n\}/);
+    expect(importBlockMatch).toBeTruthy();
+    const importBlock = importBlockMatch?.[0] ?? "";
+    expect(importBlock).not.toMatch(/seed-agent/);
+    expect(importBlock).not.toMatch(/SEED_PID/);
   });
 
   it("preserves the explicit-command pass-through (image validation: `docker run … opencode --version`)", () => {
