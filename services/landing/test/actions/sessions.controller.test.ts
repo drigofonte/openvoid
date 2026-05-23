@@ -135,6 +135,26 @@ describe('GET /sessions/:id', () => {
     // Done-line is now the prose link, not a separate "Stop & save" button
     assert.match(html, /Come back here and end the session/)
     assert.doesNotMatch(html, /Stop &amp; save/)
+    // U5: "Open chat" anchor href is the deep-link, carrying both
+    // the AGENT_PROJECT_PATH_B64 segment and the agentSessionId.
+    const openChatHref = html.match(
+      /href="([^"]+)"[^>]*>\s*Open chat/,
+    )
+    assert.notEqual(openChatHref, null, 'expected an "Open chat" anchor with href')
+    assert.match(openChatHref![1], /L3dvcmtzcGFjZS9yZXBv/)
+    assert.match(openChatHref![1], /\/session\/ses_x/)
+    // U5: the CopyButton's serialized `value` prop on the chat card
+    // is the full deep-link, not the raw agentUrl — the link users
+    // share/bookmark must skip the picker. clientEntry serializes
+    // props into a `<script type="application/json">` block adjacent
+    // to the SSR fallback markup, so assert the deep-link appears
+    // as a JSON-quoted string in the rendered HTML.
+    const expectedDeepLink =
+      `${AGENT_URL.replace(/\/$/, '')}/L3dvcmtzcGFjZS9yZXBv/session/ses_x`
+    assert.match(
+      html,
+      new RegExp(`"value":\\s*"${expectedDeepLink.replace(/[/.]/g, '\\$&')}"`),
+    )
   })
 
   it('renders Ready chrome — crumbs mode (8-char id-prefix), Session live pill', async (t) => {

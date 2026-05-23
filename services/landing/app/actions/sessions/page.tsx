@@ -179,6 +179,7 @@ function renderView(view: View, confirmStop: boolean) {
           sessionId={view.sessionId}
           agentUrl={view.agentUrl}
           previewUrl={view.previewUrl}
+          agentSessionId={view.agentSessionId}
         />
       )
     case 'stopping':
