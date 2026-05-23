@@ -17,6 +17,12 @@ export const MANAGED_BY_VALUE = "session-api";
 export const REPO_ANNOTATION = "openvoid.io/repo";
 export const BRANCH_ANNOTATION = "openvoid.io/branch";
 export const CREATED_AT_ANNOTATION = "openvoid.io/created-at";
+// Set on new-app pod manifests so the GET /sessions/:id handler can
+// gate findMainSessionId on the right pod class — import-repo pods
+// never auto-seed and must not be subjected to the deep-link gate
+// (KD9). Annotation is preferred over a label here because nothing
+// selects on it; it's metadata read off pod.metadata.annotations.
+export const NEW_APP_ANNOTATION = "openvoid.io/new-app";
 
 export const ACTIVE_DEADLINE_SECONDS = 14400;
 // Sized for the slowest realistic git push over a flaky network.
@@ -214,6 +220,12 @@ export interface SessionOps {
   createSessionResources(spec: SessionPodSpec): Promise<SessionResources>;
   getSessionPod(sessionId: string): Promise<V1Pod | null>;
   deleteSessionResources(sessionId: string): Promise<boolean>;
+  // Resolves the auto-seeded "Main" OpenCode session id for a new-app
+  // pod, hitting the per-session pod over cluster-internal Service DNS
+  // and caching the result for the pod's lifetime (KD2). Returns
+  // `undefined` on every documented transient failure so the route
+  // handler can downgrade to `awaiting-agent-session` without flapping.
+  findMainSessionId(sessionId: string, pod: V1Pod): Promise<string | undefined>;
 }
 
 function envOr(name: string, fallback: string): string {
@@ -338,6 +350,7 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
         [REPO_ANNOTATION]: spec.repo,
         [BRANCH_ANNOTATION]: branch,
         [CREATED_AT_ANNOTATION]: createdAt,
+        ...(isNewApp ? { [NEW_APP_ANNOTATION]: "true" } : {}),
       },
     },
     spec: {
@@ -524,12 +537,18 @@ export function buildSessionPodManifest(spec: SessionPodSpec): V1Pod {
 // `OPENVOID_SEED_*`) so adding a new knob requires a code change in
 // lockstep with the seed-agent script — no accidental forwarding of
 // unintended env vars.
+//
+// OPENVOID_SEED_SESSION_TITLE is deliberately absent (KD3): the
+// title is a hard-baked lockstep contract with MAIN_SESSION_TITLE
+// and the literal "Main" in seed-agent.sh, because the deep-link
+// gate in routes/sessions.ts matches sessions by title. An operator
+// override would silently break the gate and strand every new-app
+// session in awaiting-agent-session.
 const SEED_PASSTHROUGH_ENV_NAMES = [
   "OPENVOID_SEED_PROMPT_PATH",
   "OPENVOID_SEED_SENTINEL_PATH",
   "OPENVOID_SEED_OPENCODE_URL",
   "OPENVOID_SEED_HEALTH_TIMEOUT_S",
-  "OPENVOID_SEED_SESSION_TITLE",
   "OPENVOID_SEED_PROMPT_MAX_CHARS",
 ] as const;
 
@@ -874,11 +893,28 @@ export async function findMainSessionId(
 }
 
 export class K8sSessionOps implements SessionOps {
+  // Process-singleton cache: instantiated once in the constructor so
+  // entries persist across status-poll requests for the Session API
+  // process's lifetime. UID-tracked invalidation (KD2) lives inside
+  // findMainSessionId itself.
+  private readonly mainSessionIdCache: MainSessionIdCache =
+    createMainSessionIdCache();
+
   constructor(
     private readonly core: CoreV1Api,
     private readonly networking: NetworkingV1Api,
     private readonly authHeaderValue: string,
   ) {}
+
+  async findMainSessionId(
+    sessionId: string,
+    pod: V1Pod,
+  ): Promise<string | undefined> {
+    return findMainSessionId(sessionId, pod, {
+      authHeaderValue: this.authHeaderValue,
+      cache: this.mainSessionIdCache,
+    });
+  }
 
   async createSessionResources(spec: SessionPodSpec): Promise<SessionResources> {
     // Step 1: Pod first — its UID becomes the ownerRef target for the

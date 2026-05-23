@@ -33,6 +33,7 @@ import {
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
+  NEW_APP_ANNOTATION,
   ACTIVE_DEADLINE_SECONDS,
   OPENCODE_IMAGE,
   OPENCODE_AGENT_PORT,
@@ -53,6 +54,7 @@ function makeMockOps(): SessionOps & {
   createSessionResources: ReturnType<typeof vi.fn>;
   getSessionPod: ReturnType<typeof vi.fn>;
   deleteSessionResources: ReturnType<typeof vi.fn>;
+  findMainSessionId: ReturnType<typeof vi.fn>;
 } {
   return {
     createSessionResources: vi.fn(
@@ -61,6 +63,7 @@ function makeMockOps(): SessionOps & {
     ),
     getSessionPod: vi.fn(async () => null),
     deleteSessionResources: vi.fn(async () => false),
+    findMainSessionId: vi.fn(async () => undefined),
   };
 }
 
@@ -732,14 +735,23 @@ describe("buildSessionPodManifest (U8: agent dual-process + readinessProbe)", ()
     }
   });
 
-  it("U4: forwards OPENVOID_SEED_SESSION_TITLE + OPENVOID_SEED_PROMPT_MAX_CHARS when both are set", () => {
-    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
+  it("U4: forwards OPENVOID_SEED_PROMPT_MAX_CHARS when set (paired forward survives the U3 title-knob drop)", () => {
     vi.stubEnv("OPENVOID_SEED_PROMPT_MAX_CHARS", "2048");
     try {
       const manifest = buildSessionPodManifest(newAppSpec);
       const env = manifest.spec?.containers?.[0]?.env ?? [];
-      expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")?.value).toBe("smoke-test");
       expect(env.find((e) => e.name === "OPENVOID_SEED_PROMPT_MAX_CHARS")?.value).toBe("2048");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("U3 / KD3: OPENVOID_SEED_SESSION_TITLE is NOT forwarded even when set on the Session API process (lockstep contract — title is hardcoded in seed-agent.sh and MAIN_SESSION_TITLE)", () => {
+    vi.stubEnv("OPENVOID_SEED_SESSION_TITLE", "smoke-test");
+    try {
+      const manifest = buildSessionPodManifest(newAppSpec);
+      const env = manifest.spec?.containers?.[0]?.env ?? [];
+      expect(env.find((e) => e.name === "OPENVOID_SEED_SESSION_TITLE")).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }
@@ -2122,5 +2134,203 @@ describe("findMainSessionId (U2)", () => {
 
   it("MAIN_SESSION_TITLE is 'Main' (lockstep contract with seed-agent.sh)", () => {
     expect(MAIN_SESSION_TITLE).toBe("Main");
+  });
+});
+
+describe("buildSessionPodManifest (U3: NEW_APP_ANNOTATION)", () => {
+  const baseSpec: SessionPodSpec = {
+    sessionId: "01HABCDEF",
+    image: OPENCODE_IMAGE,
+    repo: "https://github.com/openvoid-platform/x.git",
+  };
+
+  it("sets metadata.annotations[NEW_APP_ANNOTATION]='true' when isNewApp is true", () => {
+    const manifest = buildSessionPodManifest({ ...baseSpec, isNewApp: true });
+    expect(manifest.metadata?.annotations?.[NEW_APP_ANNOTATION]).toBe("true");
+  });
+
+  it("omits NEW_APP_ANNOTATION entirely when isNewApp is false / unset (import-repo)", () => {
+    const manifest = buildSessionPodManifest(baseSpec);
+    expect(manifest.metadata?.annotations).toBeDefined();
+    expect(manifest.metadata?.annotations).not.toHaveProperty(NEW_APP_ANNOTATION);
+  });
+
+  it("NEW_APP_ANNOTATION exported constant matches the documented annotation key", () => {
+    expect(NEW_APP_ANNOTATION).toBe("openvoid.io/new-app");
+  });
+});
+
+describe("SEED_PASSTHROUGH_ENV_NAMES (U3 / KD3: regression guard on title-knob removal)", () => {
+  it("seed-agent.sh: SESSION_TITLE is hardcoded to 'Main' and OPENVOID_SEED_SESSION_TITLE is absent (F6)", () => {
+    const script = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../infra/images/opencode/seed-agent.sh",
+      ),
+      "utf8",
+    );
+    expect(script).toContain('SESSION_TITLE="Main"');
+    // Belt + braces: no ${OPENVOID_SEED_SESSION_TITLE} interpolation
+    // anywhere in the script (the comment-block reference was removed
+    // by U3 too).
+    expect(script).not.toMatch(/OPENVOID_SEED_SESSION_TITLE/);
+  });
+});
+
+describe("sessionsRouter GET /sessions/:id (U3: findMainSessionId gate + awaiting-agent-session)", () => {
+  const SID = "01HABCDEF";
+
+  function podWithAnnotations(
+    phase: string,
+    annotations?: Record<string, string>,
+    podIP?: string,
+  ): V1Pod {
+    return {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: {
+        name: `session-${SID.toLowerCase()}`,
+        namespace: "openvoid-sessions",
+        uid: "pod-uid-1",
+        annotations,
+      },
+      status: { phase, podIP },
+    };
+  }
+
+  let ops: ReturnType<typeof makeMockOps>;
+  let app: ReturnType<typeof sessionsRouter>;
+
+  beforeEach(() => {
+    ops = makeMockOps();
+    app = sessionsRouter(ops);
+  });
+
+  it("new-app Running + findMainSessionId resolves → Running with agentUrl, previewUrl, agentSessionId", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+    );
+    ops.findMainSessionId.mockResolvedValueOnce("ses_x");
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Running");
+    expect(body.agentSessionId).toBe("ses_x");
+    expect(body.agentUrl).toBe("http://01habcdef.agent.127.0.0.1.nip.io/");
+    expect(body.previewUrl).toBe("http://01habcdef.preview.127.0.0.1.nip.io/");
+    expect(ops.findMainSessionId).toHaveBeenCalledTimes(1);
+  });
+
+  it("new-app Running + findMainSessionId returns undefined → Pending with awaiting-agent-session, no URL fields", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+    );
+    ops.findMainSessionId.mockResolvedValueOnce(undefined);
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Pending");
+    expect(body.pendingPhase).toBe("awaiting-agent-session");
+    expect(body).not.toHaveProperty("agentUrl");
+    expect(body).not.toHaveProperty("previewUrl");
+    expect(body).not.toHaveProperty("agentSessionId");
+    expect(ops.findMainSessionId).toHaveBeenCalledTimes(1);
+  });
+
+  it("D1/R7 regression: pod Running with annotation absent (import-repo) → findMainSessionId NOT called, Running with agentUrl/previewUrl, no agentSessionId", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Running", undefined, "10.244.0.5"),
+    );
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Running");
+    expect(body.agentUrl).toBe("http://01habcdef.agent.127.0.0.1.nip.io/");
+    expect(body.previewUrl).toBe("http://01habcdef.preview.127.0.0.1.nip.io/");
+    expect(body).not.toHaveProperty("agentSessionId");
+    expect(ops.findMainSessionId).not.toHaveBeenCalled();
+  });
+
+  it("pod Pending → findMainSessionId NOT called (no wasted HTTP per status poll)", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Pending", { [NEW_APP_ANNOTATION]: "true" }),
+    );
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Pending");
+    expect(ops.findMainSessionId).not.toHaveBeenCalled();
+  });
+
+  it("pod Failed → findMainSessionId NOT called", async () => {
+    ops.getSessionPod.mockResolvedValueOnce(
+      podWithAnnotations("Failed", { [NEW_APP_ANNOTATION]: "true" }),
+    );
+
+    const res = await app.request(`/sessions/${SID}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("Failed");
+    expect(ops.findMainSessionId).not.toHaveBeenCalled();
+  });
+
+  it("two consecutive Running polls on a new-app pod that resolve → findMainSessionId invoked once per poll (cache lives on SessionOps; mock fakes the cache hit)", async () => {
+    // The route handler calls SessionOps.findMainSessionId for every
+    // Running new-app poll — the cache lives inside that helper.
+    // Simulate the cache by stubbing the mock to always return the
+    // same id; both polls land in Running with agentSessionId.
+    ops.getSessionPod
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      )
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      );
+    ops.findMainSessionId.mockResolvedValue("ses_cached");
+
+    const first = await app.request(`/sessions/${SID}`);
+    const firstBody = await first.json();
+    expect(firstBody.status).toBe("Running");
+    expect(firstBody.agentSessionId).toBe("ses_cached");
+
+    const second = await app.request(`/sessions/${SID}`);
+    const secondBody = await second.json();
+    expect(secondBody.status).toBe("Running");
+    expect(secondBody.agentSessionId).toBe("ses_cached");
+    // Both polls invoke findMainSessionId; the production cache
+    // (in K8sSessionOps.findMainSessionId) collapses these to a
+    // single outbound HTTP. The dedicated findMainSessionId (U2)
+    // tests cover the cache-hit-is-one-fetch invariant directly.
+    expect(ops.findMainSessionId).toHaveBeenCalledTimes(2);
+  });
+
+  it("status sequence: first poll Running + undefined → Pending awaiting-agent-session; second poll Running + 'ses_x' → Running with agentSessionId", async () => {
+    ops.getSessionPod
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      )
+      .mockResolvedValueOnce(
+        podWithAnnotations("Running", { [NEW_APP_ANNOTATION]: "true" }, "10.244.0.5"),
+      );
+    ops.findMainSessionId
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce("ses_x");
+
+    const first = await app.request(`/sessions/${SID}`);
+    const firstBody = await first.json();
+    expect(firstBody.status).toBe("Pending");
+    expect(firstBody.pendingPhase).toBe("awaiting-agent-session");
+    expect(firstBody).not.toHaveProperty("agentSessionId");
+
+    const second = await app.request(`/sessions/${SID}`);
+    const secondBody = await second.json();
+    expect(secondBody.status).toBe("Running");
+    expect(secondBody.agentSessionId).toBe("ses_x");
+    expect(secondBody.agentUrl).toBeDefined();
+    expect(secondBody.previewUrl).toBeDefined();
   });
 });

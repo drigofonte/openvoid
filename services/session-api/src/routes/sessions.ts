@@ -7,6 +7,7 @@ import {
   REPO_ANNOTATION,
   BRANCH_ANNOTATION,
   CREATED_AT_ANNOTATION,
+  NEW_APP_ANNOTATION,
   agentUrl,
   previewUrl,
 } from "../k8s/client.js";
@@ -323,6 +324,9 @@ export function sessionsRouter(
     }
 
     const derived = derivePodSessionState(pod);
+    const annotations = pod.metadata?.annotations ?? {};
+    const isNewApp = annotations[NEW_APP_ANNOTATION] === "true";
+
     const session: Session = {
       sessionId,
       status: derived.status,
@@ -337,12 +341,31 @@ export function sessionsRouter(
     // not have programmed the hosts yet) — better to omit the fields
     // than to hand the landing page links that 502 for the first few
     // seconds.
+    //
+    // For new-app pods (annotation set), we additionally gate on
+    // findMainSessionId resolving the OpenCode session id assigned to
+    // the auto-seeded "Main" session (KD1, KD9). Until it resolves,
+    // downgrade to Pending with the awaiting-agent-session phase (KD8)
+    // and omit all URL fields. Import-repo pods skip the gate entirely
+    // and continue to enter Running as today (R7).
     if (session.status === "Running") {
-      session.agentUrl = agentUrl(sessionId);
-      session.previewUrl = previewUrl(sessionId);
+      if (isNewApp) {
+        const agentSessionId = await sessionOps.findMainSessionId(sessionId, pod);
+        if (agentSessionId === undefined) {
+          session.status = "Pending";
+          session.pendingPhase = "awaiting-agent-session";
+          delete session.error;
+        } else {
+          session.agentSessionId = agentSessionId;
+          session.agentUrl = agentUrl(sessionId);
+          session.previewUrl = previewUrl(sessionId);
+        }
+      } else {
+        session.agentUrl = agentUrl(sessionId);
+        session.previewUrl = previewUrl(sessionId);
+      }
     }
 
-    const annotations = pod.metadata?.annotations ?? {};
     const repo = annotations[REPO_ANNOTATION];
     const branch = annotations[BRANCH_ANNOTATION];
     const createdAt = annotations[CREATED_AT_ANNOTATION];

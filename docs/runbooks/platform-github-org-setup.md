@@ -223,6 +223,67 @@ agent UI access. The user can always type their prompt manually into
 the agent UI. The seed exists to reduce friction, not to be a hard
 dependency.
 
+## Troubleshooting — `opencode-server-password` rotation
+
+The Session API loads the `opencode-server-password` Secret **once at
+boot** and caches the pre-formatted `Authorization: Basic …` header
+on the process. The same header is used for two surfaces:
+
+1. The per-session agent Ingress (`nginx.ingress.kubernetes.io/configuration-snippet`)
+   — refreshed on every new session because the Ingress is generated
+   fresh per pod.
+2. The cluster-internal `findMainSessionId` probe that powers the
+   landing page's "Open agent" deep-link gate — uses the cached
+   header for the lifetime of the Session API process.
+
+This means rotating the Secret without restarting the Session API
+leaves surface (2) holding a stale header. The probe will receive
+`401` from every per-session pod, and **every new-app session will
+land in the `awaiting-agent-session` pendingPhase indefinitely** —
+the deep-link URL never resolves, the landing page's Ready view
+never appears, and the user sits on the provisioning screen forever.
+
+The `[findMainSessionId]` warning log fires once per affected sid:
+
+```
+Authorization rejected by agent pod (sid=…); opencode-server-password
+may be stale — restart Session API after rotation
+```
+
+**Rotation procedure.**
+
+1. Update the Secret value:
+
+   ```sh
+   kubectl create secret generic opencode-server-password \
+     -n openvoid-sessions \
+     --from-literal=password='<new-password>' \
+     --dry-run=client -o yaml | kubectl apply -f -
+   ```
+
+2. Restart the Session API so it picks up the new header value
+   on its next boot:
+
+   ```sh
+   kubectl rollout restart deployment session-api -n openvoid-system
+   kubectl rollout status   deployment session-api -n openvoid-system
+   ```
+
+3. Pods that were created before the rotation will continue to
+   accept the old password (they were configured with it at boot).
+   You may either let them run out their existing sessions, or
+   delete them to force a clean restart:
+
+   ```sh
+   kubectl delete pods -n openvoid-sessions -l openvoid.io/managed-by=session-api
+   ```
+
+Skipping step 2 is the most common cause of the silent-indefinite
+`awaiting-agent-session` symptom — the Secret rotation itself is
+correct, but the cached header keeps the probe rejecting until the
+Session API process restarts. A graceful in-process reload is on the
+v1.5 roadmap; v1 requires the rollout restart.
+
 ## Rotation
 
 1. Generate a new PAT (step 3 of this runbook — the org-policy step 2

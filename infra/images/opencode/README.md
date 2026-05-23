@@ -103,8 +103,15 @@ script.
 | `OPENVOID_SEED_SENTINEL_PATH` | `/workspace/.openvoid-seeded` | Idempotency marker for this pod's lifetime. |
 | `OPENVOID_SEED_OPENCODE_URL` | `http://127.0.0.1:8080` | Loopback target — never the public agent URL. |
 | `OPENVOID_SEED_HEALTH_TIMEOUT_S` | `120` | How long to wait for OpenCode `/global/health` before giving up (transient — entrypoint restart will retry). Must be a non-negative integer; non-numeric values fail the script with a configuration error. |
-| `OPENVOID_SEED_SESSION_TITLE` | `Main` | Title used to find/create the OpenCode session for idempotency. Visible to the user in the OpenCode session list. |
 | `OPENVOID_SEED_PROMPT_MAX_CHARS` | `4096` | Character bound applied to the prompt before sending (sliced UTF-8-safely via `jq`). Defense-in-depth against unbounded prompt-injection payloads (see "Prompt-injection acknowledgment" below). Must be a non-negative integer. |
+
+The seed session's title (`"Main"`) is **not** an env knob — it is
+hardcoded in `seed-agent.sh` and mirrored as `MAIN_SESSION_TITLE` in
+`services/session-api/src/k8s/client.ts`. The Session API's deep-link
+gate (`findMainSessionId`) matches the auto-seeded session by this
+exact title to construct the agent-UI deep-link URL; an operator
+override would silently break the gate and strand every new-app
+session in the `awaiting-agent-session` provisioning phase.
 
 Override any of these by setting the same name on the Session API
 Deployment's env — `buildAgentEnv` forwards the value through to
