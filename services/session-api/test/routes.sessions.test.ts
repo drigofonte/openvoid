@@ -10,6 +10,9 @@ import {
   type SessionResources,
   buildSessionPodManifest,
   buildSessionResources,
+  createMainSessionIdCache,
+  findMainSessionId,
+  MAIN_SESSION_TITLE,
   SESSION_LABEL,
   MANAGED_BY_LABEL,
   MANAGED_BY_VALUE,
@@ -1785,5 +1788,339 @@ describe("sessionsRouter (U6: new-app POST + idempotency)", () => {
     resolveFirst();
     const first = await firstPromise;
     expect(first.status).toBe(201);
+  });
+});
+
+describe("findMainSessionId (U2)", () => {
+  const SID = "01HABCDEF";
+  const POD_UID = "pod-uid-1";
+
+  function podWithUid(uid: string): V1Pod {
+    return {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: { name: `session-${SID.toLowerCase()}`, namespace: "openvoid-sessions", uid },
+    };
+  }
+
+  function jsonResponse(body: unknown, init: { status?: number; contentType?: string } = {}): Response {
+    return new Response(JSON.stringify(body), {
+      status: init.status ?? 200,
+      headers: { "content-type": init.contentType ?? "application/json" },
+    });
+  }
+
+  it("happy path: returns the id of the Main session and caches the result (single fetch across two calls)", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([
+        { id: "ses_abc", title: "Main", time: { created: 1000 } },
+      ]),
+    );
+    const cache = createMainSessionIdCache();
+    const pod = podWithUid(POD_UID);
+
+    const a = await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    const b = await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+
+    expect(a).toBe("ses_abc");
+    expect(b).toBe("ses_abc");
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("picks the only Main session when the array contains other-titled siblings", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([
+        { id: "ses_other", title: "Scratch", time: { created: 500 } },
+        { id: "ses_main", title: "Main", time: { created: 1200 } },
+        { id: "ses_third", title: "Notes", time: { created: 100 } },
+      ]),
+    );
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    expect(result).toBe("ses_main");
+  });
+
+  it("KD10: two Main sessions → returns the one with the smallest time.created regardless of array order", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([
+        { id: "ses_late", title: "Main", time: { created: 9000 } },
+        { id: "ses_seed", title: "Main", time: { created: 1000 } },
+        { id: "ses_mid", title: "Main", time: { created: 5000 } },
+      ]),
+    );
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    expect(result).toBe("ses_seed");
+  });
+
+  it("no Main in array → undefined, cache not written, next call re-fetches", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([{ id: "ses_x", title: "Scratch", time: { created: 1 } }]),
+    );
+    const cache = createMainSessionIdCache();
+    const pod = podWithUid(POD_UID);
+
+    const first = await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(first).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+
+    await findMainSessionId(SID, pod, {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("empty array → undefined, cache not written", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse([]));
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("KD2: cache hit with mismatched podUid drops the stale entry and refetches", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "ses_old", title: "Main", time: { created: 1000 } }]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "ses_new", title: "Main", time: { created: 2000 } }]),
+      );
+    const cache = createMainSessionIdCache();
+
+    const a = await findMainSessionId(SID, podWithUid("uid-1"), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(a).toBe("ses_old");
+    expect(cache.get(SID)).toEqual({ agentSessionId: "ses_old", podUid: "uid-1" });
+
+    const b = await findMainSessionId(SID, podWithUid("uid-2"), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(b).toBe("ses_new");
+    expect(cache.get(SID)).toEqual({ agentSessionId: "ses_new", podUid: "uid-2" });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("network error (TypeError) → undefined, no cache write, auth header value not in console output", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const networkErr = new TypeError("connection refused");
+    const fetchFn = vi.fn(async () => {
+      throw networkErr;
+    });
+    const cache = createMainSessionIdCache();
+
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+    for (const call of errSpy.mock.calls) {
+      for (const arg of call) {
+        expect(String(arg)).not.toContain(TEST_AUTH_HEADER);
+      }
+    }
+    errSpy.mockRestore();
+  });
+
+  it("response 500 → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(async () => new Response("boom", { status: 500 }));
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("F4: response 401 → undefined, distinct operator-facing warning, no header value in log", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchFn = vi.fn(async () => new Response("nope", { status: 401 }));
+    const cache = createMainSessionIdCache();
+
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const logged = warnSpy.mock.calls[0]?.join(" ") ?? "";
+    expect(logged).toContain(`sid=${SID}`);
+    expect(logged).toContain("opencode-server-password may be stale");
+    expect(logged).toContain("restart Session API after rotation");
+    expect(logged).not.toContain(TEST_AUTH_HEADER);
+    warnSpy.mockRestore();
+  });
+
+  it("KD5: response 200 with text/html (SPA fallback) → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response("<!doctype html><html>…</html>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+    );
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("response 200 with invalid JSON body → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response("not json", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("response 200 with JSON object instead of array → undefined, no cache write", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ id: "ses_x", title: "Main" }));
+    const cache = createMainSessionIdCache();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+    });
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+  });
+
+  it("F3: abort fires when the timeout is exceeded → undefined, no cache write, auth header not in any log/error path", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const fetchFn: typeof globalThis.fetch = ((_url, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        signal?.addEventListener("abort", () =>
+          reject(new DOMException("Aborted", "AbortError")),
+        );
+      })) as typeof globalThis.fetch;
+
+    const cache = createMainSessionIdCache();
+    const start = Date.now();
+    const result = await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache,
+      timeoutMs: 30,
+    });
+    const elapsed = Date.now() - start;
+
+    expect(result).toBeUndefined();
+    expect(cache.has(SID)).toBe(false);
+    expect(elapsed).toBeLessThan(500);
+    for (const spy of [errSpy, warnSpy]) {
+      for (const call of spy.mock.calls) {
+        for (const arg of call) {
+          expect(String(arg)).not.toContain(TEST_AUTH_HEADER);
+        }
+      }
+    }
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it("URL matches session-<sid-lower>.openvoid-sessions.svc.cluster.local:8080/session exactly (sid lower-cased even for mixed-case input)", async () => {
+    const mixedSid = "01HabCdEf";
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([{ id: "ses_x", title: "Main", time: { created: 1 } }]),
+    );
+    await findMainSessionId(mixedSid, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const calledUrl = String(fetchFn.mock.calls[0]?.[0] ?? "");
+    expect(calledUrl).toBe(
+      "http://session-01habcdef.openvoid-sessions.svc.cluster.local:8080/session",
+    );
+  });
+
+  it("Authorization header passed to fetch equals the injected authHeaderValue", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse([{ id: "ses_x", title: "Main", time: { created: 1 } }]),
+    );
+    await findMainSessionId(SID, podWithUid(POD_UID), {
+      fetch: fetchFn,
+      authHeaderValue: TEST_AUTH_HEADER,
+      cache: createMainSessionIdCache(),
+    });
+    const init = fetchFn.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization).toBe(TEST_AUTH_HEADER);
+    expect(headers.Accept).toBe("application/json");
+  });
+
+  it("returns undefined when the pod has no metadata.uid (defensive)", async () => {
+    const fetchFn = vi.fn();
+    const result = await findMainSessionId(
+      SID,
+      { apiVersion: "v1", kind: "Pod", metadata: { name: "session-x" } },
+      {
+        fetch: fetchFn,
+        authHeaderValue: TEST_AUTH_HEADER,
+        cache: createMainSessionIdCache(),
+      },
+    );
+    expect(result).toBeUndefined();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("MAIN_SESSION_TITLE is 'Main' (lockstep contract with seed-agent.sh)", () => {
+    expect(MAIN_SESSION_TITLE).toBe("Main");
   });
 });

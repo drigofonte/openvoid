@@ -157,6 +157,15 @@ export const DEFAULT_URL_SCHEME = "http";
 // browser never sees a password prompt.
 export const OPENCODE_BASIC_USER = "opencode";
 
+// Title of the auto-seeded OpenCode session created by seed-agent at
+// pod boot. Lockstep contract with infra/images/opencode/seed-agent.sh
+// (KD3, KD6): the value is hardcoded on both ends — no env knob — so
+// the deep-link gate in routes/sessions.ts can match the seed session
+// by title without drift risk. A content-guard test in the seed-agent
+// describe block of routes.sessions.test.ts asserts the literal string
+// is present in the script.
+export const MAIN_SESSION_TITLE = "Main";
+
 export type SessionPodSpec = {
   sessionId: string;
   image: string;
@@ -717,6 +726,151 @@ export async function loadOpencodeAuthHeader(api: CoreV1Api): Promise<string> {
     );
   }
   return `Basic ${Buffer.from(`${OPENCODE_BASIC_USER}:${password}`).toString("base64")}`;
+}
+
+// Cache entry for findMainSessionId. podUid is tracked alongside the
+// session id so cache lookups can verify the entry belongs to the
+// current pod and invalidate-and-refetch on a pod-recreate that
+// happened to preserve the sid (KD2). Map<sid, entry>.
+export type MainSessionIdCacheEntry = {
+  agentSessionId: string;
+  podUid: string;
+};
+export type MainSessionIdCache = Map<string, MainSessionIdCacheEntry>;
+
+export function createMainSessionIdCache(): MainSessionIdCache {
+  return new Map();
+}
+
+export type FindMainSessionIdDeps = {
+  fetch?: typeof globalThis.fetch;
+  authHeaderValue: string;
+  cache: MainSessionIdCache;
+  timeoutMs?: number;
+};
+
+// Short-of-poll timeout. The status poll cadence in landing is 1s → 5s
+// → 10s; 3s leaves headroom for a single retry-by-poll without lagging
+// the user-visible Ready transition. Mirrors
+// services/landing/app/utils/ingress.ts:41.
+const FIND_MAIN_SESSION_TIMEOUT_MS = 3000;
+
+type OpencodeSessionSummary = {
+  id: string;
+  title: string;
+  time: { created: number };
+};
+
+function isOpencodeSession(value: unknown): value is OpencodeSessionSummary {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.id !== "string" || typeof v.title !== "string") return false;
+  if (!v.time || typeof v.time !== "object") return false;
+  const t = v.time as Record<string, unknown>;
+  return typeof t.created === "number";
+}
+
+// Finds the OpenCode session id assigned to the auto-seeded "Main"
+// session by hitting the per-session pod over cluster-internal Service
+// DNS, then caches the result keyed by `(sid, podUid)` so subsequent
+// status polls don't re-fetch (KD2). Returns `undefined` on every
+// documented transient failure (network error, abort/timeout, 5xx,
+// 401, non-JSON response, SPA-fallback 200, missing match) so the
+// caller can downgrade to Pending without losing already-cached
+// progress on other sessions.
+//
+// `authHeaderValue` stays scoped to this function invocation — never
+// assigned to wider scopes a structured logger could serialize (F3).
+// Error logs include only `{sid, error}`; 401 fires a distinct
+// operator-facing warning with a recovery path (F4).
+export async function findMainSessionId(
+  sid: string,
+  pod: V1Pod,
+  deps: FindMainSessionIdDeps,
+): Promise<string | undefined> {
+  const podUid = pod.metadata?.uid;
+  if (!podUid) return undefined;
+
+  const cached = deps.cache.get(sid);
+  if (cached && cached.podUid === podUid) {
+    return cached.agentSessionId;
+  }
+  if (cached && cached.podUid !== podUid) {
+    deps.cache.delete(sid);
+  }
+
+  const fetchFn = deps.fetch ?? globalThis.fetch;
+  const timeoutMs = deps.timeoutMs ?? FIND_MAIN_SESSION_TIMEOUT_MS;
+  const url =
+    `http://session-${sidLower(sid)}.${SESSION_NAMESPACE}` +
+    `.svc.cluster.local:${OPENCODE_AGENT_PORT}/session`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof (timer as { unref?: () => void }).unref === "function") {
+    (timer as { unref: () => void }).unref();
+  }
+
+  let response: Response;
+  try {
+    response = await fetchFn(url, {
+      method: "GET",
+      headers: {
+        Authorization: deps.authHeaderValue,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[findMainSessionId] fetch failed ${JSON.stringify({ sid, error: message })}`,
+    );
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (response.status === 401) {
+    console.warn(
+      `Authorization rejected by agent pod (sid=${sid}); ` +
+        `opencode-server-password may be stale — restart Session API after rotation`,
+    );
+    return undefined;
+  }
+
+  if (!response.ok) {
+    console.error(
+      `[findMainSessionId] non-ok response ${JSON.stringify({ sid, status: response.status })}`,
+    );
+    return undefined;
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return undefined;
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return undefined;
+  }
+
+  if (!Array.isArray(body)) return undefined;
+
+  let best: OpencodeSessionSummary | undefined;
+  for (const item of body) {
+    if (!isOpencodeSession(item)) continue;
+    if (item.title !== MAIN_SESSION_TITLE) continue;
+    if (!best || item.time.created < best.time.created) best = item;
+  }
+
+  if (!best) return undefined;
+
+  deps.cache.set(sid, { agentSessionId: best.id, podUid });
+  return best.id;
 }
 
 export class K8sSessionOps implements SessionOps {
