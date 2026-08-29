@@ -161,6 +161,10 @@ risk rather than buried.
 - *Shared instance or cluster per app?* — cluster per app; nothing weaker is enforceable (KD2)
 - *Which apps get a database?* — all of them, at app creation (R1)
 - *How much ops investment before rollout?* — ops gates rollout (R8)
+- *PostgreSQL 17 or 18?* — **18**, resolved in U1 by building it. Upstream's paved-road default, CNPG
+  supports it, and the image runs PostgreSQL 18.6 with DocumentDB 0.116-0 verified end to end. The
+  Dockerfile is parameterised by `PG_MAJOR`, so 17 remains a one-argument fallback
+- *Which base image?* — **Ubuntu 24.04**, resolved in U1 the hard way (see below)
 
 ### Deferred to implementation
 
@@ -172,8 +176,6 @@ risk rather than buried.
   Secret API, but these are platform-generated credentials to a per-app database, a lower class than
   BYOK. Options: reuse the CSI/tmpfs path from `2026-05-27-001` U12 for consistency, or a plain
   per-app K8s Secret. Decide in U7 against the threat model's actual wording, not by analogy.
-- **PostgreSQL 17 or 18.** Upstream's paved-road default is 18; CNPG's default images and openvoid's
-  control plane may prefer 17. Settle in U1 with CNPG's supported majors.
 - **Backup destination.** DO Spaces via CNPG's object-store backup is the obvious target but interacts
   with Item 2's infra decisions.
 
@@ -231,8 +233,33 @@ per-app PostgreSQL roles.
 **Verification:** container starts under CNPG; `CREATE EXTENSION documentdb CASCADE` succeeds;
 `SELECT extversion` matches the pinned version.
 
-**Risk:** highest-uncertainty unit in the plan. Nobody upstream publishes this image, so there is no
-reference to copy beyond FerretDB's stale Dockerfile.
+**Status: built and verified 2026-08-29** — `infra/images/postgres-documentdb/`. PostgreSQL 18.6 with
+DocumentDB 0.116-0, `documentdb_core` and `pg_cron` 1.6 loading under the preload set, and a document
+round-tripping through `documentdb_api`. `smoke-test.sh` is the reusable proof; run it after any
+base-image, PostgreSQL-major, or DocumentDB bump.
+
+What the build settled, none of which was predictable from the documentation:
+
+- **The base image cannot be CNPG's own.** Building `FROM ghcr.io/cloudnative-pg/postgresql`
+  (Debian trixie) to inherit CNPG's weekly security rebuilds installs cleanly and then fails at
+  startup: `undefined symbol: ucol_getSortKey_74`. ICU exports version-suffixed symbols; upstream links
+  against Ubuntu 24.04's libicu74 and trixie ships libicu76. The image is therefore Ubuntu 24.04 —
+  upstream's Tier 1 target — mirroring CNPG's Dockerfile structure rather than extending its image.
+  **The cost lands on us:** openvoid owns base-image patching, so the scheduled CI rebuild below is
+  required rather than tidy
+- **Extensions are ordinary apt packages** in CNPG's model, so the PGDG dependencies
+  (`-cron`, `-pgvector`, `-postgis-3`) install normally, and the extension package is checksum-verified
+  against upstream's `SHA256SUMS`
+- **The UID 26 reconciliation was a non-issue** — `usermod -u 26 postgres` on the Ubuntu base, exactly
+  as CNPG does on Debian
+- **Cluster config the image deliberately does not bake in** (U4 must set it): the preload libraries,
+  `cron.database_name`, `listen_addresses` including localhost — DocumentDB opens internal libpq
+  connections over TCP and a socket-only server fails at the first API call — and
+  `documentdb_core.bsonUseEJson = on`, which is off by default and is the difference between readable
+  extended JSON and a `BSONHEX...` dump when inspecting data over SQL (U13)
+
+**Remaining:** multi-arch publish and the scheduled rebuild, both of which need the registry and CI that
+Item 2 owns.
 
 ---
 
@@ -423,7 +450,9 @@ Verified against DocumentDB 0.116-0 on 2026-08-29 by exercising the admin-comman
 - **DBeaver → the CNPG cluster.** The operator's-eye view, and the more useful one for a slow app:
   `pg_stat_activity`, locks, index usage, table bloat, and the BSON rows in
   `documentdb_data.documents_<collection_id>`. This is where performance diagnosis actually happens,
-  which is convenient given the gateway cannot serve Compass's performance view anyway
+  which is convenient given the gateway cannot serve Compass's performance view anyway.
+  **`documentdb_core.bsonUseEJson` must be on** or every document reads as a `BSONHEX...` dump; it is
+  off by default, and U1 sets it in the cluster config for this reason
 - Both services are cluster-internal by design, so access is via `kubectl port-forward`. Note that this
   bypasses the NetworkPolicy (U4) — the operator path is a deliberate hole in the network layer, which
   is precisely why the credential layer in U7 carries the weight
