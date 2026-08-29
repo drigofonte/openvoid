@@ -235,8 +235,10 @@ per-app PostgreSQL roles.
 
 **Status: built and verified 2026-08-29** — `infra/images/postgres-documentdb/`. PostgreSQL 18.6 with
 DocumentDB 0.116-0, `documentdb_core` and `pg_cron` 1.6 loading under the preload set, and a document
-round-tripping through `documentdb_api`. `smoke-test.sh` is the reusable proof; run it after any
-base-image, PostgreSQL-major, or DocumentDB bump.
+round-tripping through `documentdb_api`. Verified on **both arm64 and amd64** (the latter cross-built
+and smoke-tested under emulation, since DOKS is amd64); ~220MB, 3 layers, on each.
+`smoke-test.sh` is the reusable proof; run it after any base-image, PostgreSQL-major, or DocumentDB
+bump.
 
 What the build settled, none of which was predictable from the documentation:
 
