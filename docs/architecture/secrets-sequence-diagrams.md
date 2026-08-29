@@ -1,6 +1,6 @@
 ---
 date: 2026-05-24
-updated: 2026-05-25
+updated: 2026-05-27
 status: draft
 related:
   - docs/architecture/secrets-threat-model.md
@@ -70,7 +70,9 @@ sequenceDiagram
 - A signup that fails the PRF probe leaves no user row in the database — the account is not partially created. The user sees a clear "your device isn't supported" page and the system stays clean.
 - GitHub does not appear on the user-facing OAuth surface. The platform-owned GitHub org used for per-app repo storage authenticates via a platform PAT, not via user OAuth (see the tenancy memory note: many-users / one-platform-owned source-control account).
 
-## Diagram 2 — User stores a new secret (OpenRouter key)
+## Diagram 2 — User stores a new secret
+
+The user picks a scope when storing: `user` (cross-app — e.g. the user's own OpenRouter dev key) or `app` (one specific app — e.g. Zapier, or a deployed app's runtime LLM key). The two scopes have separate DEKs and ownership-neutral storage paths; the wrapping flow is identical, only the key name and storage path differ. See [threat-model §2.1](./secrets-threat-model.md#21-secret-scope-hierarchy) for the scope hierarchy and the app-overrides-user collision rule.
 
 ```mermaid
 sequenceDiagram
@@ -83,20 +85,30 @@ sequenceDiagram
     L->>U: PublicKeyCredentialRequestOptions { challenge, prf.eval.first=salt }
 
     U->>U: navigator.credentials.get() — user touches authenticator
-    U->>L: POST /settings/integrations<br/>{ assertion, prf_output,<br/>  app_id, secret_name: "OPENROUTER_API_KEY",<br/>  secret_value: "sk-or-v1-..." }
+    U->>L: POST /settings/integrations<br/>{ assertion, prf_output,<br/>  scope: "user" | "app",<br/>  app_id?: appId,   // required iff scope == "app"<br/>  secret_name: "OPENROUTER_API_KEY",<br/>  secret_value: "sk-or-v1-..." }
 
     L->>L: verify assertion against stored credential
     L->>L: KEK = Argon2id(prf_output, salt)
 
-    alt App DEK does not yet exist
-        L->>V: transit/keys/create app-{appId}
-        L->>V: wrap app DEK with KEK; store wrapped form
+    alt scope == "user"
+        alt user-scope DEK does not yet exist
+            L->>V: transit/keys/create user-dek-{userId}
+            L->>V: wrap user-dek with KEK; store wrapped form
+        end
+        L->>L: unwrap user-dek using KEK
+        L->>V: transit/encrypt user-dek-{userId} plaintext=secret_value
+        V-->>L: ciphertext
+        L->>V: kv put secret/data/users/{userId}/integrations/{secret_name}<br/>{ ciphertext }
+    else scope == "app"
+        alt app-scope DEK does not yet exist
+            L->>V: transit/keys/create app-dek-{appId}
+            L->>V: wrap app-dek with KEK; store wrapped form
+        end
+        L->>L: unwrap app-dek using KEK
+        L->>V: transit/encrypt app-dek-{appId} plaintext=secret_value
+        V-->>L: ciphertext
+        L->>V: kv put secret/data/apps/{appId}/integrations/{secret_name}<br/>{ ciphertext }
     end
-
-    L->>L: unwrap app DEK using KEK
-    L->>V: transit/encrypt app-{appId} plaintext=secret_value
-    V-->>L: ciphertext
-    L->>V: kv put secret/data/users/{userId}/apps/{appId}/integrations/OPENROUTER_API_KEY<br/>{ ciphertext }
 
     Note over L: KEK + DEK + plaintext secret<br/>zeroed before response
     L->>U: 200 OK
@@ -108,7 +120,9 @@ sequenceDiagram
 
 ## Diagram 3 — Session start: secret materialisation into per-session pod
 
-This is the trickiest flow because the user is present at session *creation* (PRF is available) but the pod may need secrets at *boot* (PRF is no longer available). The chosen v1 design has Session API decrypt at creation time and stage plaintext to a short-lived per-session OpenBao path that the pod's ServiceAccount can read once.
+This is the trickiest flow because the user is present at session *creation* (PRF is available) but the pod may need secrets at *boot* (PRF is no longer available, and the pod may take seconds-to-minutes to schedule + image-pull). The chosen v1 design is **two-phase staging**: Session API decrypts plaintexts into request-scoped memory at creation, mints the per-session OpenBao policy + role + K8s SA, then creates the Pod. A small in-cluster reaper controller observes the Pod's phase transitions and triggers materialisation of the OpenBao staged path *only when the CSI mount is about to read it*, collapsing the staged-path TTL window from "10 minutes from session creation" to seconds. After CSI mount completes, the reaper deletes the OpenBao policy (functional `max_reads=1`).
+
+**Scope merging.** The session fetches both user-scope and app-scope secrets, decrypts both, and merges them with the app-overrides-user collision rule — see [threat-model §2.1](./secrets-threat-model.md#21-secret-scope-hierarchy). An audit event records every override.
 
 ```mermaid
 sequenceDiagram
@@ -116,46 +130,72 @@ sequenceDiagram
     participant L as Session API
     participant V as OpenBao
     participant K as Kubernetes API
+    participant R as Session Reaper
     participant P as Per-session Pod
     participant CSI as CSI Secrets Store Driver
 
     U->>L: POST /sessions { app_id, assertion, prf_output }
     L->>L: verify assertion; KEK = Argon2id(prf_output, salt)
-    L->>V: unwrap app DEK using KEK
-    L->>V: fetch all ciphertexts under<br/>secret/data/users/{userId}/apps/{appId}/integrations/*
-    L->>L: decrypt all secrets using DEK<br/>(plaintexts in request-scoped memory)
+    L->>V: unwrap user-dek-{userId} using KEK
+    opt app has app-scope secrets
+        L->>V: unwrap app-dek-{appId} using KEK
+    end
+    L->>V: fetch user-scope ciphertexts at<br/>secret/data/users/{userId}/integrations/*
+    L->>V: fetch app-scope ciphertexts at<br/>secret/data/apps/{appId}/integrations/*
+    L->>L: decrypt user-scope with user-dek<br/>(plaintexts in request-scoped memory)
+    L->>L: decrypt app-scope with app-dek<br/>(plaintexts in request-scoped memory)
+    L->>L: merge maps: app-scope overrides user-scope<br/>on name collision; audit each override
 
-    L->>V: create policy session-{sessionId}: read secret/data/sessions/{sessionId}/staged/*
-    L->>V: create K8s-auth role session-{sessionId} bound to SA session-{sessionId}, TTL 4h
-    L->>V: kv put secret/data/sessions/{sessionId}/staged/* { plaintexts },<br/>TTL 10min, max_reads=1
+    L->>L: hold merged plaintexts in in-process map<br/>keyed by sessionId, TTL 5min
+    Note over L: KEK + DEKs zeroed before next step;<br/>plaintexts persist in map until reaper callback
 
-    Note over L: KEK, DEK, all plaintexts<br/>zeroed before response
-
+    L->>V: create policy session-{sessionId}:<br/>read secret/data/sessions/{sessionId}/staged/*
+    L->>V: create K8s-auth role session-{sessionId}<br/>bound to SA session-{sessionId}, TTL 4h
     L->>K: create ServiceAccount session-{sessionId}
-    L->>K: create Pod with SA + SecretProviderClass referencing staged path
+    L->>K: create Pod with SA + SecretProviderClass<br/>referencing staged path
 
-    K->>P: schedule pod
+    K->>P: schedule pod (Pending)
+    R->>K: watch pod phase
+    K-->>R: phase = ContainerCreating
+    R->>L: POST /internal/reaper/stage/{sessionId}<br/>(shared-secret authed)
+    L->>V: kv put secret/data/sessions/{sessionId}/staged/*<br/>{ merged plaintexts }, TTL 10min
+    L->>L: zero plaintexts from in-process map
+    L-->>R: 200 OK
+
     P->>CSI: mount /var/run/secrets/integrations
-    CSI->>K: get projected SA token
+    CSI->>K: get projected SA token (audience: openbao)
     CSI->>V: POST /v1/auth/kubernetes/login { role, jwt }
     V->>V: verify JWT against K8s OIDC issuer
     V-->>CSI: vault token (TTL 4h, scoped policy)
-
     CSI->>V: read secret/data/sessions/{sessionId}/staged/*
-    V-->>CSI: plaintexts (then path TTL expires)
+    V-->>CSI: plaintexts
     CSI->>P: write plaintexts to tmpfs
-    Note over V: staged path now empty;<br/>only copy lives in pod tmpfs
+    K-->>R: phase = Running
 
-    P->>P: opencode entrypoint reads tmpfs into env vars
+    R->>V: DELETE sys/policies/acl/session-{sessionId}<br/>(functional max_reads=1)
+    Note over V: staged path may still exist until TTL,<br/>but no live policy grants read access
+
+    P->>P: opencode entrypoint sources tmpfs into env<br/>and unsets from parent shell
     L->>U: { sessionId, agentUrl, previewUrl } after readiness gate
+
+    Note over P,R: ... session runs ...
+
+    K-->>R: phase = Succeeded | Failed
+    R->>V: DELETE auth/kubernetes/role/session-{sessionId}
+    R->>K: DELETE ServiceAccount session-{sessionId}
 ```
 
 **Invariants**
 
 - User KEK is required *only* at session creation, never during the session.
-- The staged path has TTL 10min and max_reads=1 — even if compromised, the window for second-reader exfiltration is minimal.
+- KEK and DEK bytes are zeroed before the Pod is created; only the *decrypted plaintexts* persist (in Session API's in-process map) for the duration of pod scheduling, then move into the OpenBao staged path.
+- The staged path lives at most from "Pod enters ContainerCreating" to "Pod enters Running" — typically seconds. Combined with the reaper's policy-delete, this gives functional `max_reads=1` (CSI is the only reader, and after Running there is no live policy granting read access). The 10min path TTL is a safety net, not the primary security boundary.
+- App-scope reads scope to exactly *this app* (`apps/{appId}`); cross-app pivot is denied at policy level.
+- User-scope reads scope to *this user* (`users/{userId}`); cross-user pivot is denied at policy level.
 - Secrets reach the pod via tmpfs only — no `kubectl get secret` exfiltration path exists.
-- On pod termination, the OpenBao role + SA + policy are deleted (Session API cleanup) — leases auto-revoke.
+- On Pod terminal phase, the reaper deletes the OpenBao role + K8s SA (idempotent on 404).
+
+**Alternative considered (and rejected).** Eager staging (single-phase): Session API writes plaintexts to OpenBao staged path immediately at session creation. Rejected because slow image pull on cold-scheduled nodes can expire the 10min TTL before CSI mounts, producing CrashLoopBackOff and a confusing user-facing error. The reaper-coordinated two-phase design moves staging to the moment of need.
 
 **Alternative considered (and rejected).** Plaintext-passthrough via K8s `Secret` with `emptyDir{medium: Memory}`. Rejected because it adds a kubectl-visible plaintext surface (anyone with `get secret` RBAC sees the value) — the CSI-driver-from-OpenBao path keeps secrets out of the Kubernetes API entirely.
 
@@ -170,10 +210,10 @@ sequenceDiagram
     participant DB as Postgres
     participant V as OpenBao
 
-    U->>L: GET /login (GitHub OAuth)
-    L->>U: redirect to GitHub
-    U->>L: callback with code
-    L->>DB: lookup user by github_id
+    U->>L: GET /login (Google / Apple / Microsoft OAuth or magic-link)
+    L->>U: complete identity flow
+    U->>L: callback with code (or magic-link click-through)
+    L->>DB: lookup user by oauth_provider + oauth_sub (or email for magic-link)
     L->>L: detect: no usable passkey on this device
     L->>U: redirect to /recovery/choose
 
@@ -197,14 +237,15 @@ sequenceDiagram
     L->>L: KEK_new = Argon2id(prf_output, salt)
     L->>V: unwrap user-master using KEK_recovery
     L->>V: re-wrap user-master using KEK_new
-    L->>V: for each app DEK: unwrap with KEK_recovery, re-wrap with KEK_new
+    L->>V: unwrap user-dek-{userId} with KEK_recovery,<br/>re-wrap with KEK_new
+    L->>V: for each app-dek-{appId}:<br/>unwrap with KEK_recovery, re-wrap with KEK_new
     Note over L: all KEK material zeroed
     L->>DB: store new credential
 
     L->>U: success + prompt to generate fresh recovery codes
 ```
 
-**Note on the re-wrap step.** The new passkey's PRF produces a *different* KEK than the old one. Without re-wrapping app DEKs against `KEK_new`, the recovery code would be required on every login forever. The re-wrap is the step that makes recovery a one-time event, not a permanent crutch.
+**Note on the re-wrap step.** The new passkey's PRF produces a *different* KEK than the old one. Without re-wrapping every DEK (user-scope + all per-app) against `KEK_new`, the recovery code would be required on every login forever. The re-wrap is the step that makes recovery a one-time event, not a permanent crutch.
 
 ## Diagram 5 — Per-app DEK rotation
 

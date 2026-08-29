@@ -1,6 +1,6 @@
 ---
 date: 2026-05-24
-updated: 2026-05-25
+updated: 2026-05-27
 status: draft
 related:
   - docs/architecture/secrets-sequence-diagrams.md
@@ -40,11 +40,33 @@ This document describes the threat model for user-owned secrets in OpenVoid: the
 | User passkey (private key) | Critical | User device hardware (Secure Enclave / TPM / hardware key) | Permanent until user revokes |
 | Passkey-PRF output | Critical | Browser memory during auth flow only | Per-request |
 | User KEK (derived from PRF) | Critical | Session API request-scoped memory only | Per-request |
+| User-scope DEK (wrapped by user KEK) | High | OpenBao transit engine | Lifetime of user |
 | Per-app DEK (wrapped by user KEK) | High | OpenBao transit engine | Lifetime of app |
-| User-stored secret (e.g., OpenRouter key) | High | OpenBao KV, encrypted by app DEK | Until user revokes |
+| User-scope user-stored secret (e.g., OpenRouter dev key) | High | OpenBao KV, encrypted by user-scope DEK | Until user revokes |
+| App-scope user-stored secret (e.g., Zapier; deployed-app OpenRouter) | High | OpenBao KV, encrypted by per-app DEK | Until user revokes |
 | Recovery codes | Critical | User device only (display-once) + server-side Argon2id hash | Until rotated |
 | OpenBao unseal keys | Critical | Shamir-split across ≥3 humans, off-platform | Until rotated |
 | Audit log | Medium | Append-only, off-cluster sink | 90 days |
+
+### 2.1 Secret scope hierarchy
+
+User-supplied secrets exist at two scopes:
+
+- **User-scope** — secrets the user provides once and that apply across every app they build on openvoid. Example: the user's own OpenRouter API key used to *pay for their own coding-session LLM calls* across all their apps. Wrapped under a single `user-dek-{userId}` transit key per user.
+- **App-scope** — secrets the user provides per app, scoped to one app's pod identity. Example: a Zapier API key consumed by one app, or an OpenRouter key consumed by a *deployed* app the user built (different from the dev-time key above). Wrapped under `app-dek-{appId}`, one per app.
+
+Both scopes are wrapped by the same user KEK at the envelope layer (no scope-specific KEK derivation).
+
+**Collision rule at session start.** A user-scope secret and an app-scope secret may share the same environment variable name (`OPENROUTER_API_KEY` is the canonical case — dev-time vs deployed-app). When this happens, the **app-scope value overrides the user-scope value** in the per-session pod's environment, and an audit event records the override (`secret.scope_collision_overridden`) so the operator can see when an app's local value is shadowing the user's default.
+
+**Path layout (ownership-neutral).** Storage paths separate "what scope the secret belongs to" from "who can access it":
+
+- User-scope: `secret/data/users/{userId}/integrations/{name}`
+- App-scope: `secret/data/apps/{appId}/integrations/{name}`
+
+Access control is enforced at the OpenBao policy layer, not by encoding ownership into the path. At v1 every app has exactly one owner, but the policy machinery is membership-aware from the start so multi-member apps (v2 teams) extend without path migration.
+
+**Future scope: teams (v2, not in v1 scope).** Multi-user teams that share and maintain the same apps are a planned v2 capability. The cryptographic architecture extends without breaking changes: a team-scope DEK (`team-dek-{teamId}`) would be wrapped *N times*, once per member's user KEK, via the standard 1Password / Bitwarden team-vault envelope pattern. Membership changes trigger re-wrap (member added) or rotate-and-re-wrap-for-remaining (member removed). v1 explicitly assumes single-user-per-app ownership; the path layout above is the only v1 concession to keeping that future open.
 
 ## 3. Trust Boundaries
 
@@ -77,17 +99,17 @@ This document describes the threat model for user-owned secrets in OpenVoid: the
 
 **Attack.** SQL injection, leaked snapshot, compromised storage backend.
 
-**Mitigation.** Layer 1. The DB holds per-user salts, app-DEK ciphertexts (wrapped by user KEK), and secret ciphertexts (encrypted by app DEKs). The user KEK is reconstructed from passkey-PRF at request time and never persisted. Attacker has ciphertext only.
+**Mitigation.** Layer 1. The DB holds per-user salts, DEK ciphertexts (both user-scope and app-scope, all wrapped by user KEK), and secret ciphertexts (encrypted by their respective scope's DEK). The user KEK is reconstructed from passkey-PRF at request time and never persisted. Attacker has ciphertext only.
 
-**Residual risk.** Metadata correlation (which users own which apps, integration counts, names). Decryption requires user-side compromise.
+**Residual risk.** Metadata correlation (which users own which apps, integration counts, names, which apps have app-scope secrets vs only inherit user-scope). Decryption requires user-side compromise.
 
 ### T2 — Session pod compromise, pivot within same user
 
 **Attack.** Vulnerable npm dep installed by the agent achieves RCE; pod's OpenBao token is reused for other paths.
 
-**Mitigation.** Layer 3 policy template scopes the token to exactly `secret/data/users/{userId}/apps/{thisAppId}/*` and `transit/decrypt/app-{thisAppId}`. TTL = session lifetime. Cross-app reads denied + audited.
+**Mitigation.** Layer 3 policy template scopes the token to exactly: (a) `secret/data/apps/{thisAppId}/*` + `transit/decrypt/app-dek-{thisAppId}` for app-scope, and (b) `secret/data/users/{userId}/*` + `transit/decrypt/user-dek-{userId}` for user-scope. TTL = session lifetime. Reads of *other* apps (`apps/{otherAppId}`) and *other* users (`users/{otherUserId}`) remain denied + audited. The policy is generated from a join of "this session's user is the requester" and "this session's app belongs to that user" — at v1 every app has exactly one owner, but the join machinery is ownership-neutral so v2 team membership extends without policy redesign.
 
-**Residual risk.** Within (user, app), attacker reads all integration secrets — by-design blast radius bound.
+**Residual risk.** Within a single session, an attacker reads all that app's app-scope secrets plus all of the user's user-scope secrets. The user-scope inclusion is by design — user-scope secrets exist precisely so they are reachable from every session the user creates (otherwise the dev-time OpenRouter key model would not work). App-scope isolation still prevents pivot to *other* apps. Operators evaluating blast radius should treat the per-session-pod compromise as "all of one app's secrets + all of the user's cross-app secrets," not "all secrets of one user."
 
 ### T3 — Session pod compromise, pivot cross-user
 
@@ -161,11 +183,11 @@ A replayed assertion fails check (1) because the challenge has already been cons
 
 This section covers the operational surface around rotating the keys defined in §2. Three rotation flows are in scope: routine DEK rotation, KEK rotation on credential change, and emergency rotation after suspected compromise. Threats T1, T4, T5, T6, T8, T10, and T11 all degrade gracefully if rotation is timely; this section makes "timely" concrete.
 
-### 6.1 Routine per-app DEK rotation
+### 6.1 Routine DEK rotation (user-scope and per-app)
 
-**Trigger.** Scheduled (quarterly cadence at v1, configurable) or user-initiated from app settings.
+**Trigger.** Scheduled (quarterly cadence at v1, configurable) or user-initiated from settings.
 
-**Flow.** OpenBao transit supports versioned keys natively. `transit/keys/app-{appId}/rotate` increments the key version; existing ciphertexts remain decryptable with their original version, and new encryptions use the latest version. A subsequent `transit/rewrap` operation re-encrypts existing ciphertext under the latest version. The rewrap step needs the user KEK to first unwrap the app DEK, so it is bundled into the user's next login rather than run as an unattended background job.
+**Flow.** OpenBao transit supports versioned keys natively. Both `transit/keys/user-dek-{userId}/rotate` and `transit/keys/app-dek-{appId}/rotate` increment the key version; existing ciphertexts remain decryptable with their original version, and new encryptions use the latest version. A subsequent `transit/rewrap` operation re-encrypts existing ciphertext under the latest version. The rewrap step needs the user KEK to first unwrap the DEK, so it is bundled into the user's next login rather than run as an unattended background job. User-scope and per-app rotations run on independent cadences (a user with five apps has six rotation calendars: one for `user-dek-{userId}` and one each for the five `app-dek-{appId}`).
 
 **Failure modes.**
 - Rewrap interrupted mid-flight: idempotent — re-running picks up where it left off.
@@ -175,7 +197,7 @@ This section covers the operational surface around rotating the keys defined in 
 
 **Trigger.** User adds a new passkey, removes a passkey, or completes the device-loss recovery flow ([Diagram 4](./secrets-sequence-diagrams.md#diagram-4--device-loss-recovery)).
 
-**Flow.** A new passkey produces a different PRF output and therefore a different KEK. The user-master and all wrapped app DEKs must be re-wrapped against the new KEK, or the new credential cannot decrypt anything. The re-wrap is bundled into the credential enrolment flow: both the previous credential's PRF output and the new credential's PRF output are gathered in the same session, both KEKs are derived in request-scoped memory, every wrapped key is re-wrapped, and both KEKs are then zeroed per A7.
+**Flow.** A new passkey produces a different PRF output and therefore a different KEK. The user-master, the user-scope DEK, and every per-app DEK must be re-wrapped against the new KEK, or the new credential cannot decrypt anything. The re-wrap is bundled into the credential enrolment flow: both the previous credential's PRF output and the new credential's PRF output are gathered in the same session, both KEKs are derived in request-scoped memory, every wrapped key (user-master + user-DEK + N app-DEKs) is re-wrapped, and both KEKs are then zeroed per A7.
 
 **Failure modes.**
 - Process interrupted with new credential enrolled but re-wrap incomplete: old credential still works; re-wrap is retried on next login while both credentials are live.
@@ -224,3 +246,4 @@ This section covers the operational surface around rotating the keys defined in 
 ## 10. Revision history
 
 - **2026-05-25** — Resolved the four open points from the initial draft: (1) replaced the implicit "zeroed" claim with honest best-effort wording in A7; (2) expanded T11 with the WebAuthn assertion structure and an explicit split between assertion replay and PRF-output replay; (3) added §6 covering routine, credential-change, and emergency key rotation; (4) recorded the v1 decision in §7 to require a fresh passkey touch on every session creation, with convenience-mode pre-staging deferred.
+- **2026-05-27** — Added secret-scope hierarchy in §2.1 (user-scope vs app-scope) with the app-overrides-user collision rule and the audit event that records overrides. T2 mitigation reworked to grant per-session access to both scopes with ownership-neutral storage paths (`secret/data/users/{userId}/...` and `secret/data/apps/{appId}/...`). T2 residual risk widened honestly to "all of this app's secrets + all of the user's cross-app secrets" — the user-scope inclusion is by design. §6.1 rotation flows extended to both DEK families; §6.2 re-wrap chain extended to include user-scope DEK + every per-app DEK. Added v2 teams future-work note (multi-member apps extend via per-member envelope wrapping without breaking changes).
