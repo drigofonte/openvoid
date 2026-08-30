@@ -134,8 +134,13 @@ risk rather than buried.
   problem, not N bespoke ones. Provides hibernation, backups, failover, and Prometheus metrics natively.
 - **KD4. Build our own Postgres+DocumentDB image.** No suitable upstream image exists; the only
   candidate is stale and comes from the project we just dropped.
-- **KD5. Gateway as a separate per-app Deployment.** CNPG does not accept arbitrary sidecars in its
-  instance pods. The gateway is stateless and scales to zero alongside hibernation.
+- **KD5. ~~Gateway as a separate per-app Deployment.~~ INVALIDATED 2026-08-30 by building it (U2).**
+  The OSS gateway reaches PostgreSQL *only* over a local Unix socket with peer auth — it rejects
+  password-bearing URLs outright and the source states it "only supports passwordless local peer auth".
+  It cannot address a remote database, so it cannot be its own Deployment pointing at the CNPG `-rw`
+  Service. Gateway and PostgreSQL must share a filesystem, which in Kubernetes means **one pod**. CNPG
+  injects sidecars only through CNPG-I plugins; there is no generic sidecar field on the Cluster spec.
+  The replacement decision is an open question below and is **not** settled by this plan.
 - **KD6. Lifecycle driven from session-api, with a reconciler for drift.** session-api already creates
   K8s objects and owns the session lifecycle that hibernation keys off.
 - **KD7. Hibernate aggressively, wake on session start.** With every app holding a cluster (R1), most
@@ -178,6 +183,19 @@ risk rather than buried.
   per-app K8s Secret. Decide in U7 against the threat model's actual wording, not by analogy.
 - **Backup destination.** DO Spaces via CNPG's object-store backup is the obvious target but interacts
   with Item 2's infra decisions.
+- **How the gateway gets into the same pod as PostgreSQL (blocks U4).** KD5 is disproven and the
+  replacement is a genuine fork, not a detail:
+  1. *Write a CNPG-I plugin* that injects the gateway as a sidecar. Keeps CNPG and everything built on
+     it — hibernation, backups, failover, declarative `pg_hba`/`pg_ident`. Costs a gRPC plugin, a
+     component openvoid would own and maintain, for what is conceptually "run a second container".
+  2. *Drop CNPG for a plain StatefulSet* with both containers sharing an `emptyDir` socket. Trivially
+     satisfies the contract. Forfeits hibernation — which KD7 leans on to make "every app gets a
+     cluster" affordable — plus operator-managed backups and failover, so it lands squarely on the
+     support burden this plan exists to bound.
+  3. *Run upstream's `documentdb-local` image* as a StatefulSet: PostgreSQL and gateway already
+     co-located and pre-wired. Fastest, but it is an emulator by upstream's own framing, and the same
+     forfeits as (2).
+  Nothing downstream of U4 can be designed until this is chosen.
 
 ---
 
@@ -278,6 +296,30 @@ Item 2 owns.
 - Verify `documentdb-gateway check`, the connectivity probe subcommand, works as a container healthcheck
 
 **Verification:** a MongoDB driver completes insert/find against a CNPG cluster through the image.
+
+**Status: built and verified 2026-08-30** — `infra/images/documentdb-gateway/`. A real MongoDB client
+inserts and finds a document over TLS through the gateway into DocumentDB.
+`integration-test.sh` is the reusable proof and encodes the whole deployment contract.
+
+The build disproved KD5 and surfaced a configuration contract that is invisible from the documentation:
+
+- **Peer auth over a local Unix socket is the only supported path** (see KD5). The gateway must run as
+  PostgreSQL's UID, because PostgreSQL resolves the peer UID against its own passwd database
+- **A `pg_ident` map is mandatory**, not hardening. The gateway's system pool connects as its own role,
+  but each client's data pool connects *as that client's role with an empty password*, which peer auth
+  permits only via `+group` ident entries — a **PostgreSQL 16+** feature, which retroactively justifies
+  choosing 18
+- **`pg_hba` ordering matters**: the scoped rule must come first, since a catch-all peer rule locks out
+  every other local user
+- **The gateway defaults to PostgreSQL port 9712**, not 5432. Against CNPG the port must be explicit or
+  it fails with a bare `error connecting to server`
+- **The extension's own internal libpq connections default to `host=localhost` over TCP**, where they
+  have no password. Without `documentdb.localhost_connection_string` and `cron.host` pointed at the
+  socket, client auth succeeds and then every write fails with `fe_sendauth: no password supplied` from
+  inside `create_collection`
+
+**Remaining:** multi-arch publish, and U4 cannot proceed until the pod-topology question above is
+resolved.
 
 ---
 
@@ -502,6 +544,7 @@ to the same app's cluster and read the same document as BSON.
 | Wake latency too slow for transparent session start | Medium | U6 measures before the design commits; documented fallback strategy |
 | Per-app cost grows faster than modelled once every app has a cluster | Medium | U6 produces the cost model; hibernation is the lever; tiers are deferred work |
 | Operational load still exceeds a solo operator despite tooling | Medium | The explicit reason R8 gates rollout. If U6/U8 show it is untenable, revisit KD2 before shipping |
+| Gateway's peer-auth-only constraint forces either a CNPG-I plugin or abandoning CNPG | High | Open question above; U2 verified the constraint, so this is certain rather than speculative. Option 1 preserves hibernation, which KD7 depends on |
 | DocumentDB RFC-006 lands and makes cluster-per-app look heavy | Low | Consolidation is deferred work, not a blocker; the per-app boundary stays valid regardless |
 | PVC left behind on app deletion, leaking storage cost silently | Medium | Explicit PVC handling and audit event in U5; storage alert in U8 |
 | NetworkPolicy silently unenforced — no-op under kindnet, fails open on selector mismatch, bypassed by port-forward | High | Never the sole isolation layer (KD9); per-app clusters and per-app credentials hold independently; local R2 testing requires a policy-enforcing CNI |
