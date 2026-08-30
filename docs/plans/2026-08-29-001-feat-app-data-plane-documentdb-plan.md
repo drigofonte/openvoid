@@ -10,12 +10,23 @@ origin:
 
 # App Data Plane — Per-App DocumentDB
 
-> **Status note, 2026-08-30.** Extracting this data plane into a standalone Drigolabs service is under
-> consideration — openvoid would provision databases through an API and apps would connect directly.
-> The boundary and API contract are drafted in `docs/architecture/app-data-service-boundary.md`; no
-> decision has been made. If it goes ahead, U1–U4, U6 and U8–U13 move to the new service, U5 shrinks to
-> "call the API", and U7 splits. Units already built (U1, U2, U3, U4, U6) are unaffected either way —
-> the coupling to openvoid is naming, not structure.
+> **SUPERSEDED, 2026-08-30.** This data plane was extracted into a standalone service:
+> **[drigolabs/drigodb](https://github.com/drigolabs/drigodb)**, now deployed on DigitalOcean.
+> openvoid becomes a *consumer* of it rather than its host.
+>
+> Everything U1–U4, U6 and U8–U13 describe now lives in that repo, along with the images, the
+> PostgreSQL config, and the isolation verification. The reasoning behind the split, including the
+> objections raised against it, is in `docs/architecture/app-data-service-boundary.md`.
+>
+> **What openvoid still owes:** U5 shrinks from "provision databases in-cluster" to "call the drigodb
+> API and inject the returned connection string into the session pod" — an HTTP client, not Kubernetes
+> manifests. U7 splits: drigodb generates and rotates the credential, openvoid decides how it reaches a
+> pod, which is where its own threat model applies.
+>
+> The implementation on branch `feat/app-data-plane-documentdb-image` is kept as the record of how the
+> design was arrived at — every architectural decision here was forced by something that failed when
+> built. It is **not** merged, because the code it adds now lives in drigodb and duplicating it here
+> would guarantee drift.
 
 ## Summary
 
