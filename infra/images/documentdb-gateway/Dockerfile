@@ -18,8 +18,14 @@ ARG BASE=ubuntu:24.04
 FROM ${BASE}
 
 ARG DOCUMENTDB_VERSION
-# Set by buildx; defaulted so a plain `docker build` still works.
-ARG TARGETARCH=amd64
+# Populated per-platform by BuildKit. Deliberately declared WITHOUT a default:
+# giving a predefined platform ARG a default shadows the injected value, so a
+# multi-arch build silently downloads the same architecture's package for every
+# platform. Caught building this image for two architectures at once, where the
+# arm64 leg failed with `postgresql-18-documentdb:amd64 : Depends: libc6:amd64
+# but it is not installable`. Single-platform builds that pass --build-arg
+# TARGETARCH explicitly hide the problem.
+ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive
 
