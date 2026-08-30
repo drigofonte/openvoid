@@ -10,6 +10,13 @@ origin:
 
 # App Data Plane — Per-App DocumentDB
 
+> **Status note, 2026-08-30.** Extracting this data plane into a standalone Drigolabs service is under
+> consideration — openvoid would provision databases through an API and apps would connect directly.
+> The boundary and API contract are drafted in `docs/architecture/app-data-service-boundary.md`; no
+> decision has been made. If it goes ahead, U1–U4, U6 and U8–U13 move to the new service, U5 shrinks to
+> "call the API", and U7 splits. Units already built (U1, U2, U3, U4, U6) are unaffected either way —
+> the coupling to openvoid is naming, not structure.
+
 ## Summary
 
 Gives every openvoid app a MongoDB-compatible database that no other app can read or destroy, so
