@@ -75,25 +75,19 @@ docker run --rm -v "${VOL}:/sockets" --user 0 "$PG_IMAGE" chown "${PG_UID}:${PG_
 ok "created"
 
 step "PostgreSQL + DocumentDB"
+# Runs infra/app-db/bootstrap.sh — the same entrypoint the Kubernetes pod uses,
+# so this path cannot drift from the real one.
 docker run -d --name "$PG_C" --network "$NET" -v "${VOL}:/sockets" \
-  -v "${REPO_ROOT}/infra/app-db:/app-db:ro" --user "$PG_UID" "$PG_IMAGE" \
-  bash -euo pipefail -c "
-    export PGDATA=/var/lib/postgresql/data/pgdata
-    initdb -D \"\$PGDATA\" -U postgres --auth-local=peer --auth-host=scram-sha-256 >/dev/null
-    cat /app-db/postgresql.conf >> \"\$PGDATA/postgresql.conf\"
-    cp /app-db/pg_hba.conf /app-db/pg_ident.conf \"\$PGDATA/\"
-    pg_ctl -D \"\$PGDATA\" -l /tmp/pg.log -w start >/dev/null
-    createdb -U postgres ${APP_DB}
-    psql -U postgres -d ${APP_DB} -v ON_ERROR_STOP=1 -q \
-      -c 'CREATE EXTENSION IF NOT EXISTS documentdb CASCADE;' \
-      -c \"CREATE ROLE ${APP_USER} LOGIN PASSWORD '${APP_PW}';\" \
-      -c 'GRANT documentdb_admin_role TO ${APP_USER};'
-    echo BACKEND_READY
-    sleep infinity
-  " >/dev/null
+  -v "${REPO_ROOT}/infra/app-db:/app-db:ro" --user "$PG_UID" \
+  -e PGDATA=/var/lib/postgresql/data/pgdata \
+  -e APP_DB_CONF_DIR=/app-db \
+  -e APP_DB_NAME="${APP_DB}" \
+  -e APP_DB_USER="${APP_USER}" \
+  -e APP_DB_PASSWORD="${APP_PW}" \
+  "$PG_IMAGE" bash /app-db/bootstrap.sh >/dev/null
 
 for i in $(seq 1 60); do
-  docker logs "$PG_C" 2>&1 | grep -q BACKEND_READY && break
+  docker logs "$PG_C" 2>&1 | grep -q "starting postmaster" && break
   docker ps -q --filter "name=$PG_C" | grep -q . || { echo "backend died:"; docker logs "$PG_C" 2>&1 | tail -20; exit 1; }
   sleep 2
 done

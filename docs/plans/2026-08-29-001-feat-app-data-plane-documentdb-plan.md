@@ -398,6 +398,43 @@ the session-api and landing images on first run after a teardown. Expect ImagePu
 **Verification:** two apps provisioned side by side; app A's credentials fail against app B's Service
 at both the network layer and the PostgreSQL layer. This is the spike's failing test, now passing.
 
+**Status: built and verified 2026-08-30** — `services/session-api/src/k8s/app-db.ts` (19 unit tests) and
+`scripts/check-app-db-isolation.sh`, which provisions two apps and passes all three phases:
+
+```
+✓ alpha / beta: each wrote and read its own private document
+✓ app A's credentials rejected by app B's database      (PostgreSQL layer)
+✓ app A's session pod reaches A, blocked from B         (network layer)
+```
+
+The two layers are tested where each actually operates: the auth boundary through a port-forward, which
+deliberately bypasses NetworkPolicy so it is measured alone, and the network boundary pod-to-pod, the
+only path where NetworkPolicy applies. The third layer — a separate PostgreSQL process on a separate
+volume — needs no test.
+
+Four failures during bring-up, each silent rather than loud, and each now pinned by a test:
+
+- **`_from` vs `from`.** The generated client renames NetworkPolicy's `from` field and maps it back on
+  serialization. Dumping the object with `JSON.stringify` emits `_from`, which the API server ignores —
+  leaving an ingress rule that matches no sources and denies everything. It would have looked like
+  working isolation
+- **The gateway's TLS state directory.** The image ships `/var/lib/documentdb-gateway` as
+  `drwxrwx---` owned by its packaged user, so the pod's UID cannot even traverse it, and `fsGroup` fixes
+  a mounted volume's ownership rather than the image directory above it. The volume is mounted over the
+  parent, not the `tls` subdirectory. This did not appear in Docker, where `--user 26` yields GID 0
+- **`psql -c` does not interpolate psql variables.** `CREATE ROLE :"role"` reached the server verbatim.
+  The role was never created and the failure surfaced much later as the gateway's
+  `Invalid account: User details not found in the database`. Bootstrap now feeds SQL on stdin, which
+  interpolates — and keeps the password off the command line
+- **A stale PVC** from an earlier run made `bootstrap.sh` skip initialisation and silently reuse the
+  previous database. The check script now waits for full namespace deletion
+
+`infra/app-db/bootstrap.sh` is the pod's entrypoint and is also what `scripts/app-db-dev.sh` runs, so
+the local Docker path and the Kubernetes path cannot drift.
+
+**Provisional:** container resource requests are guesses until U6 measures a real cluster — the unit
+that exists precisely to stop this being sized by guesswork.
+
 ---
 
 ### U5. Provisioning lifecycle in session-api
