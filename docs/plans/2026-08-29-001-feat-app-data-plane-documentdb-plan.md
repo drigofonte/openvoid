@@ -15,7 +15,7 @@ origin:
 Gives every openvoid app a MongoDB-compatible database that no other app can read or destroy, so
 agent-generated code can persist data with a standard MongoDB driver and no openvoid-specific client.
 The engine is DocumentDB (PostgreSQL extension + its own wire-protocol gateway); FerretDB is dropped.
-Isolation is enforced by giving each app its own CloudNativePG PostgreSQL cluster, because the spike
+Isolation is enforced by giving each app its own PostgreSQL instance, because the spike
 established that no weaker boundary exists in DocumentDB 0.116-0. Idle apps hibernate to zero compute
 while retaining their volume. Because cluster-per-app converts an isolation problem into an operations
 problem, the observability and diagnostic surface is a gating deliverable: **no app receives a database
@@ -130,8 +130,14 @@ risk rather than buried.
   effectively unmaintained. Confirmed by spike F1 and by its stale image tags.
 - **KD2. One PostgreSQL cluster per app.** Not a preference — spike F3/F4 leave no enforced alternative
   at 0.116-0. Revisit if RFC-006 ships per-database RBAC.
-- **KD3. CloudNativePG as the operator.** N identical clusters reconciled declaratively is a template
-  problem, not N bespoke ones. Provides hibernation, backups, failover, and Prometheus metrics natively.
+- **KD3. A plain StatefulSet per app, no operator.** Decided 2026-08-30, after U2 established that the
+  gateway must share PostgreSQL's pod (KD5) and CNPG will not admit a second container without a
+  CNPG-I plugin. The deciding factor is that this is the same shape of work session-api already does
+  in `services/session-api/src/k8s/client.ts` — pods, volumes, containers — so no new competency
+  enters the codebase, and an incident is debugged by reading a pod and two container logs rather than
+  an operator's reconciliation loop. Hibernation survives (scale to zero retains PVCs), and failover
+  was never used since v1 is single-instance. **What openvoid takes on instead:** backups, a metrics
+  exporter, and image-tag upgrades. Rewritten as U3, U9 and U10 below.
 - **KD4. Build our own Postgres+DocumentDB image.** No suitable upstream image exists; the only
   candidate is stale and comes from the project we just dropped.
 - **KD5. ~~Gateway as a separate per-app Deployment.~~ INVALIDATED 2026-08-30 by building it (U2).**
@@ -181,37 +187,28 @@ risk rather than buried.
   Secret API, but these are platform-generated credentials to a per-app database, a lower class than
   BYOK. Options: reuse the CSI/tmpfs path from `2026-05-27-001` U12 for consistency, or a plain
   per-app K8s Secret. Decide in U7 against the threat model's actual wording, not by analogy.
-- **Backup destination.** DO Spaces via CNPG's object-store backup is the obvious target but interacts
-  with Item 2's infra decisions.
-- **How the gateway gets into the same pod as PostgreSQL (blocks U4).** KD5 is disproven and the
-  replacement is a genuine fork, not a detail:
-  1. *Write a CNPG-I plugin* that injects the gateway as a sidecar. Keeps CNPG and everything built on
-     it — hibernation, backups, failover, declarative `pg_hba`/`pg_ident`. Costs a gRPC plugin, a
-     component openvoid would own and maintain, for what is conceptually "run a second container".
-  2. *Drop CNPG for a plain StatefulSet* with both containers sharing an `emptyDir` socket. Trivially
-     satisfies the contract. **Hibernation survives** — a StatefulSet scaled to 0 replicas removes the
-     pods and retains the PVCs, which is what CNPG's hibernation does — so KD7's cost model holds. Nor
-     does it forfeit failover, since v1 is single-instance per app anyway. What it really costs is
-     operator-managed backups, declarative `pg_hba`/`pg_ident`, rolling upgrades, and the metrics
-     exporter: openvoid becomes the operator for all of it, which is more code to own on exactly the
-     axis this plan is trying to protect.
-  3. *Run upstream's `documentdb-local` image* as a StatefulSet: PostgreSQL and gateway already
-     co-located and pre-wired. Fastest, but it is an emulator by upstream's own framing, and the same
-     forfeits as (2).
-  Nothing downstream of U4 can be designed until this is chosen.
+- **Backup destination.** DO Spaces is the obvious target for the `pg_dump` CronJob in U9, but the
+  bucket, credentials and retention interact with Item 2's infra decisions.
+- ~~How the gateway gets into the same pod as PostgreSQL~~ — **resolved 2026-08-30: plain StatefulSet.**
+  See KD3 for the reasoning and what it costs.
 
 ---
 
 ## High-Level Technical Design
 
-Per app, three objects and one boundary:
+Per app, one workload and one boundary. The two containers share a pod because the gateway reaches
+PostgreSQL only over a Unix socket (KD5) — that constraint, not preference, sets this shape:
 
 ```
-app-<appId> namespace (or shared namespace, labelled by app)
-  ├── CNPG Cluster  app-<appId>-db        1 instance, openvoid/postgres-documentdb image
-  │     └── PVC                            survives hibernation; the durable artifact
-  ├── Deployment    app-<appId>-gateway    openvoid/documentdb-gateway, stateless, replicas 0|1
-  ├── Service       app-<appId>-mongo      :27017 → gateway
+app-<appId>
+  ├── StatefulSet   app-<appId>-db         replicas 0|1 — scaling to 0 IS hibernation
+  │     ├── container  postgres            openvoid/postgres-documentdb, runs as uid 26
+  │     ├── container  gateway             openvoid/documentdb-gateway, same uid 26
+  │     ├── volume     socket (emptyDir)   shared; carries the PostgreSQL socket for peer auth
+  │     └── volumeClaimTemplate  data      PVC retained on scale-down (the default), so data
+  │                                        survives hibernation — the durable artifact
+  ├── ConfigMap     app-<appId>-pgconf     postgresql.conf, pg_hba.conf, pg_ident.conf
+  ├── Service       app-<appId>-mongo      :27017 → gateway :10260
   └── NetworkPolicy                        ingress to the gateway only from that app's session pod
 ```
 
@@ -222,10 +219,10 @@ app's Service — denied both by NetworkPolicy and by the per-app PostgreSQL rol
 Lifecycle:
 
 ```
-app created      → provision Cluster + gateway + Service + NetworkPolicy, then hibernate
-session starts   → wake (hibernation off, gateway to 1), gate Ready on the database being reachable
-session ends     → hibernate (gateway to 0, hibernation on)
-app deleted      → delete all four objects; PVC deletion is explicit and audited
+app created      → provision StatefulSet (replicas 0) + ConfigMap + Service + NetworkPolicy
+session starts   → scale to 1, gate session Ready on the database accepting connections
+session ends     → scale to 0 after a grace window; the PVC stays
+app deleted      → delete all objects; PVC deletion is explicit and audited
 ```
 
 Isolation rests on three independent layers, so no single failure exposes another app's data: separate
@@ -245,14 +242,16 @@ per-app PostgreSQL roles.
 - Base on CNPG's PostgreSQL image for the chosen major; install `postgresql-N-documentdb` plus the
   `pg_cron`, `vector`, `postgis`, `tsm_system_rows` dependencies the extension declares
 - Set `shared_preload_libraries = pg_cron, pg_documentdb_core, pg_documentdb` and
-  `cron.database_name` to the app database, via CNPG cluster config rather than baked-in
+  `cron.database_name` to the app database, via the ConfigMap in U3 rather than baked into the image
 - Reconcile UID/GID: CNPG runs PostgreSQL as UID 26; DocumentDB's own packaging expects 999. The
   FerretDB CNPG write-up hit exactly this and it is the most likely first failure
 - Pin the DocumentDB version explicitly; the tag encodes PG major + extension version
 - CI builds on a schedule so a stale base is visible rather than silent
 
-**Verification:** container starts under CNPG; `CREATE EXTENSION documentdb CASCADE` succeeds;
-`SELECT extversion` matches the pinned version.
+**Verification:** the container starts and `CREATE EXTENSION documentdb CASCADE` succeeds with
+`SELECT extversion` matching the pinned version. The image stays CNPG-compatible (uid 26, PGDG layout,
+required binaries on PATH) even though KD3 no longer runs CNPG — it costs nothing and keeps that door
+open.
 
 **Status: built and verified 2026-08-29** — `infra/images/postgres-documentdb/`. PostgreSQL 18.6 with
 DocumentDB 0.116-0, `documentdb_core` and `pg_cron` 1.6 loading under the preload set, and a document
@@ -326,15 +325,24 @@ resolved.
 
 ---
 
-### U3. CloudNativePG operator install
+### U3. Cluster foundations and PostgreSQL configuration templates
 
-**Goal:** CNPG running in kind and on DOKS from one Helm values abstraction.
+**Goal:** The shared pieces every app database needs, and the config that makes the two containers
+work together.
 
-**Requirements:** R6, R9 · **Dependencies:** none
+**Requirements:** R2, R9 · **Dependencies:** none
 
-- Helm install, values split kind vs DOKS per the helm-routing-abstraction pattern
-- Enable the Prometheus exporter — U8 depends on it
-- Tilt applies the operator and waits for readiness before session-api
+Replaces the CloudNativePG operator install, which KD3 removed.
+
+- StorageClass selection and defaults, split kind vs DOKS per the helm-routing-abstraction pattern
+- The `postgresql.conf`, `pg_hba.conf` and `pg_ident.conf` templates, whose exact contents are
+  recorded in `infra/images/documentdb-gateway/README.md` and enforced by its integration test. These
+  are not boilerplate: without the `pg_ident` `+group` map the gateway cannot authenticate clients at
+  all, and without `documentdb.localhost_connection_string` and `cron.host` pointed at the socket every
+  write fails from inside the extension
+- **A policy-enforcing CNI for kind** (Calico or Cilium), replacing kindnet. Without it the
+  NetworkPolicy in U4 is a silent no-op and R2 cannot be tested locally at all
+- Tilt wiring so a local cluster comes up with all of the above
 
 ---
 
@@ -344,7 +352,11 @@ resolved.
 
 **Requirements:** R1, R2, R3 · **Dependencies:** U1, U2, U3
 
-- CNPG `Cluster` (1 instance), gateway `Deployment`, `Service`, `NetworkPolicy`
+- `StatefulSet` (two containers, shared `emptyDir` for the socket, `volumeClaimTemplate` for data),
+  `ConfigMap`, `Service`, `NetworkPolicy` — generated from an app ID, following the manifest-building
+  patterns already in `services/session-api/src/k8s/client.ts`
+- Both containers run as uid 26 and share the socket volume; the gateway's readiness probe is
+  `documentdb-gateway check`
 - NetworkPolicy restricting gateway ingress to the pod labelled with that app ID — but treat it as the
   **weakest** of the three isolation layers, for three verified reasons: kind's default CNI (kindnet)
   does not implement NetworkPolicy at all, so the policy is a silent no-op in local development; a
@@ -353,8 +365,8 @@ resolved.
   traffic originates from the kubelet rather than pod-to-pod. Local verification of R2 therefore
   requires swapping kindnet for Calico or Cilium — otherwise the isolation test in this unit passes
   regardless of whether the policy is correct
-- Per-app PostgreSQL role created at bootstrap via CNPG's declarative role management; the app's role
-  is admin **within its own cluster only**, which is safe precisely because the cluster is not shared
+- Per-app PostgreSQL role created at first start by an init step; the app's role is admin **within its
+  own database only**, which is safe precisely because nothing is shared with another app
 - Resource requests sized from U6's measurements, not guessed
 
 **Verification:** two apps provisioned side by side; app A's credentials fail against app B's Service
@@ -443,7 +455,9 @@ transparent session start, adopt the warm-for-session-duration strategy from Ope
 
 - `scripts/db-diagnose.sh <app-id>`: cluster phase, hibernation state, PVC usage, recent errors,
   gateway health, last backup, top slow queries — one command, one screen
-- CNPG scheduled backups to object storage; retention policy
+- Scheduled backups to object storage — a per-app CronJob running `pg_dump`, with a retention policy.
+  This is work KD3 moved onto openvoid; it is small but it is load-bearing, and it is the main thing
+  given up by not running an operator
 - A restore drill executed at least once and written down, because an untested restore is not a backup
 - Follows the existing `diagnose.sh` convention at repo root
 
@@ -455,7 +469,10 @@ transparent session start, adopt the warm-for-session-duration strategy from Ope
 
 **Requirements:** R4, R5 · **Dependencies:** U6 (strategy), U5, U8
 
-- Wake on session creation, hibernate after the session ends plus a grace window
+- Wake on session creation by scaling the StatefulSet to 1; hibernate by scaling to 0 after the
+  session ends plus a grace window. The PVC is retained on scale-down by default
+  (`persistentVolumeClaimRetentionPolicy.whenScaled: Retain`) — set it explicitly rather than relying
+  on the default, since the alternative silently deletes app data
 - Wake is part of the session readiness gate — a session must not reach Ready with an unreachable
   database, which would surface as "my app is broken" and generate exactly the support load R6 targets
 - Reconciler corrects drift: a woken cluster with no live session, a hibernated cluster with one
@@ -547,7 +564,8 @@ to the same app's cluster and read the same document as BSON.
 | Wake latency too slow for transparent session start | Medium | U6 measures before the design commits; documented fallback strategy |
 | Per-app cost grows faster than modelled once every app has a cluster | Medium | U6 produces the cost model; hibernation is the lever; tiers are deferred work |
 | Operational load still exceeds a solo operator despite tooling | Medium | The explicit reason R8 gates rollout. If U6/U8 show it is untenable, revisit KD2 before shipping |
-| Gateway's peer-auth-only constraint forces either a CNPG-I plugin or abandoning CNPG | High | Open question above; U2 verified the constraint, so this is certain rather than speculative. Option 1 preserves hibernation, which KD7 depends on |
+| Reimplementing operator concerns (backup, upgrade, reconciliation) worse than CNPG would | Medium | Accepted cost of KD3. Scope is deliberately small — backup CronJob, exporter sidecar, tag bump. If the fleet grows enough that this hurts, revisit CNPG via a plugin then, with the shape known |
+| Gateway's peer-auth-only constraint forces either a CNPG-I plugin or abandoning CNPG | ~~High~~ Resolved | Open question above; U2 verified the constraint, so this is certain rather than speculative. Option 1 preserves hibernation, which KD7 depends on |
 | DocumentDB RFC-006 lands and makes cluster-per-app look heavy | Low | Consolidation is deferred work, not a blocker; the per-app boundary stays valid regardless |
 | PVC left behind on app deletion, leaking storage cost silently | Medium | Explicit PVC handling and audit event in U5; storage alert in U8 |
 | NetworkPolicy silently unenforced — no-op under kindnet, fails open on selector mismatch, bypassed by port-forward | High | Never the sole isolation layer (KD9); per-app clusters and per-app credentials hold independently; local R2 testing requires a policy-enforcing CNI |
