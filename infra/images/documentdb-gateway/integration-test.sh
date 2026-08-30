@@ -21,6 +21,11 @@
 # Usage: ./integration-test.sh [gateway-image] [postgres-image]
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# The canonical PostgreSQL config lives in infra/app-db and is mounted in, so
+# this test proves the files U3 actually ships rather than a copy of them.
+APP_DB_CONF="${REPO_ROOT}/infra/app-db"
+
 GW_IMAGE="${1:-openvoid/documentdb-gateway:0.116-0}"
 PG_IMAGE="${2:-openvoid/postgres-documentdb:18-0.116-0}"
 SFX="$$"
@@ -43,43 +48,15 @@ docker volume create "$VOL" >/dev/null
 docker run --rm -v "${VOL}:/sockets" --user 0 "$PG_IMAGE" chown "${PG_UID}:${PG_UID}" /sockets >/dev/null
 
 echo "==> starting DocumentDB backend"
-docker run -d --name "$PG_C" --network "$NET" -v "${VOL}:/sockets" --user "$PG_UID" "$PG_IMAGE" \
+docker run -d --name "$PG_C" --network "$NET" -v "${VOL}:/sockets" \
+  -v "${APP_DB_CONF}:/app-db:ro" --user "$PG_UID" "$PG_IMAGE" \
   bash -euo pipefail -c "
   export PGDATA=/tmp/pgdata
   initdb -D \"\$PGDATA\" -U postgres --auth-local=peer --auth-host=scram-sha-256 >/dev/null
-  {
-    echo \"shared_preload_libraries = 'pg_cron,pg_documentdb_core,pg_documentdb'\"
-    echo \"cron.database_name = '${APP_DB}'\"
-    echo \"documentdb_core.bsonUseEJson = on\"
-    # /sockets is shared with the gateway; the default path must stay because
-    # the extension's own internal libpq connections (create_collection, pg_cron)
-    # resolve the socket by libpq default and otherwise fall back to TCP, where
-    # they have no password.
-    echo \"unix_socket_directories = '/var/run/postgresql,/sockets'\"
-    echo \"listen_addresses = '*'\"
-    # The extension and pg_cron open internal libpq connections that default to
-    # host=localhost (TCP), where they have no password. Point both at the local
-    # socket so they authenticate by peer, as the ident map expects.
-    echo \"documentdb.localhost_connection_string = 'host=/var/run/postgresql'\"
-    echo \"cron.host = '/var/run/postgresql'\"
-  } >> \"\$PGDATA/postgresql.conf\"
-
-  # The gateway's OS user must be able to assume any documentdb_* member role.
-  cat > \"\$PGDATA/pg_ident.conf\" <<'IDENT'
-documentdb-gateway-map   postgres   postgres
-documentdb-gateway-map   postgres   +documentdb_admin_role
-documentdb-gateway-map   postgres   +documentdb_readwrite_role
-documentdb-gateway-map   postgres   +documentdb_readonly_role
-IDENT
-
-  # Scoped to those roles and placed first — pg_hba is first-match, and a
-  # catch-all peer rule would lock out every other local user.
-  cat > \"\$PGDATA/pg_hba.conf\" <<'HBA'
-local   all   \"postgres\",+documentdb_admin_role,+documentdb_readwrite_role,+documentdb_readonly_role   peer   map=documentdb-gateway-map
-local   all   all                                     peer
-host    all   all             127.0.0.1/32            scram-sha-256
-host    all   all             ::1/128                 scram-sha-256
-HBA
+  # The shipped config from infra/app-db — postgresql.conf is appended to the
+  # generated one, pg_hba/pg_ident replace theirs outright.
+  cat /app-db/postgresql.conf >> \"\$PGDATA/postgresql.conf\"
+  cp /app-db/pg_hba.conf /app-db/pg_ident.conf \"\$PGDATA/\"
 
   pg_ctl -D \"\$PGDATA\" -l /tmp/pg.log -w start >/dev/null
   createdb -h /sockets -U postgres ${APP_DB}

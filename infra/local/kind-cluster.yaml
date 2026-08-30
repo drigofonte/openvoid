@@ -17,6 +17,20 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: openvoid-local
 
+# kindnet, kind's default CNI, does not implement NetworkPolicy — policies
+# apply cleanly and are silently ignored. The app data plane leans on
+# NetworkPolicy to keep one app's session pod off another app's database, so
+# without a policy-enforcing CNI that isolation test passes locally whether or
+# not the policy is correct. Calico is installed by scripts/kind-up.sh.
+# See docs/plans/2026-08-29-001-...-plan.md U3.
+networking:
+  disableDefaultCNI: true
+  # kind's default pod CIDR, stated explicitly because the Calico Installation
+  # in infra/local/calico-installation.yaml must declare the same value.
+  # Deliberately not Calico's own 192.168.0.0/16 default, which collides with
+  # the address range most home networks use.
+  podSubnet: "10.244.0.0/16"
+
 nodes:
   - role: control-plane
     # `ingress-ready=true` is the node label ingress-nginx pins onto via

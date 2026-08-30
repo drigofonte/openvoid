@@ -344,6 +344,32 @@ Replaces the CloudNativePG operator install, which KD3 removed.
   NetworkPolicy in U4 is a silent no-op and R2 cannot be tested locally at all
 - Tilt wiring so a local cluster comes up with all of the above
 
+**Status: built and verified 2026-08-30.**
+
+- `infra/app-db/{postgresql.conf,pg_hba.conf,pg_ident.conf}` + README. These are not a copy of the
+  settings U2 discovered — `infra/images/documentdb-gateway/integration-test.sh` now mounts and uses
+  these exact files, so the shipped config is the tested config and the two cannot drift
+- Calico v3.32.1 replaces kindnet: `disableDefaultCNI` in `infra/local/kind-cluster.yaml`,
+  `infra/local/calico-installation.yaml` pinning the pod CIDR to kind's `10.244.0.0/16` (deliberately
+  not Calico's own 192.168.0.0/16 default, which collides with most home networks), and a pinned
+  install step in `scripts/kind-up.sh`
+- `scripts/check-netpol.sh` proves enforcement in three phases — baseline reaches, deny blocks, and a
+  relabelled client reaches again. The third phase matters: "nothing can reach anything" is not
+  enforcement, and without it a broken pod network would look like a working policy. **Verified passing
+  on the rebuilt cluster**
+- StorageClass split documented (kind `standard`, DOKS `do-block-storage`), read by U4 from
+  `OPENVOID_APP_DB_STORAGE_CLASS`
+- No Tilt changes were needed: the CNI must exist before Tilt runs, so it belongs in `kind-up.sh`, and
+  the app-db ConfigMap has no consumer until U4
+
+Two ordering bugs surfaced while bringing the cluster up, both now fixed in `kind-up.sh`: the Installation
+CR must wait for its CRD to be Established (the operator Deployment going Available does not imply it),
+and the readiness wait must follow the DaemonSet rollout rather than `kubectl wait` on a pod, because the
+operator replaces that pod mid-reconcile and the wait then fails on a name that no longer exists.
+
+**Note for the next local rebuild:** `kind-down.sh` recreates the registry empty, so `tilt up` rebuilds
+the session-api and landing images on first run after a teardown. Expect ImagePullBackOff until it does.
+
 ---
 
 ### U4. Per-app topology templates

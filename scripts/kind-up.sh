@@ -25,6 +25,11 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # `bash scripts/kind-down.sh && bash scripts/kind-up.sh` to upgrade.
 INGRESS_NGINX_CHART_VERSION="4.15.1"
 
+# Calico pin. kindnet is disabled in kind-cluster.yaml because it does not
+# enforce NetworkPolicy; Calico does. Bump intentionally, then recreate the
+# cluster with `bash scripts/kind-down.sh && bash scripts/kind-up.sh`.
+CALICO_VERSION="v3.32.1"
+
 # ---- formatting ----
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -94,6 +99,51 @@ if [ "$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "${REG_NAME}
 else
   note "${REG_NAME} already on kind network"
 fi
+
+# ---- Calico CNI ----
+# kind-cluster.yaml sets disableDefaultCNI, so the cluster has NO working pod
+# network until this runs — nodes stay NotReady and every pod stays Pending.
+# Calico replaces kindnet because kindnet ignores NetworkPolicy, which the app
+# data plane depends on for app-to-app isolation.
+
+step "Calico CNI (${CALICO_VERSION})"
+if kubectl --context "kind-${CLUSTER_NAME}" get installation default >/dev/null 2>&1; then
+  note "Calico already installed"
+else
+  # Server-side apply: the operator manifest's CRDs exceed the annotation size
+  # limit that client-side `kubectl apply` imposes.
+  kubectl --context "kind-${CLUSTER_NAME}" apply --server-side --force-conflicts \
+    -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" >/dev/null
+  ok "tigera-operator applied"
+
+  kubectl --context "kind-${CLUSTER_NAME}" wait --namespace tigera-operator \
+    --for=condition=Available deployment/tigera-operator --timeout=180s >/dev/null
+  ok "tigera-operator Available"
+
+  # The operator Deployment going Available does not mean its CRDs are
+  # registered yet; applying the Installation too early fails with
+  # "no matches for kind Installation".
+  kubectl --context "kind-${CLUSTER_NAME}" wait --for=condition=Established \
+    --timeout=120s crd/installations.operator.tigera.io >/dev/null
+  ok "Installation CRD established"
+
+  kubectl --context "kind-${CLUSTER_NAME}" apply \
+    -f "${REPO_ROOT}/infra/local/calico-installation.yaml" >/dev/null
+  ok "Installation applied (pod CIDR matches kind-cluster.yaml)"
+fi
+
+# calico-system is created by the operator, so wait for the namespace before
+# waiting on pods inside it.
+for _ in $(seq 1 60); do
+  kubectl --context "kind-${CLUSTER_NAME}" get namespace calico-system >/dev/null 2>&1 && break
+  sleep 2
+done
+# `kubectl wait` pins a pod name, and the operator replaces the DaemonSet pod
+# while it reconciles the Installation — so waiting on pods fails on a name that
+# no longer exists. Rollout status follows the DaemonSet instead.
+kubectl --context "kind-${CLUSTER_NAME}" rollout status daemonset/calico-node \
+  --namespace calico-system --timeout=300s >/dev/null
+ok "calico-node Ready — pod network up"
 
 # ---- ConfigMap so KEP-1755 tooling discovers the registry ----
 
