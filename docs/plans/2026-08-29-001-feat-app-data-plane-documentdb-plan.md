@@ -471,6 +471,41 @@ that exists precisely to stop this being sized by guesswork.
 Write the numbers into the plan and into the runbook. If wake latency is incompatible with a
 transparent session start, adopt the warm-for-session-duration strategy from Open Questions.
 
+**Status: measured 2026-08-30** — `scripts/measure-app-db.sh`, kind, warm image cache:
+
+| | |
+|---|---|
+| Provision from nothing → Ready | **12s** (includes `initdb` and `CREATE EXTENSION documentdb CASCADE`) |
+| Wake from hibernation (avg of 3) | **8.1s** — min 7.5s, max 8.7s |
+| Active memory | **114 MiB** — PostgreSQL 110, gateway 4 |
+| Hibernated | 0 pods, PVC retained, 73 MiB used by a fresh database |
+
+**KD7 is confirmed: hibernate aggressively.** An ~8s wake is well inside a session start, which already
+pays pod scheduling, image pull, repo clone and `pnpm install`. The database wakes in parallel and is
+not the critical path, so the warm-for-session-duration fallback in Open Questions is not needed.
+
+**The cost model, corrected.** The two terms scale on different axes, and only one tracks signups:
+
+| Apps | Storage provisioned (2Gi each) | Compute if *all* active | Compute at 10 concurrent |
+|---|---|---|---|
+| 10 | 20 GiB | 1.1 GiB | 1.1 GiB |
+| 50 | 100 GiB | 5.6 GiB | 1.1 GiB |
+| 200 | 400 GiB | 22 GiB | 1.1 GiB |
+
+Compute tracks **concurrent sessions**, not total apps — which is exactly what KD7 was relying on, now
+with numbers behind it. Storage tracks total apps and is the term that grows with signups, so the 2Gi
+default per app is the lever worth revisiting before the fleet is large. Apply DigitalOcean's current
+block-storage rate to the middle column for a monthly figure; the arithmetic here is deliberately in
+GiB rather than currency.
+
+**Fed back into the code:** the gateway's memory request drops from 64Mi to 32Mi — it was a 16x
+over-provision against 4 MiB measured, and requests are what constrain how many apps fit on a node.
+PostgreSQL's 256Mi request stands, now with a basis rather than a guess.
+
+**Not measured, and stated rather than glossed:** DOKS, since there is no remote cluster yet; and cold
+image pull, since these images are already on the node — a first-ever wake on a fresh node adds the
+pull. Both are Item 2 territory.
+
 ---
 
 ### U7. Credentials

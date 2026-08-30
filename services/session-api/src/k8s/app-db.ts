@@ -64,13 +64,21 @@ export const DEFAULT_APP_DB_GATEWAY_IMAGE = "localhost:5001/openvoid/documentdb-
 export const DEFAULT_APP_DB_STORAGE_CLASS = "standard";
 export const DEFAULT_APP_DB_STORAGE_SIZE = "2Gi";
 
-// Provisional. U6 measures a real cluster and replaces these; sizing them by
-// guesswork is exactly what that unit exists to stop.
+// Sized from U6's measurements (scripts/measure-app-db.sh, kind, 2026-08-30):
+// PostgreSQL settled at 110 MiB and the gateway at 4 MiB on a freshly
+// initialised, idle database. Requests keep real headroom over that, because
+// the measured workload was empty — PostgreSQL grows with data, connections and
+// shared_buffers, and the gateway with concurrent clients.
+//
+// CPU is deliberately left at a modest request: U6 did not measure it under
+// load, and an idle database tells you nothing useful about it.
 export const APP_DB_PG_CPU_REQUEST = "100m";
 export const APP_DB_PG_MEMORY_REQUEST = "256Mi";
 export const APP_DB_PG_MEMORY_LIMIT = "1Gi";
 export const APP_DB_GATEWAY_CPU_REQUEST = "50m";
-export const APP_DB_GATEWAY_MEMORY_REQUEST = "64Mi";
+// Was 64Mi, a 16x over-provision against the 4 MiB measured. 32Mi still leaves
+// 8x headroom, and the request is what constrains how many apps fit on a node.
+export const APP_DB_GATEWAY_MEMORY_REQUEST = "32Mi";
 export const APP_DB_GATEWAY_MEMORY_LIMIT = "256Mi";
 
 function envOr(name: string, fallback: string): string {
