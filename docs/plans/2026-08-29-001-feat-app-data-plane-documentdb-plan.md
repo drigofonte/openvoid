@@ -189,9 +189,12 @@ risk rather than buried.
      it — hibernation, backups, failover, declarative `pg_hba`/`pg_ident`. Costs a gRPC plugin, a
      component openvoid would own and maintain, for what is conceptually "run a second container".
   2. *Drop CNPG for a plain StatefulSet* with both containers sharing an `emptyDir` socket. Trivially
-     satisfies the contract. Forfeits hibernation — which KD7 leans on to make "every app gets a
-     cluster" affordable — plus operator-managed backups and failover, so it lands squarely on the
-     support burden this plan exists to bound.
+     satisfies the contract. **Hibernation survives** — a StatefulSet scaled to 0 replicas removes the
+     pods and retains the PVCs, which is what CNPG's hibernation does — so KD7's cost model holds. Nor
+     does it forfeit failover, since v1 is single-instance per app anyway. What it really costs is
+     operator-managed backups, declarative `pg_hba`/`pg_ident`, rolling upgrades, and the metrics
+     exporter: openvoid becomes the operator for all of it, which is more code to own on exactly the
+     axis this plan is trying to protect.
   3. *Run upstream's `documentdb-local` image* as a StatefulSet: PostgreSQL and gateway already
      co-located and pre-wired. Fastest, but it is an emulator by upstream's own framing, and the same
      forfeits as (2).
