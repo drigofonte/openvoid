@@ -28,7 +28,14 @@ openvoid is a **many-users / one-platform-owned-source-control-account** product
 - **Session API**: `services/session-api/` — Hono server, drives K8s via `@kubernetes/client-node`. Tests via vitest.
 - **Landing**: `services/landing/` — Remix 3 (SSR-first; `clientEntry` for the few interactive surfaces). Tests via `remix/test`. The May-2026 redesign replaced the Phase-7 throwaway — apply normal quality bar.
 - **Per-session pods**: three container images under `infra/images/` — `workspace-init` (initContainer; clones scaffold/repo + runs `pnpm install`), `opencode` (main container; agent + optional `pnpm dev`), `git-finalizer` (native sidecar; pushes on SIGTERM).
-- **Local cluster**: kind (`openvoid-local-control-plane`) + Tilt. `tilt up` from repo root.
+- **App databases**: external. Apps get a MongoDB-compatible database from
+  [drigodb](https://github.com/drigolabs/drigodb), a separate Drigolabs service that openvoid calls
+  over HTTP. It is not part of this repo and not deployed by it. See
+  `docs/architecture/app-data-service-boundary.md` for the boundary, and the superseded note at the top
+  of `docs/plans/2026-08-29-001-...` for what openvoid still has to build against it.
+- **Local cluster**: kind (`openvoid-local-control-plane`) + Tilt. `tilt up` from repo root. The local
+  cluster now runs Calico rather than kindnet, because kindnet silently ignores NetworkPolicy —
+  `scripts/check-netpol.sh` proves enforcement.
 - **Remote cluster**: DigitalOcean Kubernetes (DOKS) — env-overridable routing constants in `services/session-api/src/k8s/client.ts`.
 
 ## Conventions
